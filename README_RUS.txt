@@ -91,7 +91,16 @@
 	
 Благодарности:
 
-	Спасибо ficool2 за Hammer++ https://ficool2.github.io/HammerPlusPlus-Website/
-	Спасибо UltraTechX за CrowbarCommandLineDecomp https://github.com/UltraTechX/Crowbar-Command-Line
-	Спасибо craftablescience (Laura Lewis) и контрибьютерам за vpkeditcli.exe https://github.com/craftablescience/VPKEdit
+	Спасибо ficool2 за Hammer++
+	https://ficool2.github.io/HammerPlusPlus-Website/
+	
+	Спасибо UltraTechX за CrowbarCommandLineDecomp
+	https://github.com/UltraTechX/Crowbar-Command-Line
+	
+	Спасибо craftablescience (Laura Lewis) и контрибьютерам за vpkeditcli.exe
+	https://github.com/craftablescience/VPKEdit
+	
+	Спасибо Metapyziks за VMFInstanceInserter (VMFii)
+	https://github.com/Metapyziks/VMFInstanceInserter
+	
 	Спасибо aptekarr, MyCbEH и v3sp4 за реквест, тестирование и предложения по улучшению.
