@@ -127,6 +127,7 @@ https://github.com/Metapyziks/VMFInstanceInserter
 Thanks to aptekarr, MyCbEH and v3sp4 for the request, testing and suggestions for improvements.
 
 ## Screenshots:
+![photo_2024-08-01_03-47-43](https://github.com/user-attachments/assets/419fc2b4-7ff9-4ddc-a987-f63aa626b7b8)
 ![aa_models_test_01a0012](https://github.com/user-attachments/assets/22eadadc-a277-4bfe-b950-b8d11488875f)
 ![aa_models_static_convert_test_01a0000](https://github.com/user-attachments/assets/16fee47e-0c88-40c0-af9a-2b0405bc2f0f)
 ![aa_models_test_01a0023](https://github.com/user-attachments/assets/c268c60e-950d-456a-9e8f-fdabf0e8ab8c)
