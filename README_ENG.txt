@@ -79,15 +79,13 @@ Future plans:
 
 	1. Fixing critical errors.
 	
-	2. Upload the source code.
+	2. Reduce the size of the executable file.
 	
-	3. Reduce the size of the executable file.
+	3. New entity - scaling physical props with preserving correct collision and converting any props to physical props.
 	
-	4. New entity - scaling physical props with preserving correct collision and converting any props to physical props.
+	4. New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
 	
-	5. New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
-	
-	6. Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve this.
+	5. Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve it.
 
 	
 Credits:
