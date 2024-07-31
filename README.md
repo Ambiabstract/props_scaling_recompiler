@@ -65,7 +65,7 @@ In summary, these tools complement each other rather than exclude each other.
 
    It is important to pay attention to the following parameters:
 
-   `-vmf_in $path\$file.vmf` - this path should be if you don't use VMFii and other programs that create a copy of vmf to change something in it and compile the copy. If you use VMFii and similar tools, you should specify the path to the vmf that is output by the previous tool. For example, “-vmf_in $path\inst_fix\$file.vmf” if the conditional VMFii outputs its vmf to the inst_fix folder.
+   `-vmf_in $path\$file.vmf` - this path should be if you don't use VMFii and other programs that create a copy of vmf to change something in it and compile the copy. If you use VMFii and similar tools, you should specify the path to the vmf that is output by the previous tool. For example, `-vmf_in $path\inst_fix\$file.vmf` if the conditional VMFii outputs its vmf to the `inst_fix` folder.
 
    `-vmf_out $path\psr_temp\$file.vmf` - this is the vmf that props_scaling_recompiler will output and which should be specified in the following Compile/run commands!
 
