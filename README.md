@@ -18,7 +18,7 @@ Only [Hammer++](https://ficool2.github.io/HammerPlusPlus-Website/) is supported.
 
 ## Working together with Propper++
 	
-Propper++ includes a function for static prop scaling, capable of scaling assets on separate axes. It can also merge models into one prop_static like Static Prop Combine from the CS:GO SDK, among other features.
+[Propper++](https://developer.valvesoftware.com/wiki/Hammer++/Propper++) includes a function for static prop scaling, capable of scaling assets on separate axes. It can also merge models into one prop_static like Static Prop Combine from the CS:GO SDK, among other features.
 
 However, Propper++ has three key disadvantages for our purposes: no asset preview before creation, manual path entry, and no conversion to static prop.
 
