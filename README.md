@@ -82,7 +82,7 @@ In summary, these tools complement each other rather than exclude each other.
 
 3. The usual setting is taking place. In addition to the usual settings for prop_static we now have Model Scale. We set the scale value as a multiplier, i.e. 2 will mean a 2-fold increase of the prop (the name of the new asset in the content will have the postfix “_scaled_200”, i.e. 200% of the original size).
 
-   Note: this is true for static and most dynamic props, but not for physics props. For some reason physics props are scaled not by N times, but by N^2 times. I.e. a 2x increase will actually increase the model by a factor of 4, model scale 4 will increase the model by a factor of 16. This error is somewhere in the engine. The scaled model will be put into the project content with the name from the "model scale", not the actual scaled values.
+   Note: this is true for static and most dynamic props, but not for physics props. For some reason physics props are scaled not by N times, but by N^2 times. I.e. a 2x increase will actually increase the model by a factor of 4, model scale 4 will increase the model by a factor of 16. The scaled model will be put into the project content with the name from the "model scale", not the actual scaled values.
 
 4. Compile the map. After the tool has done its work - a new model with a different scale will appear in the content.
 
