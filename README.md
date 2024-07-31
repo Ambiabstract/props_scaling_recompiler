@@ -98,16 +98,10 @@ In summary, these tools complement each other rather than exclude each other.
 ## Future plans:
 
 1. Fixing critical errors.
-
-2. Upload the source code.
-
-3. Reduce the size of the executable file.
-
-4. New entity - scaling physical props with preserving correct collision and converting any props to physical props.
-
-5. New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
-
-6. Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve this.
+2. Reduce the size of the executable file.
+3. New entity - scaling physical props with preserving correct collision and converting any props to physical props.
+4. New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
+5. Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve this.
 
 ## Credits:
 Thanks to ficool2 for Hammer++ 
@@ -123,6 +117,11 @@ https://github.com/UltraTechX/Crowbar-Command-Line
 Thanks to craftablescience (Laura Lewis) and contributors for vpkeditcli.exe 
 
 https://github.com/craftablescience/VPKEdit
+
+
+Thanks Metapyziks for VMFInstanceInserter (VMFii)
+
+https://github.com/Metapyziks/VMFInstanceInserter
 
 
 Thanks to aptekarr, MyCbEH and v3sp4 for the request, testing and suggestions for improvements.
