@@ -44,11 +44,11 @@ In summary, these tools complement each other rather than exclude each other.
 
 4. Click New to add another step.
 
-   If you are using VMFii or any other tool that duplicates your VMF to compile later - put our new item after them. For example if you only use VMFii, our item should be second in the list.
+   If you are using [VMFii](https://github.com/Metapyziks/VMFInstanceInserter) or any other tool that duplicates your VMF to compile later - put our new item after them. For example if you only use [VMFii](https://github.com/Metapyziks/VMFInstanceInserter), our item should be second in the list.
 
    ![изображение](https://github.com/user-attachments/assets/5dfb0427-d180-44c5-b118-a78b63c12a46)
 
-   If you don't use VMFii and other such tools - drag our item to the very beginning.
+   If you don't use [VMFii](https://github.com/Metapyziks/VMFInstanceInserter) and other such tools - drag our item to the very beginning.
 
    ![изображение](https://github.com/user-attachments/assets/e40e047e-1d55-4522-8404-81ae7120d161)
 
