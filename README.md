@@ -5,7 +5,11 @@ props_scaling_recompiler is an automatic assets recompiler that allows you to sc
 
 If you work with Source SDK 2013 and often use prop_scalable, this tool can be particularly useful. prop_scalable is a dynamic entity, which means it consumes entdata, does not cast lightmap shadows, lacks baked vertex lighting, and its collision does not scale with its visual geometry.
 
-The main reference is the uniformscale feature of prop_static from the CS:GO SDK.
+![aa_models_test_01a0010](https://github.com/user-attachments/assets/1ae07220-df59-400a-8475-413da770286a)
+![изображение](https://github.com/user-attachments/assets/c3459319-84e6-4f55-b88a-2a706f1a0338)
+
+
+The main reference is the "uniformscale" feature of prop_static from the CS:GO SDK.
 
 The primary purpose of this tool is to save level designers from using prop_scalable or manually recompiling models.
 
@@ -119,7 +123,6 @@ https://github.com/craftablescience/VPKEdit
 Thanks to aptekarr, MyCbEH and v3sp4 for the request, testing and suggestions for improvements.
 
 ## Screenshots:
-![aa_models_test_01a0010](https://github.com/user-attachments/assets/1ae07220-df59-400a-8475-413da770286a)
 ![aa_models_test_01a0012](https://github.com/user-attachments/assets/22eadadc-a277-4bfe-b950-b8d11488875f)
 ![aa_models_static_convert_test_01a0000](https://github.com/user-attachments/assets/16fee47e-0c88-40c0-af9a-2b0405bc2f0f)
 ![aa_models_test_01a0023](https://github.com/user-attachments/assets/c268c60e-950d-456a-9e8f-fdabf0e8ab8c)
