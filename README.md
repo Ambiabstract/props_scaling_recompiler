@@ -6,6 +6,7 @@ props_scaling_recompiler is an automatic assets recompiler that allows you to sc
 If you work with Source SDK 2013 and often use prop_scalable, this tool can be particularly useful. prop_scalable is a dynamic entity, which means it consumes entdata, does not cast lightmap shadows, lacks baked vertex lighting, and its collision does not scale with its visual geometry.
 
 The main reference is the uniformscale feature of prop_static from the CS:GO SDK.
+
 The primary purpose of this tool is to save level designers from using prop_scalable or manually recompiling models.
 
 Only [Hammer++](https://ficool2.github.io/HammerPlusPlus-Website/) is supported. Functionality with other editors is not guaranteed.
