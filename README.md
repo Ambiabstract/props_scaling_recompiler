@@ -60,6 +60,7 @@ In summary, these tools complement each other rather than exclude each other.
    `-vmf_out $path\psr_temp\$file.vmf` - this is the vmf that props_scaling_recompiler will output and which should be specified in the following Compile/run commands!
 
    `-subfolders 1` - put the scaled versions of the props in a separate subfolder (1 = yes, 0 = no)
+
    `-force_recompile 0` - recompile all scaled props that are available on the level (1 = yes, 0 = no). Needed in case the original model has changed, for example.
 
 7. Go through Compile/run commands and specify correct paths in Parameters. It should be the path that props_scaling_recompiler outputs.
