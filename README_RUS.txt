@@ -25,7 +25,8 @@
 
 	1. Сделать чай.
 	
-	2. Кинуть все .exe файлы и fgd в папку bin, где лежит studiomdl.exe. Например:
+	2. Кинуть props_scaling_recompiler.exe, CrowbarCommandLineDecomp.exe, vpkeditcli.exe и fgd в папку bin, где лежит studiomdl.exe. 
+	Например:
 	"C:\Program Files (x86)\Steam\steamapps\common\Source SDK Base 2013 Singleplayer\bin\" (без кавычек).
 	
 	3. Открыть Hammer. Перейти в "Tools -> Options -> Game Configuration", добавить "props_scaling_recompiler.fgd" в список "Game Data files" и нажать "OK". Обратите внимание на выбранный проект в выпадающем списке Configuration, там должен быть ваш проект! Добавить этот fgd нужно для всех проектов, где вы планируете использовать инструмент!
