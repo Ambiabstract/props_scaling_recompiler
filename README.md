@@ -1,19 +1,24 @@
 # props_scaling_recompiler
 
 ## Description:
-props_scaling_recompiler is an automatic assets recompiler that allows you to scale props and/or convert them to prop_static without leaving Hammer++.
+props_scaling_recompiler is an automatic assets recompiler that allows you to scale props and/or convert them to prop_static without leaving [Hammer++](https://ficool2.github.io/HammerPlusPlus-Website/).
 
 If you work with Source SDK 2013 and often use prop_scalable, this tool can be particularly useful. prop_scalable is a dynamic entity, which means it consumes entdata, does not cast lightmap shadows, lacks baked vertex lighting, and its collision does not scale with its visual geometry.
 
-The main reference is the uniformscale feature of prop_static from the CS:GO SDK.
+![aa_models_test_01a0010](https://github.com/user-attachments/assets/1ae07220-df59-400a-8475-413da770286a)
+![изображение](https://github.com/user-attachments/assets/c3459319-84e6-4f55-b88a-2a706f1a0338)
+
+
+The main reference is the "uniformscale" feature of prop_static from the CS:GO SDK.
+
 The primary purpose of this tool is to save level designers from using prop_scalable or manually recompiling models.
 
-Only Hammer++ is supported. Functionality with other editors is not guaranteed.
+Only [Hammer++](https://ficool2.github.io/HammerPlusPlus-Website/) is supported. Functionality with other editors is not guaranteed.
 
 
 ## Working together with Propper++
 	
-Propper++ includes a function for static prop scaling, capable of scaling assets on separate axes. It can also merge models into one prop_static like Static Prop Combine from the CS:GO SDK, among other features.
+[Propper++](https://developer.valvesoftware.com/wiki/Hammer++/Propper++) includes a function for static prop scaling, capable of scaling assets on separate axes. It can also merge models into one prop_static like Static Prop Combine from the CS:GO SDK, among other features.
 
 However, Propper++ has three key disadvantages for our purposes: no asset preview before creation, manual path entry, and no conversion to static prop.
 
@@ -23,7 +28,7 @@ In summary, these tools complement each other rather than exclude each other.
 
 
 ## Installation:
-1. Put props_scaling_recompiler.exe, CrowbarCommandLineDecomp.exe, vpkeditcli.exe and .fgd in the bin folder where studiomdl.exe is located.
+1. Put props_scaling_recompiler.exe, [CrowbarCommandLineDecomp.exe](https://github.com/UltraTechX/Crowbar-Command-Line), [vpkeditcli.exe](https://github.com/craftablescience/VPKEdit) and props_scaling_recompiler.fgd in the bin folder where studiomdl.exe is located.
 
    For example:
 
@@ -39,9 +44,14 @@ In summary, these tools complement each other rather than exclude each other.
 
 4. Click New to add another step.
 
-   If you are using VMFii or any other tool that duplicates your VMF to compile later - put our new item after them. For example if you only use VMFii, our item should be second in the list.
+   If you are using [VMFii](https://github.com/Metapyziks/VMFInstanceInserter) or any other tool that duplicates your VMF to compile later - put our new item after them. For example if you only use [VMFii](https://github.com/Metapyziks/VMFInstanceInserter), our item should be second in the list.
 
-   If you don't use VMFii and other such tools - drag our item to the very beginning.
+   ![изображение](https://github.com/user-attachments/assets/5dfb0427-d180-44c5-b118-a78b63c12a46)
+
+   If you don't use [VMFii](https://github.com/Metapyziks/VMFInstanceInserter) and other such tools - drag our item to the very beginning.
+
+   ![изображение](https://github.com/user-attachments/assets/e40e047e-1d55-4522-8404-81ae7120d161)
+
 
 5. In Command Properties, specify Command. This should be the path to props_scaling_recompiler.exe, for example:
 
@@ -60,6 +70,7 @@ In summary, these tools complement each other rather than exclude each other.
    `-vmf_out $path\psr_temp\$file.vmf` - this is the vmf that props_scaling_recompiler will output and which should be specified in the following Compile/run commands!
 
    `-subfolders 1` - put the scaled versions of the props in a separate subfolder (1 = yes, 0 = no)
+
    `-force_recompile 0` - recompile all scaled props that are available on the level (1 = yes, 0 = no). Needed in case the original model has changed, for example.
 
 7. Go through Compile/run commands and specify correct paths in Parameters. It should be the path that props_scaling_recompiler outputs.
@@ -87,22 +98,39 @@ In summary, these tools complement each other rather than exclude each other.
 ## Future plans:
 
 1. Fixing critical errors.
-
-2. Upload the source code.
-
-3. Reduce the size of the executable file.
-
-4. New entity - scaling physical props with preserving correct collision and converting any props to physical props.
-
-5. New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
-
-6. Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve this.
+2. Reduce the size of the executable file.
+3. New entity - scaling physical props with preserving correct collision and converting any props to physical props.
+4. New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
+5. Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve this.
 
 ## Credits:
-Thanks to ficool2 for Hammer++ https://ficool2.github.io/HammerPlusPlus-Website/
+Thanks to ficool2 for Hammer++ 
 
-Thanks to UltraTechX for CrowbarCommandLineDecomp https://github.com/UltraTechX/Crowbar-Command-Line
+https://ficool2.github.io/HammerPlusPlus-Website/
 
-Thanks to craftablescience (Laura Lewis) and contributors for vpkeditcli.exe https://github.com/craftablescience/VPKEdit
+
+Thanks to UltraTechX for CrowbarCommandLineDecomp 
+
+https://github.com/UltraTechX/Crowbar-Command-Line
+
+
+Thanks to craftablescience (Laura Lewis) and contributors for vpkeditcli.exe 
+
+https://github.com/craftablescience/VPKEdit
+
+
+Thanks Metapyziks for VMFInstanceInserter (VMFii)
+
+https://github.com/Metapyziks/VMFInstanceInserter
+
 
 Thanks to aptekarr, MyCbEH and v3sp4 for the request, testing and suggestions for improvements.
+
+## Screenshots:
+![aa_models_test_01a0012](https://github.com/user-attachments/assets/22eadadc-a277-4bfe-b950-b8d11488875f)
+![aa_models_static_convert_test_01a0000](https://github.com/user-attachments/assets/16fee47e-0c88-40c0-af9a-2b0405bc2f0f)
+![aa_models_test_01a0023](https://github.com/user-attachments/assets/c268c60e-950d-456a-9e8f-fdabf0e8ab8c)
+![aa_models_test_01a0024](https://github.com/user-attachments/assets/f0112d88-b216-41e9-a001-3c1c5c3f4eeb)
+![aa_models_static_convert_test_01a0001](https://github.com/user-attachments/assets/71b3443d-d184-45bc-b94c-795fa638877b)
+![aa_models_static_convert_test_01a0002](https://github.com/user-attachments/assets/55faec14-3906-4771-9e30-d4b32298437d)
+![aa_models_test_01a0025](https://github.com/user-attachments/assets/f4489a3c-4ff5-4dd2-a865-03405a34ebd2)
