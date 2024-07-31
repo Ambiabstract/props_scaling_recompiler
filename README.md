@@ -1,14 +1,14 @@
 # props_scaling_recompiler
 
 ## Description:
-props_scaling_recompiler is an automatic assets recompiler that allows you to scale props and/or convert them to prop_static without leaving Hammer++.
+props_scaling_recompiler is an automatic assets recompiler that allows you to scale props and/or convert them to prop_static without leaving [Hammer++](https://ficool2.github.io/HammerPlusPlus-Website/).
 
 If you work with Source SDK 2013 and often use prop_scalable, this tool can be particularly useful. prop_scalable is a dynamic entity, which means it consumes entdata, does not cast lightmap shadows, lacks baked vertex lighting, and its collision does not scale with its visual geometry.
 
 The main reference is the uniformscale feature of prop_static from the CS:GO SDK.
 The primary purpose of this tool is to save level designers from using prop_scalable or manually recompiling models.
 
-Only Hammer++ is supported. Functionality with other editors is not guaranteed.
+Only [Hammer++](https://ficool2.github.io/HammerPlusPlus-Website/) is supported. Functionality with other editors is not guaranteed.
 
 
 ## Working together with Propper++
@@ -23,7 +23,7 @@ In summary, these tools complement each other rather than exclude each other.
 
 
 ## Installation:
-1. Put props_scaling_recompiler.exe, CrowbarCommandLineDecomp.exe, vpkeditcli.exe and .fgd in the bin folder where studiomdl.exe is located.
+1. Put props_scaling_recompiler.exe, [CrowbarCommandLineDecomp.exe](https://github.com/UltraTechX/Crowbar-Command-Line), [vpkeditcli.exe](https://github.com/craftablescience/VPKEdit) and props_scaling_recompiler.fgd in the bin folder where studiomdl.exe is located.
 
    For example:
 
