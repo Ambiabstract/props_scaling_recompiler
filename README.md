@@ -111,3 +111,8 @@ Thanks to aptekarr, MyCbEH and v3sp4 for the request, testing and suggestions fo
 ![aa_models_test_01a0010](https://github.com/user-attachments/assets/1ae07220-df59-400a-8475-413da770286a)
 ![aa_models_test_01a0012](https://github.com/user-attachments/assets/22eadadc-a277-4bfe-b950-b8d11488875f)
 ![aa_models_static_convert_test_01a0000](https://github.com/user-attachments/assets/16fee47e-0c88-40c0-af9a-2b0405bc2f0f)
+![aa_models_test_01a0023](https://github.com/user-attachments/assets/c268c60e-950d-456a-9e8f-fdabf0e8ab8c)
+![aa_models_test_01a0024](https://github.com/user-attachments/assets/f0112d88-b216-41e9-a001-3c1c5c3f4eeb)
+![aa_models_static_convert_test_01a0001](https://github.com/user-attachments/assets/71b3443d-d184-45bc-b94c-795fa638877b)
+![aa_models_static_convert_test_01a0002](https://github.com/user-attachments/assets/55faec14-3906-4771-9e30-d4b32298437d)
+
