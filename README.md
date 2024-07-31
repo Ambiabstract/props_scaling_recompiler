@@ -46,7 +46,12 @@ In summary, these tools complement each other rather than exclude each other.
 
    If you are using VMFii or any other tool that duplicates your VMF to compile later - put our new item after them. For example if you only use VMFii, our item should be second in the list.
 
+   ![изображение](https://github.com/user-attachments/assets/5dfb0427-d180-44c5-b118-a78b63c12a46)
+
    If you don't use VMFii and other such tools - drag our item to the very beginning.
+
+   ![изображение](https://github.com/user-attachments/assets/e40e047e-1d55-4522-8404-81ae7120d161)
+
 
 5. In Command Properties, specify Command. This should be the path to props_scaling_recompiler.exe, for example:
 
@@ -129,4 +134,4 @@ Thanks to aptekarr, MyCbEH and v3sp4 for the request, testing and suggestions fo
 ![aa_models_test_01a0024](https://github.com/user-attachments/assets/f0112d88-b216-41e9-a001-3c1c5c3f4eeb)
 ![aa_models_static_convert_test_01a0001](https://github.com/user-attachments/assets/71b3443d-d184-45bc-b94c-795fa638877b)
 ![aa_models_static_convert_test_01a0002](https://github.com/user-attachments/assets/55faec14-3906-4771-9e30-d4b32298437d)
-
+![aa_models_test_01a0025](https://github.com/user-attachments/assets/f4489a3c-4ff5-4dd2-a865-03405a34ebd2)
