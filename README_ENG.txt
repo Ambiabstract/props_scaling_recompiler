@@ -23,7 +23,8 @@ Working together with Propper++
 
 Installation:
 	
-	1. Put all .exe and .fgd in the bin folder where studiomdl.exe is located. For example:
+	1. Put props_scaling_recompiler.exe, CrowbarCommandLineDecomp.exe, vpkeditcli.exe and .fgd in the bin folder where studiomdl.exe is located. 
+	For example:
 	"C:\Program Files (x86)\Steam\steamapps\common\Source SDK Base 2013 Singleplayer\bin\" (unquote).
 	
 	2. Open Hammer. Go to “Tools -> Options -> Game Configuration”, add “props_scaling_recompiler.fgd” to the “Game Data files” list and click “OK”. 
