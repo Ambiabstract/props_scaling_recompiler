@@ -7,6 +7,7 @@ If you work with Source SDK 2013 and often use prop_scalable, this tool can be p
 
 ![aa_models_test_01a0010](https://github.com/user-attachments/assets/1ae07220-df59-400a-8475-413da770286a)
 ![изображение](https://github.com/user-attachments/assets/c3459319-84e6-4f55-b88a-2a706f1a0338)
+![ezgif-3-9343f7bb04](https://github.com/user-attachments/assets/7176845e-8e00-4365-b0fa-dba6f7481687)
 
 
 The main reference is the "uniformscale" feature of prop_static from the CS:GO SDK.
