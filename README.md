@@ -28,21 +28,23 @@ In summary, these tools complement each other rather than exclude each other.
 ![ezgif-3-9343f7bb04](https://github.com/user-attachments/assets/7176845e-8e00-4365-b0fa-dba6f7481687)
 
 ## Installation:
-1. Put props_scaling_recompiler.exe, [CrowbarCommandLineDecomp.exe](https://github.com/UltraTechX/Crowbar-Command-Line), [vpkeditcli.exe](https://github.com/craftablescience/VPKEdit) and props_scaling_recompiler.fgd in the bin folder where studiomdl.exe is located.
+1. [**Download zip archive with all stuff**](https://github.com/Ambiabstract/props_scaling_recompiler/releases/latest)
+
+2. Put props_scaling_recompiler.exe, [CrowbarCommandLineDecomp.exe](https://github.com/UltraTechX/Crowbar-Command-Line), [vpkeditcli.exe](https://github.com/craftablescience/VPKEdit) and props_scaling_recompiler.fgd in the bin folder where studiomdl.exe is located.
 
    For example:
 
    `C:\Program Files (x86)\Steam\steamapps\common\Source SDK Base 2013 Singleplayer\bin\`
 
-2. Open Hammer. Go to `Tools -> Options -> Game Configuration`, add `props_scaling_recompiler.fgd` to the `Game Data files` list and click "OK".
+3. Open Hammer. Go to `Tools -> Options -> Game Configuration`, add `props_scaling_recompiler.fgd` to the `Game Data files` list and click "OK".
 
    Pay attention to the selected project in the Configuration drop-down list: your project should be there! Add this fgd for all projects where you plan to use the tool!
 
-3. Press F9 (Run Map) and go to Expert mode if you are in Normal mode.
+4. Press F9 (Run Map) and go to Expert mode if you are in Normal mode.
 
    Here you need to change the map compilation settings.
 
-4. Click New to add another step.
+5. Click New to add another step.
 
    If you are using [VMFii](https://github.com/Metapyziks/VMFInstanceInserter) or any other tool that duplicates your VMF to compile later - put our new item after them. For example if you only use [VMFii](https://github.com/Metapyziks/VMFInstanceInserter), our item should be second in the list.
 
@@ -53,13 +55,13 @@ In summary, these tools complement each other rather than exclude each other.
    ![изображение](https://github.com/user-attachments/assets/e40e047e-1d55-4522-8404-81ae7120d161)
 
 
-5. In Command Properties, specify Command. This should be the path to props_scaling_recompiler.exe, for example:
+6. In Command Properties, specify Command. This should be the path to props_scaling_recompiler.exe, for example:
 
    `C:\Program Files (x86)\Steam\steamapps\common\Source SDK Base 2013 Singleplayer\bin\props_scaling_recompiler.exe`
 
    The path to this file can be specified not manually, but by clicking `Cmds -> Executable` and then selecting our executable file through explorer.
 
-6. Now it is necessary to specify Parameters. Default parameters will be as follows:
+7. Now it is necessary to specify Parameters. Default parameters will be as follows:
 
    `-game $gamedir -vmf_in $path\$file.vmf -vmf_out $path\psr_temp\$file.vmf -subfolders 1 -force_recompile 0`
 
@@ -73,14 +75,14 @@ In summary, these tools complement each other rather than exclude each other.
 
    `-force_recompile 0` - recompile all scaled props that are available on the level (1 = yes, 0 = no). Needed in case the original model has changed, for example.
 
-7. Go through Compile/run commands and specify correct paths in Parameters. It should be the path that props_scaling_recompiler outputs.
+8. Go through Compile/run commands and specify correct paths in Parameters. It should be the path that props_scaling_recompiler outputs.
 
 ## Usage example:
 1. Create a new entity.
 
-2. Select its Class prop_static_scalable.
+2. Select its Class `prop_static_scalable`.
 
-3. The usual setting is taking place. In addition to the usual settings for prop_static we now have Model Scale. We set the scale value as a multiplier, i.e. 2 will mean a 2-fold increase of the prop (the name of the new asset in the content will have the postfix “_scaled_200”, i.e. 200% of the original size).
+3. The usual setting is taking place. In addition to the usual settings for prop_static we now have `Model Scale`. We set the scale value as a multiplier, i.e. 2 will mean a 2-fold increase of the prop (the name of the new asset in the content will have the postfix “_scaled_200”, i.e. 200% of the original size).
 
    Note: this is true for static and most dynamic props, but not for physics props. For some reason physics props are scaled not by N times, but by N^2 times. I.e. a 2x increase will actually increase the model by a factor of 4, model scale 4 will increase the model by a factor of 16. The scaled model will be put into the project content with the name from the "model scale", not the actual scaled values.
 
