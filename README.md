@@ -88,7 +88,7 @@ In summary, these tools complement each other rather than exclude each other.
 
 4. Compile the map. After the tool has done its work - a new model with a different scale will appear in the content.
 
-5. If the compilation was successful, a scaled version of the model will be waiting for you in the game.
+5. If everything has been set up correctly and the compilation was successful, a scaled and static version of the model will be waiting for you in the game.
 
 ## Known issues:
 1. If you have assets with the same name in your content, but in different folders - this may cause a fatal error and “crash” the program. This problem will be fixed in the future.
