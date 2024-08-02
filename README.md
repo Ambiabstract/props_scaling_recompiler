@@ -95,7 +95,7 @@ In summary, these tools complement each other rather than exclude each other.
 
 2. In some cases dynamic and physics props will have incorrect visualization and/or collision. Some of these problems will be fixed in the future, but not all of them. In some cases modification of the original asset will be required.
 
-3. There may be fatal errors when compiling some dynamic props, for example “models/props_c17/door02_double.mdl”. Whether this will be fixed in the future is still unknown.
+3. There may be errors when compiling some dynamic props, for example “models/props_c17/door02_double.mdl”. Whether this will be fixed in the future is still unknown.
 
 ## Future plans:
 
