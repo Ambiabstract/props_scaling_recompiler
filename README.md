@@ -106,7 +106,7 @@ In summary, these tools complement each other rather than exclude each other.
 5. Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve it.
 
 ## Credits:
-Thanks to ficool2 for Hammer++ 
+Thanks to ficool2 for Hammer++ and Propper++
 
 https://ficool2.github.io/HammerPlusPlus-Website/
 
