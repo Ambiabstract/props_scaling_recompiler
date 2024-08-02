@@ -73,7 +73,7 @@ In summary, these tools complement each other rather than exclude each other.
 
    `-subfolders 1` - put the scaled versions of the props in a separate subfolder (1 = yes, 0 = no)
 
-   `-force_recompile 0` - recompile all scaled props that are available on the level (1 = yes, 0 = no). Needed in case the original model has changed, for example.
+   `-force_recompile 0` - recompile all scaled props that are available on the level from scratch (1 = yes, 0 = no). For example, this can be useful if the original non-scaled model has been modified.
 
 8. Go through Compile/run commands and specify correct paths in Parameters. It should be the path that props_scaling_recompiler outputs.
 
