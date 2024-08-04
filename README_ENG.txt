@@ -68,24 +68,20 @@ Usage example:
 
 Known issues:
 
-	1. If you have assets with the same name in your content, but in different folders - this may cause a fatal error and “crash” the program. This problem will be fixed in the future.
+	1. In some cases dynamic and physics props will have incorrect visualization and/or collision. Some of these problems will be fixed in the future, but not all of them. In some cases modification of the original asset will be required.
 	
-	2. In some cases dynamic and physics props will have incorrect visualization and/or collision. Some of these problems will be fixed in the future, but not all of them. In some cases modification of the original asset will be required.
-	
-	3. There may be fatal errors when compiling some dynamic props, for example “models/props_c17/door02_double.mdl”. Whether this will be fixed in the future is still unknown.
+	2. There may be fatal errors when compiling some dynamic props, for example “models/props_c17/door02_double.mdl”. Whether this will be fixed in the future is still unknown.
 
 
 Future plans:
 
-	1. Fixing critical errors.
+	1. New entity - scaling physical props with preserving correct collision and converting any props to physical props.
 	
-	2. Reduce the size of the executable file.
+	2. New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
 	
-	3. New entity - scaling physical props with preserving correct collision and converting any props to physical props.
+	3. New feature for painting static props, analogous to "rendercolor" from newer versions of the engine.
 	
-	4. New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
-	
-	5. Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve it.
+	4. Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve it.
 
 	
 Credits:
