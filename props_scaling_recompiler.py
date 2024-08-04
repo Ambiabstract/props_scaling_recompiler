@@ -73,12 +73,33 @@ def find_mdl_file(game_dir, mdl_name):
                     return mdl_path_custom
     return None
 
-def find_real_mdl_path(game_dir, mdl_name):
-    mdl_filename = f"{mdl_name}.mdl"
+def find_real_mdl_path(game_dir, hammer_mdl_path):
+    hammer_mdl_path = os.path.normpath(hammer_mdl_path)
+    hammer_parts = hammer_mdl_path.split(os.sep)
+    
+    if debug_mode: print_and_log(f"hammer_parts: {hammer_parts}")
+
+    if "models" not in hammer_parts:
+        print_and_log(Fore.RED + f"[find_real_mdl_path] ERROR! Path must contain 'models' directory")
+        return None
+    
+    models_index = hammer_parts.index("models")
+    hammer_dirs = hammer_parts[models_index:]
+    
+    if debug_mode: print_and_log(f"models_index: {models_index}")
+    if debug_mode: print_and_log(f"hammer_dirs: {hammer_dirs}")
+    
+    mdl_filename = hammer_dirs[-1]
+    hammer_dirs = hammer_dirs[:-1]
+
     for root, dirs, files in os.walk(game_dir):
-        if mdl_filename in files:
-            full_path = os.path.join(root, mdl_filename)
-            return full_path
+        rel_path = os.path.relpath(root, game_dir)
+        rel_parts = rel_path.split(os.sep)
+        if debug_mode: print_and_log(f"rel_path: {rel_path}, rel_parts: {rel_parts}")
+        if rel_parts[-len(hammer_dirs):] == hammer_dirs:
+            if mdl_filename in files:
+                return os.path.join(root, mdl_filename)
+    
     return None
 
 def get_file_name(file_path):
@@ -553,7 +574,7 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
     extracted_mdl_path = find_file_in_subfolders(vpk_extract_folder_model, f"{mdl_name}.mdl")
     
     if debug_mode: print_and_log(Fore.YELLOW + f"7. extracted_mdl_path: {extracted_mdl_path}")
-    
+
     extracted_mdl_path = extracted_mdl_path[0]
     if debug_mode: print_and_log(Fore.YELLOW + f"8. extracted_mdl_path: {extracted_mdl_path}")
 
@@ -691,29 +712,48 @@ def find_vpks(gameinfo_path):
 
     return found_vpks
 
-def find_mdl_in_paths_from_gameinfo(search_paths, mdl_name):
-    search_paths = [(path, ending) for parts in search_paths if len(parts) == 3 for mode, path, ending in [parts]]
-
-    def search_for_mdl(base_path, mdl_name):
-        for root, dirs, files in os.walk(base_path):
-            if f"{mdl_name}.mdl" in files:
-                founded_mdl = os.path.join(root, f"{mdl_name}.mdl")
-                if debug_mode: print_and_log(f"!!!!!!!!!!!!! founded_mdl: {founded_mdl}")
-                return founded_mdl
+def find_mdl_in_paths_from_gameinfo(search_paths, hammer_mdl_path):
+    hammer_mdl_path = os.path.normpath(hammer_mdl_path)
+    hammer_parts = hammer_mdl_path.split(os.sep)
+    
+    if debug_mode: print_and_log(f"hammer_parts: {hammer_parts}")
+    
+    if "models" not in hammer_parts:
+        print_and_log(Fore.RED + f"[find_mdl_in_paths_from_gameinfo] ERROR! Path must contain 'models' directory")
         return None
+    
+    models_index = hammer_parts.index("models")
+    hammer_dirs = hammer_parts[models_index:]
+    
+    mdl_filename = hammer_dirs[-1]
+    hammer_dirs = hammer_dirs[:-1]
+
+    def search_for_mdl(base_path, hammer_dirs, mdl_filename):
+        for root, dirs, files in os.walk(base_path):
+            rel_path = os.path.relpath(root, base_path)
+            rel_parts = rel_path.split(os.sep)
+
+            if rel_parts[-len(hammer_dirs):] == hammer_dirs:
+                if mdl_filename in files:
+                    founded_mdl = os.path.join(root, mdl_filename)
+                    if debug_mode: print_and_log(f"!!!!!!!!!!!!! founded_mdl: {founded_mdl}")
+                    return founded_mdl
+        return None
+
+    search_paths = [(path, ending) for parts in search_paths if len(parts) == 3 for mode, path, ending in [parts]]
 
     for path, ending in search_paths:
         if ending == '*':
-            mdl_path = search_for_mdl(path, mdl_name)
+            mdl_path = search_for_mdl(path, hammer_dirs, mdl_filename)
             if mdl_path:
                 return mdl_path
         elif ending == '.':
             models_path = os.path.join(path, "models")
-            mdl_path = search_for_mdl(models_path, mdl_name)
+            mdl_path = search_for_mdl(models_path, hammer_dirs, mdl_filename)
             if mdl_path:
                 return mdl_path
         elif not ending or ending.isalpha():
-            mdl_path = search_for_mdl(path, mdl_name)
+            mdl_path = search_for_mdl(path, hammer_dirs, mdl_filename)
             if mdl_path:
                 return mdl_path
         elif ending.endswith('.vpk') or ending == '*.vpk':
@@ -783,7 +823,7 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
         hammer_mdl_path = mdl_name
         if debug_mode: print_and_log(f"hammer_mdl_path: {hammer_mdl_path}")
         mdl_name = get_file_name(hammer_mdl_path)
-        real_mdl_path = find_real_mdl_path(game_dir, mdl_name)
+        real_mdl_path = find_real_mdl_path(game_dir, hammer_mdl_path)
         if real_mdl_path:
             real_mdl_paths.append(real_mdl_path)
         else:
@@ -796,7 +836,7 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
             search_paths = search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False)
             search_paths = update_search_paths(search_paths, game_dir, all_source_engine_paths)
             
-            mdl_path_from_other_contents = find_mdl_in_paths_from_gameinfo(search_paths, mdl_name)
+            mdl_path_from_other_contents = find_mdl_in_paths_from_gameinfo(search_paths, hammer_mdl_path)
             
             if mdl_path_from_other_contents != None:
                 real_mdl_paths.append(mdl_path_from_other_contents)
@@ -910,7 +950,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.1')
+    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.2')
     print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
     print_and_log(f'https://github.com/Ambiabstract')
     print_and_log(f'Discord: @Ambiabstract')
