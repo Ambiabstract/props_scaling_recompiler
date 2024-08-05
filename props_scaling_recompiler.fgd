@@ -10,12 +10,12 @@
 	//nothing here and its okay
 ]
 
-@PointClass base(prop_physics, Studiomodel) studioprop() = prop_physics_scalable : "Scalable Physics Prop and also prop_physics_override with fixed collision"
+@PointClass base(prop_dynamic, Studiomodel) studioprop() = prop_dynamic_scalable : "Scalable Dynamic Prop with override and fixed collision"
 [
 	//nothing here and its okay
 ]
 
-@PointClass base(prop_dynamic, Studiomodel) studioprop() = prop_dynamic_scalable : "Scalable Dynamic Prop with override and fixed collision"
+@PointClass base(prop_physics, Studiomodel) studioprop() = prop_physics_scalable : "Scalable Physics Prop and also prop_physics_override with fixed collision"
 [
 	//nothing here and its okay
 ]
