@@ -7,7 +7,7 @@ import argparse
 import io
 from colorama import init, Fore
 
-debug_mode = False
+debug_mode = True
 
 # Regular expression for deleting ANSI escape sequences
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
