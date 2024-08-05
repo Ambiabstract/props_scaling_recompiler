@@ -38,8 +38,10 @@ def get_script_name():
         script_name = os.path.basename(os.path.abspath(__file__))
     return os.path.splitext(script_name)[0]
 
-def parse_vmf(file_path, classname="prop_static_scalable"):
+def parse_vmf(file_path):
     entities_raw = []
+    
+    classname="prop_static_scalable"    
     with open(file_path, 'r') as file:
         content = file.read()
     pattern = re.compile(rf'entity\s*\{{\s*("id"\s*"(\d+)"\s*)("classname"\s*"{re.escape(classname)}"\s*)(".*?"\s*)*?("model"\s*"(.*?)"\s*)("modelscale"\s*"(.*?)"\s*)(".*?"\s*)*\}}', re.DOTALL)
@@ -48,6 +50,37 @@ def parse_vmf(file_path, classname="prop_static_scalable"):
     for match in matches:
         entity_dict = {
             "id": match[1],
+            "classname": classname,
+            "model": match[5],
+            "modelscale": match[7]
+        }
+        entities_raw.append(entity_dict)
+
+    classname="prop_dynamic_scalable"    
+    with open(file_path, 'r') as file:
+        content = file.read()
+    pattern = re.compile(rf'entity\s*\{{\s*("id"\s*"(\d+)"\s*)("classname"\s*"{re.escape(classname)}"\s*)(".*?"\s*)*?("model"\s*"(.*?)"\s*)("modelscale"\s*"(.*?)"\s*)(".*?"\s*)*\}}', re.DOTALL)
+    matches = pattern.findall(content)
+
+    for match in matches:
+        entity_dict = {
+            "id": match[1],
+            "classname": classname,
+            "model": match[5],
+            "modelscale": match[7]
+        }
+        entities_raw.append(entity_dict)
+
+    classname="prop_physics_scalable"    
+    with open(file_path, 'r') as file:
+        content = file.read()
+    pattern = re.compile(rf'entity\s*\{{\s*("id"\s*"(\d+)"\s*)("classname"\s*"{re.escape(classname)}"\s*)(".*?"\s*)*?("model"\s*"(.*?)"\s*)("modelscale"\s*"(.*?)"\s*)(".*?"\s*)*\}}', re.DOTALL)
+    matches = pattern.findall(content)
+
+    for match in matches:
+        entity_dict = {
+            "id": match[1],
+            "classname": classname,
             "model": match[5],
             "modelscale": match[7]
         }
@@ -123,24 +156,64 @@ def transform_mdl_path_to_hammer_style(full_path):
     unix_style_path = re.sub(r'[\\/]', '/', relative_path)
     return unix_style_path
 
-def process_mdl_name(mdl_name, modelscale):
-    if "_scaled_" in mdl_name:
-        parts = mdl_name.split("_scaled_")
-        scale_from_name = float(parts[1]) / 100
-        modelscale = scale_from_name * float(modelscale)
-        base_name = parts[0]
-    else:
-        base_name = mdl_name
-        if float(modelscale) == 1.0:
-            new_mdl_name = f"{base_name}_static"
-            return new_mdl_name
+def process_mdl_name(mdl_name, modelscale, classname):
 
-    modelscale = float(modelscale) * 100
-    modelscale = int(modelscale)
-    if modelscale == 100:
-        new_mdl_name = f"{base_name}"
-    else:
-        new_mdl_name = f"{base_name}_scaled_{modelscale}"
+    if classname == "prop_static_scalable":
+        if "_static_scaled_" in mdl_name:
+            parts = mdl_name.split("_static_scaled_")
+            scale_from_name = float(parts[1]) / 100
+            modelscale = scale_from_name * float(modelscale)
+            base_name = parts[0]
+        else:
+            base_name = mdl_name
+            if float(modelscale) == 1.0:
+                new_mdl_name = f"{base_name}_static"
+                return new_mdl_name
+    
+        modelscale = float(modelscale) * 100
+        modelscale = int(modelscale)
+        if modelscale == 100:
+            new_mdl_name = f"{base_name}"
+        else:
+            new_mdl_name = f"{base_name}_static_scaled_{modelscale}"
+    
+    elif classname == "prop_dynamic_scalable":
+        if "_dyn_scaled_" in mdl_name:
+            parts = mdl_name.split("_dyn_scaled_")
+            scale_from_name = float(parts[1]) / 100
+            modelscale = scale_from_name * float(modelscale)
+            base_name = parts[0]
+        else:
+            base_name = mdl_name
+            if float(modelscale) == 1.0:
+                new_mdl_name = f"{base_name}_dynamic"
+                return new_mdl_name
+    
+        modelscale = float(modelscale) * 100
+        modelscale = int(modelscale)
+        if modelscale == 100:
+            new_mdl_name = f"{base_name}"
+        else:
+            new_mdl_name = f"{base_name}_dyn_scaled_{modelscale}"
+    
+    elif classname == "prop_physics_scalable":
+        if "_phy_scaled_" in mdl_name:
+            parts = mdl_name.split("_phy_scaled_")
+            scale_from_name = float(parts[1]) / 100
+            modelscale = scale_from_name * float(modelscale)
+            base_name = parts[0]
+        else:
+            base_name = mdl_name
+            if float(modelscale) == 1.0:
+                new_mdl_name = f"{base_name}_physics"
+                return new_mdl_name
+    
+        modelscale = float(modelscale) * 100
+        modelscale = int(modelscale)
+        if modelscale == 100:
+            new_mdl_name = f"{base_name}"
+        else:
+            new_mdl_name = f"{base_name}_phy_scaled_{modelscale}"
 
     return new_mdl_name
 
@@ -195,11 +268,12 @@ def process_entities_raw(game_dir, entities_raw, force_recompile):
 
     for entity in entities_raw:
         entity_id = entity['id']
+        classname = entity['classname']
         model = entity['model']
         modelscale = entity['modelscale']
 
         mdl_name = get_file_name(model)
-        mdl_name = process_mdl_name(mdl_name, modelscale)
+        mdl_name = process_mdl_name(mdl_name, modelscale, classname)
         mdl_path = find_mdl_file(game_dir, mdl_name)
 
         if force_recompile:
@@ -1032,24 +1106,36 @@ def main():
     
     print_and_log(f"Processing initiated")
     
-    entities_raw = parse_vmf(vmf_in_path, classname="prop_static_scalable")
-    if debug_mode: print_and_log(f"\nentities_raw: {entities_raw}")
+    entities_raw = parse_vmf(vmf_in_path)
+    if debug_mode: print_and_log(f"\n entities_raw: {entities_raw}")
     
     if force_recompile: print_and_log(f"Force recompile mode: scaled and static assets removing from project files...")
     if force_recompile: remove_vmf_assets(entities_raw, game_dir, remove_static=True)
     
     print_and_log(f"Validating prop_static_scalable entities...")
     entities_ready, entities_todo = process_entities_raw(game_dir, entities_raw, force_recompile)
-    if debug_mode: print_and_log(f"\nentities_ready: {entities_ready}")
-    if debug_mode: print_and_log(f"\nentities_todo: {entities_todo}")
-
+    if debug_mode: print_and_log(f"\n entities_ready: {entities_ready}")
+    if debug_mode: print_and_log(f"\n entities_todo: {entities_todo}")
+    
+    input(f"KMFDM")
+    
     if len(entities_todo) != 0:
         print_and_log(f"There's something to do....")
         entities_todo, entities_ready = entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_path, compiler_path, game_dir, convert_to_static, subfolders, vpkeditcli_path)
     else:
         print_and_log(Fore.GREEN + f"Nothing to recompile!")
-
+    
     if debug_mode: print_and_log(f"\n entities_ready: {entities_ready}")
+    
+    # processing prop_dynamic_scalable
+    
+    #entities_raw_dyn = parse_vmf(vmf_in_path, classname="prop_dynamic_scalable")
+    #if debug_mode: print_and_log(f"\n entities_raw_dyn: {entities_raw_dyn}")
+    
+    #input(f"hammertime")
+    
+    
+    # processing prop_physics_scalable
     
     print_and_log(f"Processing VMF...")
     convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir)
