@@ -884,14 +884,25 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
 
     mdl_with_scales = {}
     for entity in entities_todo:
+        entity_id = entity['id']
+        classname = entity['classname']
         model = entity['model']
         modelscale = entity['modelscale']
-        mdl_name = model
+        mdl_hammer_path = model
         
-        if mdl_name not in mdl_with_scales:
-            mdl_with_scales[mdl_name] = set()
-        mdl_with_scales[mdl_name].add(modelscale)
+        # if debug_mode: print_and_log(Fore.YELLOW + f"mdl_hammer_path: {mdl_hammer_path}")
 
+        mdl_id_class_scale_struct = (entity_id, classname, modelscale)
+        
+        if mdl_hammer_path not in mdl_with_scales:
+            mdl_with_scales[mdl_hammer_path] = set()
+        #mdl_with_scales[mdl_hammer_path].add(modelscale)
+        mdl_with_scales[mdl_hammer_path].add(mdl_id_class_scale_struct)
+
+    if debug_mode: print_and_log(Fore.YELLOW + f"mdl_with_scales: {mdl_with_scales}")
+    
+    input(f"KMFDM")
+    
     real_mdl_paths = []
     for mdl_name in mdl_with_scales.keys():
         hammer_mdl_path = mdl_name
@@ -1116,8 +1127,6 @@ def main():
     entities_ready, entities_todo = process_entities_raw(game_dir, entities_raw, force_recompile)
     if debug_mode: print_and_log(f"\n entities_ready: {entities_ready}")
     if debug_mode: print_and_log(f"\n entities_todo: {entities_todo}")
-    
-    input(f"KMFDM")
     
     if len(entities_todo) != 0:
         print_and_log(f"There's something to do....")
