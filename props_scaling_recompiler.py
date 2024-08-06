@@ -985,15 +985,32 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
                 else:
                     print_and_log(Fore.RED + f"Can't extract {mdl_name} from VPKs, skipping")
 
-    input(f"zxcv")
+    #print_and_log(f"988 mdl_with_scales: {mdl_with_scales}")
     
-    for real_mdl_path in real_mdl_paths:
+
+    #for real_mdl_path in real_mdl_paths:
+    for mdl_paths_struct, entities in list(mdl_with_scales.items()):
+        mdl_name = mdl_paths_struct[0]
+        real_mdl_path = mdl_paths_struct[1]
         mdl_file_name = get_file_name(real_mdl_path)
-        mdl_name = transform_mdl_path_to_hammer_style(real_mdl_path)
-        if mdl_name == None:
-            print_and_log(Fore.RED + f"Cant recompile and scale {mdl_file_name}.mdl because of hammer style path transform error, skipping :(")
-            continue
-        scales = " ".join(mdl_with_scales[mdl_name])
+        #mdl_name = transform_mdl_path_to_hammer_style(real_mdl_path)
+        #if mdl_name == None:
+        #    print_and_log(Fore.RED + f"Cant recompile and scale {mdl_file_name}.mdl because of hammer style path transform error, skipping :(")
+        #    continue
+        if debug_mode: print_and_log(f"Entities: {entities}")
+        scales = ""
+        for entity in entities:
+            modelscale = entity[2]
+            print_and_log(f"1002 modelscale: {modelscale}")
+            #mdl_id_class_scale_struct = (entity_id, classname, modelscale)
+            #scales = " ".join(mdl_with_scales[mdl_name])
+            scales += f"{modelscale} "
+        
+        scales = scales.strip()
+        print_and_log(f"1007 scales: {scales}")
+        
+        input(f"zxcv")
+        
         decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, real_mdl_path, scales, convert_to_static, subfolders)
 
     for entity in entities_todo:
