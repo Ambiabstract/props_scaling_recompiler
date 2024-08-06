@@ -903,7 +903,7 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
     
     input(f"KMFDM")
     
-    real_mdl_paths = []
+    real_mdl_paths = [] #вот это надо превратить в {} и буквально в копию mdl_with_scales, но с реальными путями
     for mdl_name in mdl_with_scales.keys():
         hammer_mdl_path = mdl_name
         if debug_mode: print_and_log(f"hammer_mdl_path: {hammer_mdl_path}")
@@ -917,7 +917,7 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
             print_and_log(f"Trying to find {mdl_name}.mdl in paths from GameInfo...")
 
             all_source_engine_paths = os.path.abspath(os.path.join(get_script_path(), ".."))
-            search_paths = parse_search_paths(gameinfo_path)
+            search_paths = parse_search_paths(gameinfo_path) #вот эту хуйню надо вынести из цикла и парсить гейминфо только один раз за функцию энтитес_туду_процессор
             search_paths = search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False)
             search_paths = update_search_paths(search_paths, game_dir, all_source_engine_paths)
             
