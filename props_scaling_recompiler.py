@@ -694,10 +694,10 @@ def parse_search_paths(gameinfo_path):
                         path = path[:-1]
                     search_paths.append((mode, path, ending))
 
-    if debug_mode:
-        print_and_log(Fore.YELLOW + f'Holy shit its search_paths!')
-        for mode, path, ending in search_paths:
-            print_and_log(f'{mode}\t{path}\t{ending}')
+    #if debug_mode:
+    #    print_and_log(Fore.YELLOW + f'Holy shit its search_paths!')
+    #    for mode, path, ending in search_paths:
+    #        print_and_log(f'{mode}\t{path}\t{ending}')
     
     # Update the search_paths list by removing the quotation marks
     search_paths = [(mode, path.replace('"', ''), ending.replace('"', '')) for mode, path, ending in search_paths]
@@ -710,10 +710,10 @@ def parse_search_paths(gameinfo_path):
             unique_search_paths.append(item)
             seen.add(item)
     
-    if debug_mode:
-        print_and_log(Fore.YELLOW + f'Holy shit its unique_search_paths!')
-        for mode, path, ending in unique_search_paths:
-            print_and_log(f'{mode}\t{path}\t{ending}')
+    #if debug_mode:
+    #    print_and_log(Fore.YELLOW + f'Holy shit its unique_search_paths!')
+    #    for mode, path, ending in unique_search_paths:
+    #        print_and_log(f'{mode}\t{path}\t{ending}')
     
     return unique_search_paths
 
@@ -728,11 +728,11 @@ def search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_so
 
     search_paths = [sp for sp in search_paths if sp[0] not in modes_to_remove]
     
-    if debug_mode:
-        print_and_log("Search Paths after deletion by mode:")
-        for mode, path, ending in search_paths:
-            print_and_log(f'{mode}\t{path}\t{ending}')
-
+    #if debug_mode:
+    #    print_and_log("Search Paths after deletion by mode:")
+    #    for mode, path, ending in search_paths:
+    #        print_and_log(f'{mode}\t{path}\t{ending}')
+    #
     endings_to_remove = ["_textures", "_materials", "_vo_", "_lang_", "_sound", "_english"]
 
     search_paths = [
@@ -761,10 +761,10 @@ def update_search_paths(search_paths, game_dir, all_source_engine_paths):
     search_paths = [(mode, path.replace("|gameinfo_path|", game_dir), ending) for mode, path, ending in search_paths]
     search_paths = [(mode, path.replace("|all_source_engine_paths|", all_source_engine_paths), ending) for mode, path, ending in search_paths]
     search_paths = [(mode, path.replace("\\", "/").replace("//", "/"), ending) for mode, path, ending in search_paths]
-    if debug_mode:
-        print_and_log("Updated Search Paths:")
-        for mode, path, ending in search_paths:
-            print_and_log(f'{path}\t\t{ending}')
+    #if debug_mode:
+    #    print_and_log("Updated Search Paths:")
+    #    for mode, path, ending in search_paths:
+    #        print_and_log(f'{path}\t\t{ending}')
     for mode, path, ending in search_paths:
         if not os.path.exists(path):
             print_and_log(Fore.YELLOW + f'Path from gameinfo.txt does not exist: {path}')
@@ -892,42 +892,80 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
         
         # if debug_mode: print_and_log(Fore.YELLOW + f"mdl_hammer_path: {mdl_hammer_path}")
 
+        mdl_real_path = None
+        mdl_paths_struct = (mdl_hammer_path, mdl_real_path)
         mdl_id_class_scale_struct = (entity_id, classname, modelscale)
         
-        if mdl_hammer_path not in mdl_with_scales:
-            mdl_with_scales[mdl_hammer_path] = set()
+        if mdl_paths_struct not in mdl_with_scales:
+            mdl_with_scales[mdl_paths_struct] = set()
         #mdl_with_scales[mdl_hammer_path].add(modelscale)
-        mdl_with_scales[mdl_hammer_path].add(mdl_id_class_scale_struct)
+        mdl_with_scales[mdl_paths_struct].add(mdl_id_class_scale_struct)
 
     if debug_mode: print_and_log(Fore.YELLOW + f"mdl_with_scales: {mdl_with_scales}")
+
+    def example_search(mdl_with_scales): # Поиск всех позиций, где modelscale равен 1 - пример
+        print_and_log(f"Start example_search")
+        result = []
+        
+        for mdl_paths_struct, entities in mdl_with_scales.items():
+            for entity_id_class_scale_struct in entities:
+                print_and_log(f"float(entity_id_class_scale_struct[2]) = {float(entity_id_class_scale_struct[2])}")
+                if float(entity_id_class_scale_struct[2]) == 1.0:
+                    result.append((mdl_paths_struct, entity_id_class_scale_struct))
+        
+        print_and_log(f"result: {result}")
+        
+        # Вывод результатов
+        for item in result:
+            print_and_log(f"example_search item: {item}")
     
-    input(f"KMFDM")
+    #if debug_mode: example_search(mdl_with_scales)
     
-    real_mdl_paths = [] #вот это надо превратить в {} и буквально в копию mdl_with_scales, но с реальными путями
-    for mdl_name in mdl_with_scales.keys():
-        hammer_mdl_path = mdl_name
+    # Parsing GameInfo.txt for folders paths and vpks paths
+    all_source_engine_paths = os.path.abspath(os.path.join(get_script_path(), ".."))
+    search_paths = parse_search_paths(gameinfo_path)
+    search_paths = search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False)
+    search_paths = update_search_paths(search_paths, game_dir, all_source_engine_paths)
+    
+    #real_mdl_paths = [] #вот это надо превратить в {} и буквально в копию mdl_with_scales, но с реальными путями
+    #for mdl_paths_struct, entities in mdl_with_scales.items():
+    for mdl_paths_struct, entities in list(mdl_with_scales.items()):
+    #for mdl_name in mdl_with_scales.keys():
+        hammer_mdl_path = mdl_paths_struct[0]
         if debug_mode: print_and_log(f"hammer_mdl_path: {hammer_mdl_path}")
         mdl_name = get_file_name(hammer_mdl_path)
+        
         real_mdl_path = find_real_mdl_path(game_dir, hammer_mdl_path)
+        #real_mdl_path = r"C:\Program Files (x86)\Steam\steamapps\sourcemods\antenna_mod\models\apt\fsmit01.mdl" #debug
+        
         if real_mdl_path:
-            real_mdl_paths.append(real_mdl_path)
+            new_mdl_paths_struct = (mdl_paths_struct[0], real_mdl_path)
+            if debug_mode: print_and_log(f"new_mdl_paths_struct: {new_mdl_paths_struct}")
+            
+            if debug_mode: print_and_log(f"mdl_with_scales[mdl_paths_struct]: {mdl_with_scales[mdl_paths_struct]}")
+            
+            mdl_with_scales[new_mdl_paths_struct] = mdl_with_scales.pop(mdl_paths_struct)
+            mdl_paths_struct = new_mdl_paths_struct
+            if debug_mode: print_and_log(f"mdl_paths_struct: {mdl_paths_struct}")
+            if debug_mode: print_and_log(f"new_mdl_paths_struct: {new_mdl_paths_struct}")
+            if debug_mode: print_and_log(f"mdl_with_scales[mdl_paths_struct]: {mdl_with_scales[mdl_paths_struct]}")
         else:
+            if debug_mode: print_and_log(f"mdl_paths_struct: {mdl_paths_struct}")
+            if debug_mode: print_and_log(f"mdl_with_scales[mdl_paths_struct]: {mdl_with_scales[mdl_paths_struct]}")
             if debug_mode: print_and_log(f" ")
             print_and_log(f"{mdl_name}.mdl not found in project content.")
             print_and_log(f"Trying to find {mdl_name}.mdl in paths from GameInfo...")
-
-            all_source_engine_paths = os.path.abspath(os.path.join(get_script_path(), ".."))
-            search_paths = parse_search_paths(gameinfo_path) #вот эту хуйню надо вынести из цикла и парсить гейминфо только один раз за функцию энтитес_туду_процессор
-            search_paths = search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False)
-            search_paths = update_search_paths(search_paths, game_dir, all_source_engine_paths)
             
             mdl_path_from_other_contents = find_mdl_in_paths_from_gameinfo(search_paths, hammer_mdl_path)
             
             if mdl_path_from_other_contents != None:
-                real_mdl_paths.append(mdl_path_from_other_contents)
+                new_mdl_paths_struct = (mdl_paths_struct[0], mdl_path_from_other_contents)
+                mdl_with_scales[new_mdl_paths_struct] = mdl_with_scales.pop(mdl_paths_struct)
+                mdl_paths_struct = new_mdl_paths_struct
+                #real_mdl_paths.append(mdl_path_from_other_contents)
                 print_and_log(Fore.GREEN + f"{mdl_name}.mdl found!")
             else:
-                if debug_mode: print_and_log(f"{mdl_name}.mdl not found in paths from gameinfo.txt")
+                #print_and_log(f"{mdl_name}.mdl not found in paths from gameinfo.txt")
                 print_and_log(f"Trying to find {mdl_name}.mdl in vpks...")
 
                 vpk_paths_from_gameinfo = only_vpk_paths_from_gameinfo(search_paths)
@@ -937,10 +975,15 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
                 if debug_mode: print_and_log(Fore.YELLOW + f"extracted_mdl_path: {extracted_mdl_path}")
 
                 if extracted_mdl_path != None:
-                    real_mdl_paths.append(extracted_mdl_path)
+                    new_mdl_paths_struct = (mdl_paths_struct[0], extracted_mdl_path)
+                    mdl_with_scales[new_mdl_paths_struct] = mdl_with_scales.pop(mdl_paths_struct)
+                    mdl_paths_struct = new_mdl_paths_struct
+                    #real_mdl_paths.append(extracted_mdl_path)
                 else:
                     print_and_log(Fore.RED + f"Can't extract {mdl_name} from VPKs, skipping")
 
+    input(f"zxcv")
+    
     for real_mdl_path in real_mdl_paths:
         mdl_file_name = get_file_name(real_mdl_path)
         mdl_name = transform_mdl_path_to_hammer_style(real_mdl_path)
