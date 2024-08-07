@@ -21,6 +21,15 @@ Working together with Propper++
 	In summary, these tools complement each other rather than exclude each other.
 
 
+Small content size:
+
+	Since the tool creates scaled copies of models, you should consider the impact on the overall size of new files in the mod content.
+	
+	However, props_scaling_recompiler creates copies only of the geometry and does not create copies of materials/textures, so a significant increase in the size of the project's files is not expected.
+	
+	Currently, the ratio of copies to megabytes is approximately 3 to 1, i.e., 3 new models will weigh about 1 MB (including LODs and collisions). This means that with an additional 100 MB of project content size, you can afford approximately 300 scaled versions of assets (maybe less, maybe more - it depends on the asset itself).
+
+
 Installation:
 	
 	1. Put props_scaling_recompiler.exe, CrowbarCommandLineDecomp.exe, vpkeditcli.exe and .fgd in the bin folder where studiomdl.exe is located. 
