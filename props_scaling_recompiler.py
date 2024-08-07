@@ -500,16 +500,33 @@ def copy_and_rescale_qc(qc_path, scale, convert_to_static, subfolders):
     new_qc_path = rescale_qc_file(new_qc_path, scale, convert_to_static, subfolders)
     return new_qc_path
 
-def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, convert_to_static, subfolders):    
+def rescale_and_compile_models(decomp_qc_path, compiler_path, game_folder, mdl_paths_struct, mdl_entities, subfolders):
+    
+    input(f"zxcv 1")
+    
+    # ттттттттттттттт
+    
+    scales = ""
+    for mdl_entity in mdl_entities:
+        modelscale = mdl_entity[2]
+        print_and_log(f"1002 modelscale: {modelscale}")
+        #mdl_id_class_scale_struct = (entity_id, classname, modelscale)
+        #scales = " ".join(mdl_with_scales[mdl_name])
+        scales += f"{modelscale} "
+    
+    scales = scales.strip()
+    print_and_log(f"589 scales: {scales}")
+    
+    
     scales = list(set(map(float, scales.split())))
     scales.sort()
 
     for scale in scales:
-        new_qc_path = copy_and_rescale_qc(qc_path, scale, convert_to_static, subfolders)
+        new_qc_path = copy_and_rescale_qc(decomp_qc_path, scale, convert_to_static, subfolders)
         if new_qc_path != None:
             compile_model(compiler_path, game_folder, new_qc_path)
         else:
-            print_and_log(Fore.YELLOW + f"Skip QC compiling: {qc_path}")
+            print_and_log(Fore.YELLOW + f"Skip QC compiling: {decomp_qc_path}")
 
 def get_valid_path(prompt_message, valid_extension):
     while True:
@@ -574,18 +591,27 @@ def find_file_in_subfolders(directory, filename_with_extension):
                 result.append(os.path.join(root, file))
     return result
 
-def decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, mdl_path, scales, convert_to_static, subfolders):
-    if debug_mode: print_and_log(f"\ndecompile_rescale_and_compile_model start\n")
+def decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, mdl_paths_struct, mdl_entities, subfolders):
+    if debug_mode: print_and_log(f"\n decompile rescale and compile model start\n")
+    
+    #hammer_mdl_path = mdl_paths_struct[0]
+    mdl_real_path = mdl_paths_struct[1]
+
     if debug_mode: print_and_log(f"ccld_path: {ccld_path}")
     if debug_mode: print_and_log(f"gameinfo_path: {gameinfo_path}")
     if debug_mode: print_and_log(f"compiler_path: {compiler_path}")
-    if debug_mode: print_and_log(f"mdl_path: {mdl_path}")
-    if debug_mode: print_and_log(f"scales: {scales}")
-    qc_path = decompile_dialog(mdl_path, ccld_path)
-    if debug_mode: print_and_log(f"qc_path: {qc_path}")
+    if debug_mode: print_and_log(f"mdl_real_path: {mdl_real_path}")
+    #if debug_mode: print_and_log(f"scales: {scales}")
+    
+    # decompiled model
+    decomp_qc_path = decompile_dialog(mdl_real_path, ccld_path)
+    if debug_mode: print_and_log(f"decomp_qc_path: {decomp_qc_path}")
+    
     game_folder = gameinfo_path.rsplit('\\', 1)[0]
+    
     if debug_mode: print_and_log(f"game_folder: {game_folder}")
-    rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, convert_to_static, subfolders)
+    
+    rescale_and_compile_models(decomp_qc_path, compiler_path, game_folder, mdl_paths_struct, mdl_entities, subfolders)
 
 def get_vpkeditcli_tree(vpkeditcli_path, vpk_file):
     result = subprocess.run(
@@ -989,7 +1015,7 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
     
 
     #for real_mdl_path in real_mdl_paths:
-    for mdl_paths_struct, entities in list(mdl_with_scales.items()):
+    for mdl_paths_struct, mdl_entities in list(mdl_with_scales.items()):
         mdl_name = mdl_paths_struct[0]
         real_mdl_path = mdl_paths_struct[1]
         mdl_file_name = get_file_name(real_mdl_path)
@@ -997,22 +1023,23 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
         #if mdl_name == None:
         #    print_and_log(Fore.RED + f"Cant recompile and scale {mdl_file_name}.mdl because of hammer style path transform error, skipping :(")
         #    continue
-        if debug_mode: print_and_log(f"Entities: {entities}")
-        scales = ""
-        for entity in entities:
-            modelscale = entity[2]
-            print_and_log(f"1002 modelscale: {modelscale}")
-            #mdl_id_class_scale_struct = (entity_id, classname, modelscale)
-            #scales = " ".join(mdl_with_scales[mdl_name])
-            scales += f"{modelscale} "
         
-        scales = scales.strip()
-        print_and_log(f"1007 scales: {scales}")
+        if debug_mode: print_and_log(f"mdl_entities: {mdl_entities}")
+        #scales = ""
+        #for mdl_entity in mdl_entities:
+        #    modelscale = mdl_entity[2]
+        #    print_and_log(f"1002 modelscale: {modelscale}")
+        #    #mdl_id_class_scale_struct = (entity_id, classname, modelscale)
+        #    #scales = " ".join(mdl_with_scales[mdl_name])
+        #    scales += f"{modelscale} "
+        #
+        #scales = scales.strip()
+        #print_and_log(f"1007 scales: {scales}")
         
-        input(f"zxcv")
-        
-        decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, real_mdl_path, scales, convert_to_static, subfolders)
+        decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, mdl_paths_struct, mdl_entities, subfolders)
 
+    input(f"zxcv 2")
+    
     for entity in entities_todo:
         model = entity['model']
         modelscale = entity['modelscale']
