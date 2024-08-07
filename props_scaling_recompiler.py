@@ -491,38 +491,56 @@ def rescale_qc_file(qc_path, scale, convert_to_static=False, subfolders=True):
 
     return new_qc_path
 
-def copy_and_rescale_qc(qc_path, scale, convert_to_static, subfolders):
-    dir_name, file_name = os.path.split(qc_path)
+def copy_and_rescale_qc(decomp_qc_path, mdl_entity, subfolders):
+    dir_name, file_name = os.path.split(decomp_qc_path)
     base_name, ext = os.path.splitext(file_name)
-    new_file_name = f"{base_name}_scaled_{int(scale*100)}{ext}"
-    new_qc_path = os.path.join(dir_name, new_file_name)
-    shutil.copy(qc_path, new_qc_path)
-    new_qc_path = rescale_qc_file(new_qc_path, scale, convert_to_static, subfolders)
-    return new_qc_path
 
-def rescale_and_compile_models(decomp_qc_path, compiler_path, game_folder, mdl_paths_struct, mdl_entities, subfolders):
+    entity_id = mdl_entity[0]
+    classname = mdl_entity[1]
+    modelscale = mdl_entity[2]
+    
+    if debug_mode: print_and_log(f"entity_id: {entity_id}")
+    if debug_mode: print_and_log(f"classname: {classname}")
+    if debug_mode: print_and_log(f"modelscale: {modelscale}")
+    
+    if classname == "prop_static_scalable":
+        if debug_mode: print_and_log(f"prop_static_scalable")
+    elif classname == "prop_dynamic_scalable":
+        if debug_mode: print_and_log(f"prop_dynamic_scalable")
+    elif classname == "prop_physics_scalable":
+        if debug_mode: print_and_log(f"prop_physics_scalable")
     
     input(f"zxcv 1")
     
-    # ттттттттттттттт
-    
-    scales = ""
-    for mdl_entity in mdl_entities:
-        modelscale = mdl_entity[2]
-        print_and_log(f"1002 modelscale: {modelscale}")
-        #mdl_id_class_scale_struct = (entity_id, classname, modelscale)
-        #scales = " ".join(mdl_with_scales[mdl_name])
-        scales += f"{modelscale} "
-    
-    scales = scales.strip()
-    print_and_log(f"589 scales: {scales}")
-    
-    
-    scales = list(set(map(float, scales.split())))
-    scales.sort()
+    #new_file_name = f"{base_name}_scaled_{int(scale*100)}{ext}"
+    #new_qc_path = os.path.join(dir_name, new_file_name)
+    #shutil.copy(decomp_qc_path, new_qc_path)
+    #
+    #scales = ""
+    #for mdl_entity in mdl_entities:
+    #    modelscale = mdl_entity[2]
+    #    print_and_log(f"1002 modelscale: {modelscale}")
+    #    #mdl_id_class_scale_struct = (entity_id, classname, modelscale)
+    #    #scales = " ".join(mdl_with_scales[mdl_name])
+    #    scales += f"{modelscale} "
+    #
+    #scales = scales.strip()
+    #print_and_log(f"589 scales: {scales}")
+    #
+    #scales = list(set(map(float, scales.split())))
+    #scales.sort()
+    #
+    #
+    #
+    #
+    #new_qc_path = rescale_qc_file(new_qc_path, scale, convert_to_static, subfolders)
+    #return new_qc_path
 
-    for scale in scales:
-        new_qc_path = copy_and_rescale_qc(decomp_qc_path, scale, convert_to_static, subfolders)
+def rescale_and_compile_models(decomp_qc_path, compiler_path, game_folder, mdl_paths_struct, mdl_entities, subfolders):
+    
+    for mdl_entity in mdl_entities:
+        print_and_log(f"542 mdl_entity: {mdl_entity}")
+        new_qc_path = copy_and_rescale_qc(decomp_qc_path, mdl_entity, subfolders)
         if new_qc_path != None:
             compile_model(compiler_path, game_folder, new_qc_path)
         else:
