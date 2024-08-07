@@ -37,6 +37,8 @@ Currently, the ratio of copies to megabytes is approximately 3 to 1, i.e., 3 new
 
 This means that with an additional 100 MB of project content size, you can afford approximately 300 scaled versions of assets (maybe less, maybe more - it depends on the asset itself).
 
+After packing this content into VPK, the size will be even smaller.
+
 
 ## Installation:
 1. [**Download zip archive with all stuff**](https://github.com/Ambiabstract/props_scaling_recompiler/releases/latest)
