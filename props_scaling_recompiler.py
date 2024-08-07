@@ -376,13 +376,10 @@ def fix_phys_collision_smd(qc_path):
         print_and_log(Fore.RED + f"ERROR: {e}")
         return False
 
-def rescale_qc_file(qc_path, scale, convert_to_static=False, subfolders=True):
-    prop_physics = False
-    prop_dynamic = False
-    prop_static = False
-    new_qc_path = qc_path
-    new_scale = scale
-    new_hammer_modelname = None
+def rescale_qc_file(qc_path, mdl_entity, subfolders=True):
+    classname = mdl_entity[1]
+    scale = mdl_entity[2]
+    scale = float(scale)
 
     def scale_values(line, scale):
         numbers = re.findall(r"[-+]?\d*\.\d+|\d+", line)
@@ -402,7 +399,7 @@ def rescale_qc_file(qc_path, scale, convert_to_static=False, subfolders=True):
     with open(qc_path, 'r') as file:
         lines = file.readlines()
         #content = file.read()
-
+    
     staticprop_found = any("$staticprop" in line for line in lines)
     keyvalues_found = any("$keyvalues" in line for line in lines)
     prop_data_found = any("prop_data" in line for line in lines)
@@ -418,7 +415,9 @@ def rescale_qc_file(qc_path, scale, convert_to_static=False, subfolders=True):
     #    cls_fixed = fix_phys_collision_smd(qc_path)
     #    if debug_mode: print_and_log(Fore.YELLOW + f"cls_fixed: {cls_fixed}")
     
-    # Fucking shit because of the bug that physics props for some reason scales not by N times, but by N^2 times unlike statics and some(!) dyn models
+    # physics props for some reason scales not by N times, but by N^2 times unlike statics and most (but not all!) dyn models
+    # scale multi needed because we dont know prop class until we decompile it, so name of mdl will be like it's model scale, but actual scale will be like scale_multi
+    # maybe i can fix this by remembering prop class after decompile, but it's not critical issue
     scale_multi = scale
     if prop_data_found and not staticprop_found:
         scale_multi = scale ** 2
@@ -444,25 +443,33 @@ def rescale_qc_file(qc_path, scale, convert_to_static=False, subfolders=True):
         
         if debug_mode: print_and_log(Fore.YELLOW + f"!!! model_name: {model_name}")
         if debug_mode: print_and_log(Fore.YELLOW + f"!!! float(scale): {float(scale)}")
+        if debug_mode: print_and_log(Fore.YELLOW + f"!!! classname: {classname}")
 
-        if subfolders == True and float(scale) != 1.0:
-            if debug_mode: print_and_log(Fore.YELLOW + f"!!! subfolders == True and float(scale) != 1.0")
-            new_model_name = f"scaled/{model_name}_scaled_{int(scale * 100)}.mdl"
-        else:
-            if float(scale) == 1.0 and staticprop_found == False:
-                if debug_mode: print_and_log(Fore.YELLOW + f"!!! float(scale) != 1.0 and staticprop_found == False")
-                new_model_name = f"{model_name}_static.mdl"
-            elif float(scale) == 1.0:
-                if debug_mode: print_and_log(Fore.YELLOW + f"!!! float(scale) != 1.0")
-                new_model_name = f"_do_not_compile_me!"
-                return None
+        subfolder_name = ""
+        if subfolders: subfolder_name = "scaled/"
+
+        if classname == "prop_static_scalable":
+            if float(scale) == 1.0:
+                new_model_name = f"{subfolder_name}{model_name}_static.mdl"
             else:
-                if debug_mode: print_and_log(Fore.YELLOW + f"!!! blyat")
-                new_model_name = f"{model_name}_scaled_{int(scale * 100)}.mdl"
+                new_model_name = f"{subfolder_name}{model_name}_static_scaled_{int(float(scale)*100)}.mdl"
+        elif classname == "prop_dynamic_scalable":
+            if float(scale) == 1.0:
+                new_model_name = f"{subfolder_name}{model_name}_dynamic.mdl"
+            else:
+                new_model_name = f"{subfolder_name}{model_name}_dyn_scaled_{int(float(scale)*100)}.mdl"
+        elif classname == "prop_physics_scalable":
+            if float(scale) == 1.0:
+                new_model_name = f"{subfolder_name}{model_name}_physics.mdl"
+            else:
+                new_model_name = f"{subfolder_name}{model_name}_phy_scaled_{int(float(scale)*100)}.mdl"
+
         if debug_mode: print_and_log(f"new_model_name: {new_model_name}")
         new_model_path = model_path.replace(f"{model_name}.mdl", new_model_name)
         if debug_mode: print_and_log(f"new_model_path: {new_model_path}")
         new_modelname_line = f'$modelname "{new_model_path}"\n'
+
+        input(f"zxcv 1")
 
         lines[modelname_index] = new_modelname_line
         
@@ -495,27 +502,35 @@ def copy_and_rescale_qc(decomp_qc_path, mdl_entity, subfolders):
     dir_name, file_name = os.path.split(decomp_qc_path)
     base_name, ext = os.path.splitext(file_name)
 
-    entity_id = mdl_entity[0]
+    #entity_id = mdl_entity[0]
     classname = mdl_entity[1]
     modelscale = mdl_entity[2]
     
-    if debug_mode: print_and_log(f"entity_id: {entity_id}")
+    #if debug_mode: print_and_log(f"entity_id: {entity_id}")
     if debug_mode: print_and_log(f"classname: {classname}")
     if debug_mode: print_and_log(f"modelscale: {modelscale}")
     
     if classname == "prop_static_scalable":
-        if debug_mode: print_and_log(f"prop_static_scalable")
+        if float(modelscale) == 1.0:
+            new_file_name = f"{base_name}_static{ext}"
+        else:
+            new_file_name = f"{base_name}_static_scaled_{int(float(modelscale)*100)}{ext}"
     elif classname == "prop_dynamic_scalable":
-        if debug_mode: print_and_log(f"prop_dynamic_scalable")
+        if float(modelscale) == 1.0:
+            new_file_name = f"{base_name}_dynamic{ext}"
+        else:
+            new_file_name = f"{base_name}_dyn_scaled_{int(float(modelscale)*100)}{ext}"
     elif classname == "prop_physics_scalable":
-        if debug_mode: print_and_log(f"prop_physics_scalable")
+        if float(modelscale) == 1.0:
+            new_file_name = f"{base_name}_physics{ext}"
+        else:
+            new_file_name = f"{base_name}_phy_scaled_{int(float(modelscale)*100)}{ext}"
     
-    input(f"zxcv 1")
+    if debug_mode: print_and_log(f"new_file_name: {new_file_name}")
     
-    #new_file_name = f"{base_name}_scaled_{int(scale*100)}{ext}"
-    #new_qc_path = os.path.join(dir_name, new_file_name)
-    #shutil.copy(decomp_qc_path, new_qc_path)
-    #
+    new_qc_path = os.path.join(dir_name, new_file_name)
+    shutil.copy(decomp_qc_path, new_qc_path)
+
     #scales = ""
     #for mdl_entity in mdl_entities:
     #    modelscale = mdl_entity[2]
@@ -529,12 +544,9 @@ def copy_and_rescale_qc(decomp_qc_path, mdl_entity, subfolders):
     #
     #scales = list(set(map(float, scales.split())))
     #scales.sort()
-    #
-    #
-    #
-    #
-    #new_qc_path = rescale_qc_file(new_qc_path, scale, convert_to_static, subfolders)
-    #return new_qc_path
+
+    new_qc_path = rescale_qc_file(new_qc_path, mdl_entity, subfolders)
+    return new_qc_path
 
 def rescale_and_compile_models(decomp_qc_path, compiler_path, game_folder, mdl_paths_struct, mdl_entities, subfolders):
     
