@@ -1128,8 +1128,13 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
         modelscale = entity['modelscale']
         
         if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
+        if debug_mode: print_and_log(Fore.YELLOW + f"classname: {classname}")
         if debug_mode: print_and_log(Fore.YELLOW + f"modelscale: {modelscale}")
 
+        if classname == "prop_static_scalable": new_classname = "prop_static"
+        if classname == "prop_dynamic_scalable": new_classname = "prop_dynamic"
+        if classname == "prop_physics_scalable": new_classname = "prop_physics"
+        
         if float(modelscale) == 1.0:
             mdl_name = get_file_name(new_model)
             real_mdl_path = find_file_in_subfolders(game_dir, f"{mdl_name}.mdl")
@@ -1151,7 +1156,7 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
 
         def replacer(match):
             updated_block = match.group(0)
-            updated_block = re.sub(r'"classname"\s*"(prop_static_scalable|prop_dynamic_scalable|prop_physics_scalable)"', '"classname" "prop_static"', updated_block)
+            updated_block = re.sub(r'"classname"\s*"(prop_static_scalable|prop_dynamic_scalable|prop_physics_scalable)"', f'"classname" "{new_classname}"', updated_block)
             updated_block = re.sub(r'"model"\s*".*?"', f'"model" "{new_model}"', updated_block)
             return updated_block
 
