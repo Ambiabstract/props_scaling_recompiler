@@ -380,6 +380,7 @@ def rescale_qc_file(qc_path, mdl_entity, subfolders=True):
     classname = mdl_entity[1]
     scale = mdl_entity[2]
     scale = float(scale)
+    new_qc_path = qc_path
 
     def scale_values(line, scale):
         numbers = re.findall(r"[-+]?\d*\.\d+|\d+", line)
@@ -450,17 +451,17 @@ def rescale_qc_file(qc_path, mdl_entity, subfolders=True):
 
         if classname == "prop_static_scalable":
             if float(scale) == 1.0:
-                new_model_name = f"{subfolder_name}{model_name}_static.mdl"
+                new_model_name = f"{model_name}_static.mdl"
             else:
                 new_model_name = f"{subfolder_name}{model_name}_static_scaled_{int(float(scale)*100)}.mdl"
         elif classname == "prop_dynamic_scalable":
             if float(scale) == 1.0:
-                new_model_name = f"{subfolder_name}{model_name}_dynamic.mdl"
+                new_model_name = f"{model_name}_dynamic.mdl"
             else:
                 new_model_name = f"{subfolder_name}{model_name}_dyn_scaled_{int(float(scale)*100)}.mdl"
         elif classname == "prop_physics_scalable":
             if float(scale) == 1.0:
-                new_model_name = f"{subfolder_name}{model_name}_physics.mdl"
+                new_model_name = f"{model_name}_physics.mdl"
             else:
                 new_model_name = f"{subfolder_name}{model_name}_phy_scaled_{int(float(scale)*100)}.mdl"
 
@@ -468,8 +469,6 @@ def rescale_qc_file(qc_path, mdl_entity, subfolders=True):
         new_model_path = model_path.replace(f"{model_name}.mdl", new_model_name)
         if debug_mode: print_and_log(f"new_model_path: {new_model_path}")
         new_modelname_line = f'$modelname "{new_model_path}"\n'
-
-        input(f"zxcv 1")
 
         lines[modelname_index] = new_modelname_line
         
@@ -480,8 +479,9 @@ def rescale_qc_file(qc_path, mdl_entity, subfolders=True):
             lines.insert(modelname_index + 2, f"$scale {scale_multi}\n")
             scale_line_index = modelname_index + 2
 
-        if staticprop_line_index == -1:
-            lines.insert(scale_line_index + 1, "$staticprop\n")
+        if classname == "prop_static_scalable":
+            if staticprop_line_index == -1:
+                lines.insert(scale_line_index + 1, "$staticprop\n")
 
         for index, line in enumerate(lines):
             if line.strip().startswith(("$lod")):
@@ -1068,22 +1068,37 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
         
         decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, mdl_paths_struct, mdl_entities, subfolders)
 
-    input(f"zxcv 2")
-    
     for entity in entities_todo:
+        entity_id = entity['id']
+        classname = entity['classname']
         model = entity['model']
         modelscale = entity['modelscale']
         base_name, ext = os.path.splitext(model)
-        
-        if float(modelscale) == 1.0:
-            new_model = f"{base_name}_static{ext}"
-        else:
-            new_model = f"{base_name}_scaled_{int(float(modelscale) * 100)}{ext}"
-        
+
+        if classname == "prop_static_scalable":
+            new_classname = "prop_static"
+            if float(modelscale) == 1.0:
+                new_model = f"{base_name}_static{ext}"
+            else:
+                new_model = f"{base_name}_static_scaled_{int(float(modelscale)*100)}{ext}"
+        elif classname == "prop_dynamic_scalable":
+            new_classname = "prop_dynamic"
+            if float(modelscale) == 1.0:
+                new_model = f"{base_name}_dynamic{ext}"
+            else:
+                new_model = f"{base_name}_dyn_scaled_{int(float(modelscale)*100)}{ext}"
+        elif classname == "prop_physics_scalable":
+            new_classname = "prop_physics"
+            if float(modelscale) == 1.0:
+                new_model = f"{base_name}_physics{ext}"
+            else:
+                new_model = f"{base_name}_phy_scaled_{int(float(modelscale)*100)}{ext}"
+
         if subfolders == True and float(modelscale) != 1.0:
             new_model = os.path.join(os.path.dirname(new_model), 'scaled', os.path.basename(new_model)).replace('\\', '/')
 
         entity['model'] = new_model
+        entity['classname'] = new_classname
 
         entities_ready.append(entity)
 
@@ -1265,6 +1280,8 @@ def main():
     
     
     # processing prop_physics_scalable
+    
+    input(f"zxcv")
     
     print_and_log(f"Processing VMF...")
     convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir)
