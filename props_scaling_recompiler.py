@@ -1076,19 +1076,19 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
         base_name, ext = os.path.splitext(model)
 
         if classname == "prop_static_scalable":
-            new_classname = "prop_static"
+            #new_classname = "prop_static"
             if float(modelscale) == 1.0:
                 new_model = f"{base_name}_static{ext}"
             else:
                 new_model = f"{base_name}_static_scaled_{int(float(modelscale)*100)}{ext}"
         elif classname == "prop_dynamic_scalable":
-            new_classname = "prop_dynamic"
+            #new_classname = "prop_dynamic"
             if float(modelscale) == 1.0:
                 new_model = f"{base_name}_dynamic{ext}"
             else:
                 new_model = f"{base_name}_dyn_scaled_{int(float(modelscale)*100)}{ext}"
         elif classname == "prop_physics_scalable":
-            new_classname = "prop_physics"
+            #new_classname = "prop_physics"
             if float(modelscale) == 1.0:
                 new_model = f"{base_name}_physics{ext}"
             else:
@@ -1098,7 +1098,7 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
             new_model = os.path.join(os.path.dirname(new_model), 'scaled', os.path.basename(new_model)).replace('\\', '/')
 
         entity['model'] = new_model
-        entity['classname'] = new_classname
+        #entity['classname'] = new_classname
 
         entities_ready.append(entity)
 
@@ -1123,29 +1123,35 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
     for entity in entities_ready:
         if debug_mode: print_and_log(Fore.YELLOW + f"inserting to vmf: {entity}")
         entity_id = entity['id']
+        classname = entity['classname']
         new_model = entity['model']
         modelscale = entity['modelscale']
         
         if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
         if debug_mode: print_and_log(Fore.YELLOW + f"modelscale: {modelscale}")
-        
+
         if float(modelscale) == 1.0:
             mdl_name = get_file_name(new_model)
             real_mdl_path = find_file_in_subfolders(game_dir, f"{mdl_name}.mdl")
             if real_mdl_path:
                 pass
             else:
-                new_model = new_model.replace('_static', '')
+                if classname == "prop_static_scalable":
+                    new_model = new_model.replace('_static', '')
+                elif classname == "prop_dynamic_scalable":
+                    new_model = new_model.replace('_dynamic', '')
+                elif classname == "prop_physics_scalable":
+                    new_model = new_model.replace('_physics', '')
         
         if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
 
         pattern = re.compile(
-            r'entity\s*\{\s*"id"\s*"' + re.escape(entity_id) + r'"\s*("classname"\s*"prop_static_scalable"\s*)(".*?"\s*)*?("model"\s*".*?"\s*)(".*?"\s*)*\}', re.DOTALL
+            r'entity\s*\{\s*"id"\s*"' + re.escape(entity_id) + r'"\s*("classname"\s*"(prop_static_scalable|prop_dynamic_scalable|prop_physics_scalable)"\s*)(".*?"\s*)*?("model"\s*".*?"\s*)(".*?"\s*)*\}', re.DOTALL
         )
 
         def replacer(match):
             updated_block = match.group(0)
-            updated_block = re.sub(r'"classname"\s*"prop_static_scalable"', '"classname" "prop_static"', updated_block)
+            updated_block = re.sub(r'"classname"\s*"(prop_static_scalable|prop_dynamic_scalable|prop_physics_scalable)"', '"classname" "prop_static"', updated_block)
             updated_block = re.sub(r'"model"\s*".*?"', f'"model" "{new_model}"', updated_block)
             return updated_block
 
@@ -1281,8 +1287,7 @@ def main():
     
     # processing prop_physics_scalable
     
-    input(f"zxcv")
-    
+
     print_and_log(f"Processing VMF...")
     convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir)
     
