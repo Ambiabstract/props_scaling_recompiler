@@ -420,8 +420,10 @@ def rescale_qc_file(qc_path, mdl_entity, subfolders=True):
     # scale multi needed because we dont know prop class until we decompile it, so name of mdl will be like it's model scale, but actual scale will be like scale_multi
     # maybe i can fix this by remembering prop class after decompile, but it's not critical issue
     scale_multi = scale
-    if prop_data_found and not staticprop_found:
-        scale_multi = scale ** 2
+    #if prop_data_found and not staticprop_found and classname == "prop_static_scalable":
+    #    scale_multi = scale ** 2
+    #elif prop_data_found:
+    #    scale_multi = scale ** 0.25
 
     modelname_line = ""
     modelname_index = -1
@@ -479,9 +481,8 @@ def rescale_qc_file(qc_path, mdl_entity, subfolders=True):
             lines.insert(modelname_index + 2, f"$scale {scale_multi}\n")
             scale_line_index = modelname_index + 2
 
-        if classname == "prop_static_scalable":
-            if staticprop_line_index == -1:
-                lines.insert(scale_line_index + 1, "$staticprop\n")
+        if staticprop_line_index == -1:
+            lines.insert(scale_line_index + 1, "$staticprop\n")
 
         for index, line in enumerate(lines):
             if line.strip().startswith(("$lod")):
@@ -489,6 +490,8 @@ def rescale_qc_file(qc_path, mdl_entity, subfolders=True):
             if line.strip().startswith(("$bbox", "$cbox", "$illumposition")):
                 lines[index] = comment_line(line)
             if line.strip().startswith(("$definebone", "$hboxset")):
+                lines[index] = comment_line(line)
+            if line.strip().startswith(("$staticprop")) and classname != "prop_static_scalable":
                 lines[index] = comment_line(line)
 
         with open(qc_path, 'w') as file:
