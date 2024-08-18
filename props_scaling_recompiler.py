@@ -529,17 +529,22 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
     mdl_name = os.path.splitext(os.path.basename(hammer_mdl_path))[0]
     if debug_mode: print_and_log(f"4. mdl_name: {mdl_name}")
 
-    mdl_folder_path_without_name = mdl_folder_path.replace(mdl_name, '').strip(os.sep)
+    mdl_folder_path_without_name = mdl_folder_path.replace(f"{mdl_name}.mdl", '').strip(os.sep)
     if debug_mode: print_and_log(f"5. mdl_folder_path_without_name: {mdl_folder_path_without_name}")
     
     mdl_folder_path_without_name_and_last_folder = '/'.join(mdl_folder_path_without_name.rstrip('/').split('/')[:-1]) + '/'
     if debug_mode: print_and_log(f"5-2. mdl_folder_path_without_name_and_last_folder: {mdl_folder_path_without_name_and_last_folder}")
 
-    vpk_extract_folder_model = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path_without_name_and_last_folder)
+    if mdl_folder_path_without_name_and_last_folder == "/":
+        mdl_folder_path_without_name_and_last_folder = ''
     
-    os.makedirs(vpk_extract_folder_model, exist_ok=True)
+    vpk_extract_folder_model = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path_without_name_and_last_folder)
+    vpk_extract_folder_model_with_last_folder = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path)
     
     if debug_mode: print_and_log(Fore.YELLOW + f"6. vpk_extract_folder_model: {vpk_extract_folder_model}")
+    
+    os.makedirs(vpk_extract_folder_model, exist_ok=True)
+    os.makedirs(vpk_extract_folder_model_with_last_folder, exist_ok=True)
 
     mdl_name_with_ext = mdl_name + ".mdl"
     if debug_mode: print_and_log(Fore.YELLOW + f"mdl_name_with_ext: {mdl_name_with_ext}")
@@ -553,6 +558,10 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
             #print_and_log(f"vpkeditcli_tree_err: {vpkeditcli_tree_err}")
             if mdl_name_with_ext in vpkeditcli_tree_out:
                 vpk_with_mdl = vpk_file
+                #if debug_mode: print_and_log(f"vpkeditcli_tree_out: {vpkeditcli_tree_out}")
+                if debug_mode: print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
+                if debug_mode: print_and_log(f"mdl_folder_path: {mdl_folder_path}")
+                if debug_mode: print_and_log(f"vpk_extract_folder_model_with_last_folder: {vpk_extract_folder_model_with_last_folder}")
         except subprocess.CalledProcessError as e:
             print_and_log(Fore.RED + f"Error executing vpkeditcli: {e}")
             return None
@@ -561,9 +570,42 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
         print_and_log(Fore.GREEN + f"vpk with {mdl_name}.mdl found: {vpk_with_mdl}")
         try:
             if debug_mode: print_and_log(Fore.YELLOW + f"Extracting {mdl_name}.mdl from vpk...")
-            vpkeditcli_extract_result = subprocess.run([vpkeditcli_path, '--output', vpk_extract_folder_model, '--extract', mdl_folder_path, vpk_with_mdl], check=True)
-            print_and_log(f"vpkeditcli_extract_result.stdout {vpkeditcli_extract_result.stdout}")
-            print_and_log(f"vpkeditcli_extract_result.stderr {vpkeditcli_extract_result.stderr}")   
+            
+            extract_paths = []
+            extract_paths.append(mdl_folder_path + mdl_name + ".mdl")
+            extract_paths.append(mdl_folder_path + mdl_name + ".dx80.vtx")
+            extract_paths.append(mdl_folder_path + mdl_name + ".dx90.vtx")
+            extract_paths.append(mdl_folder_path + mdl_name + ".sw.vtx")
+            extract_paths.append(mdl_folder_path + mdl_name + ".vvd")
+            extract_paths.append(mdl_folder_path + mdl_name + ".phy")
+            
+            if debug_mode: print_and_log(f"extract_paths: {extract_paths}")
+            if debug_mode: print_and_log(f" ")
+            
+            for extract_path in extract_paths:
+                if debug_mode: print_and_log(f"extract_path: {extract_path}")
+                if debug_mode: print_and_log(f"vpk_extract_folder_model: {vpk_extract_folder_model}")
+                
+                if ".mdl" in extract_path:
+                    vpk_extract_model_path = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path) + mdl_name + ".mdl"
+                if ".dx80.vtx" in extract_path:
+                    vpk_extract_model_path = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path) + mdl_name + ".dx80.vtx"
+                if ".dx90.vtx" in extract_path:
+                    vpk_extract_model_path = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path) + mdl_name + ".dx90.vtx"
+                if ".sw.vtx" in extract_path:
+                    vpk_extract_model_path = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path) + mdl_name + ".sw.vtx"
+                if ".vvd" in extract_path:
+                    vpk_extract_model_path = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path) + mdl_name + ".vvd"
+                if ".phy" in extract_path:
+                    vpk_extract_model_path = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path) + mdl_name + ".phy"
+
+                if debug_mode: print_and_log(Fore.YELLOW + f"vpk_extract_model_path: {vpk_extract_model_path}")
+                
+                vpkeditcli_extract_result = subprocess.run([vpkeditcli_path, '--output', vpk_extract_model_path, '--extract', extract_path, vpk_with_mdl], check=True)
+            
+            #print_and_log(f"vpkeditcli_extract_result.stdout {vpkeditcli_extract_result.stdout}")
+            #print_and_log(f"vpkeditcli_extract_result.stderr {vpkeditcli_extract_result.stderr}")
+            
         except subprocess.CalledProcessError as e:
             print_and_log(Fore.RED + f"Error executing vpkeditcli: {e}")
             return None
@@ -950,7 +992,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.2')
+    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.3')
     print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
     print_and_log(f'https://github.com/Ambiabstract')
     print_and_log(f'Discord: @Ambiabstract')
@@ -959,7 +1001,7 @@ def main():
     script_path = get_script_path()
     
     if debug_mode == True:
-        print_and_log(f'[debug_mode] script_path: {script_path}\n')
+        print_and_log(f'script_path: {script_path}\n')
     
     if check_bin_folder(script_path) == True:
         pass
