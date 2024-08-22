@@ -42,14 +42,50 @@ def parse_vmf(file_path, classname="prop_static_scalable"):
     entities_raw = []
     with open(file_path, 'r') as file:
         content = file.read()
-    pattern = re.compile(rf'entity\s*\{{\s*("id"\s*"(\d+)"\s*)("classname"\s*"{re.escape(classname)}"\s*)(".*?"\s*)*?("model"\s*"(.*?)"\s*)("modelscale"\s*"(.*?)"\s*)(".*?"\s*)*\}}', re.DOTALL)
+    #pattern = re.compile(rf'entity\s*\{{\s*("id"\s*"(\d+)"\s*)("classname"\s*"{re.escape(classname)}"\s*)(".*?"\s*)*?("model"\s*"(.*?)"\s*)("modelscale"\s*"(.*?)"\s*)(".*?"\s*)*\}}', re.DOTALL)
+    pattern = re.compile(
+        rf"""
+        entity\s*\{{\s*
+        ("id"\s*"(\d+)"\s*)
+        ("classname"\s*"{re.escape(classname)}"\s*)
+        (".*?"\s*)*?
+        ("model"\s*"(.*?)"\s*)
+        ("modelscale"\s*"(.*?)"\s*)
+        (".*?"\s*)*?
+        ("origin"\s*"(.*?)"\s*)
+        (".*?"\s*)*
+        \}}
+        """, 
+        re.DOTALL | re.VERBOSE
+    )
     matches = pattern.findall(content)
 
+    if debug_mode: print_and_log(f"matches: {matches}")
+
     for match in matches:
+        if debug_mode: print_and_log(f"match[1]: {match[1]}")
+        #if debug_mode: print_and_log(f"match[2]: {match[2]}")
+        #if debug_mode: print_and_log(f"match[3]: {match[3]}")
+        #if debug_mode: print_and_log(f"match[4]: {match[4]}")
+        if debug_mode: print_and_log(f"match[5]: {match[5]}")
+        #if debug_mode: print_and_log(f"match[6]: {match[6]}")
+        if debug_mode: print_and_log(f"match[7]: {match[7]}")
+        #if debug_mode: print_and_log(f"match[8]: {match[8]}")
+        #if debug_mode: print_and_log(f"match[9]: {match[9]}")
+        if debug_mode: print_and_log(f"match[10]: {match[10]}")
+        #if debug_mode: print_and_log(f"match[11]: {match[11]}")
+
+        origin = match[10][:match[10].find('"')]
+        if debug_mode: print_and_log(f"origin: {origin}")
+        
+        modelscale = match[7]
+        if "," in match[7]:
+            print_and_log(Fore.YELLOW + f"Warning! Model scale of {get_file_name(match[5])}.mdl has a comma! Entity ID: {match[1]}. Entity origin: '{origin}'. Compiling with scale 1.")
+            modelscale = "1"
         entity_dict = {
             "id": match[1],
             "model": match[5],
-            "modelscale": match[7]
+            "modelscale": modelscale
         }
         entities_raw.append(entity_dict)
 
@@ -992,7 +1028,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.3')
+    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.4')
     print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
     print_and_log(f'https://github.com/Ambiabstract')
     print_and_log(f'Discord: @Ambiabstract')
