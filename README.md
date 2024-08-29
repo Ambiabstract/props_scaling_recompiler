@@ -41,6 +41,10 @@ After packing this content into VPK, the size will be even smaller.
 
 
 ## Installation:
+Video tutorial (English subtitles available):
+
+[![Click to open Youtube video](https://img.youtube.com/vi/3PpmJrCmTKQ/0.jpg)](https://www.youtube.com/watch?v=3PpmJrCmTKQ)
+
 1. [**Download zip archive with all stuff**](https://github.com/Ambiabstract/props_scaling_recompiler/releases/latest)
 
 2. Put props_scaling_recompiler.exe, [CrowbarCommandLineDecomp.exe](https://github.com/UltraTechX/Crowbar-Command-Line), [vpkeditcli.exe](https://github.com/craftablescience/VPKEdit) and props_scaling_recompiler.fgd in the bin folder where studiomdl.exe is located.
