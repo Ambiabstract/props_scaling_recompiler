@@ -118,10 +118,14 @@ Video tutorial (English subtitles available):
 
 ## Future plans:
 
-1. New entity - scaling physical props with preserving correct collision and converting any props to physical props.
-2. New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
-3. New feature for painting static props, analogous to "rendercolor" from newer versions of the engine.
-4. Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve it.
+- Auto update of lights.rad (if the original prop is included in this file - its scaled versions will be added automatically).
+- Parsing the mdl header to see in advance the presence of the $staticprop parameter (reduce script runtime).
+- "_dir" ending support when parsing gameinfo.
+- Portal 2 support research.
+- New entity - scaling physical props with preserving correct collision and converting any props to physical props.
+- New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
+- New feature for painting static props, analogous to "rendercolor" from newer versions of the engine.
+- Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve it.
 
 ## Credits:
 Thanks to ficool2 for Hammer++ and Propper++
