@@ -27,6 +27,9 @@ In summary, these tools complement each other rather than exclude each other.
 
 ![ezgif-3-9343f7bb04](https://github.com/user-attachments/assets/7176845e-8e00-4365-b0fa-dba6f7481687)
 
+By the way, with the "Shift + Mouse Wheel" key combination you can scale selected prop without opening any menus at all!
+![GIF 21 10 2024 4-43-34](https://github.com/user-attachments/assets/330ce557-45ee-4201-8e96-22700b35352d)
+
 
 ## Small content size:
 Since the tool creates scaled copies of models, you should consider the impact on the overall size of new files in the mod content.
