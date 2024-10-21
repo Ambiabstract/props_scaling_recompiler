@@ -38,20 +38,57 @@ def get_script_name():
         script_name = os.path.basename(os.path.abspath(__file__))
     return os.path.splitext(script_name)[0]
 
-def parse_vmf(file_path, classname="prop_static_scalable"):
+def parse_vmf(file_path, classnames = ["prop_static_scalable", "prop_dynamic_scalable", "prop_physics_scalable"]):
     entities_raw = []
     with open(file_path, 'r') as file:
         content = file.read()
-    pattern = re.compile(rf'entity\s*\{{\s*("id"\s*"(\d+)"\s*)("classname"\s*"{re.escape(classname)}"\s*)(".*?"\s*)*?("model"\s*"(.*?)"\s*)("modelscale"\s*"(.*?)"\s*)(".*?"\s*)*\}}', re.DOTALL)
-    matches = pattern.findall(content)
 
+    classnames_pattern = '|'.join(classnames)
+
+    pattern = re.compile(
+        rf'entity\s*\{{'
+        rf'[^\{{}}]*"id"\s*"(?P<id>\d+)"\s*'
+        rf'[^\{{}}]*"classname"\s*\"(?P<classname>{classnames_pattern})\"\s*'
+        rf'[^\{{}}]*"model"\s*"(?P<model>[^"]+)"\s*'
+        rf'[^\{{}}]*"modelscale"\s*"(?P<modelscale>[^"]+)"\s*'
+        rf'[^\{{}}]*"origin"\s*"(?P<origin>[^"]+)"\s*',
+        re.DOTALL | re.MULTILINE
+    )
+    matches = list(pattern.finditer(content))
+    
+    print_and_log(f" ")
+    print_and_log(f"{len(matches)} entities with modelscale found")
+    
     for match in matches:
+        if debug_mode: print_and_log(f" ")
+        
+        entity_id = match.group('id')
+        if debug_mode: print_and_log(f"id: {entity_id}")
+        
+        classname = match.group('classname')
+        if debug_mode: print_and_log(f"classname: {classname}")
+        
+        model = match.group('model')
+        if debug_mode: print_and_log(f"model: {model}")
+        
+        modelscale = match.group('modelscale')
+        if debug_mode: print_and_log(f"modelscale: {modelscale}")
+        if "," in modelscale:
+            print_and_log(Fore.YELLOW + f"Warning! Model scale of {get_file_name(model)}.mdl has a comma! Entity ID: {entity_id}. Entity origin: '{origin}'. Compiling with scale 1.")
+            modelscale = "1"
+        
+        origin = match.group('origin')
+        if debug_mode: print_and_log(f"origin: {origin}")
+
         entity_dict = {
-            "id": match[1],
-            "model": match[5],
-            "modelscale": match[7]
+            "id": entity_id,
+            "model": model,
+            "modelscale": modelscale
         }
+
         entities_raw.append(entity_dict)
+    
+    print_and_log(f" ")
 
     return entities_raw
 
@@ -192,7 +229,10 @@ def process_entities_raw(game_dir, entities_raw, force_recompile):
             print_and_log(Fore.RED + f"ERROR! {get_file_name(entity['model'])}.mdl has wrong scale: {entity['modelscale']}. Should be more than 0.01! Skipping")
     
     entities_raw = entities_raw_temp
-
+    
+    entities_raw_len = len(entities_raw)
+    entities_raw_progress = 0
+    
     for entity in entities_raw:
         entity_id = entity['id']
         model = entity['model']
@@ -211,6 +251,13 @@ def process_entities_raw(game_dir, entities_raw, force_recompile):
                 entity['model'] = transform_mdl_path_to_hammer_style(mdl_path)
                 entity['modelscale'] = '1'
                 entities_ready.append(entity)
+
+        entities_raw_progress += 1
+        
+        if entities_raw_progress >= entities_raw_len:
+            print_and_log(f"Done!")
+        else:
+            print(f"{int(entities_raw_progress*100/entities_raw_len)}%", end="\r")
 
     return entities_ready, entities_todo
 
@@ -942,6 +989,11 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
     with open(vmf_out_path, 'r') as file:
         content = file.read()
 
+    entities_ready_len = len(entities_ready)
+    print_and_log(f"{entities_ready_len} entities to insert.")
+    
+    entities_progress = 0
+    
     for entity in entities_ready:
         if debug_mode: print_and_log(Fore.YELLOW + f"inserting to vmf: {entity}")
         entity_id = entity['id']
@@ -972,7 +1024,14 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
             return updated_block
 
         content = pattern.sub(replacer, content)
-
+        
+        entities_progress += 1
+        
+        if entities_progress >= entities_ready_len:
+            print_and_log(f"Done!")
+        else:
+            print(f"{int(entities_progress*100/entities_ready_len)}%", end="\r")
+    
     with open(vmf_out_path, 'w') as file:
         if debug_mode: print_and_log(Fore.YELLOW + f"writing vmf...")
         file.write(content)
@@ -992,7 +1051,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.3')
+    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.4')
     print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
     print_and_log(f'https://github.com/Ambiabstract')
     print_and_log(f'Discord: @Ambiabstract')
@@ -1074,7 +1133,7 @@ def main():
     
     print_and_log(f"Processing initiated")
     
-    entities_raw = parse_vmf(vmf_in_path, classname="prop_static_scalable")
+    entities_raw = parse_vmf(vmf_in_path, classnames = ["prop_static_scalable"])
     if debug_mode: print_and_log(f"\nentities_raw: {entities_raw}")
     
     if force_recompile: print_and_log(f"Force recompile mode: scaled and static assets removing from project files...")
@@ -1093,9 +1152,11 @@ def main():
 
     if debug_mode: print_and_log(f"\n entities_ready: {entities_ready}")
     
+    print_and_log(f" ")
     print_and_log(f"Processing VMF...")
     convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir)
     
+    print_and_log(f" ")
     print_and_log(Fore.GREEN + f"props_scaling_recompiler has finished its work!")
     
     # Closing colorama
