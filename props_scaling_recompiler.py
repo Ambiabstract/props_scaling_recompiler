@@ -7,7 +7,7 @@ import argparse
 import io
 from colorama import init, Fore
 
-debug_mode = False
+debug_mode = True
 
 # Regular expression for deleting ANSI escape sequences
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -38,56 +38,57 @@ def get_script_name():
         script_name = os.path.basename(os.path.abspath(__file__))
     return os.path.splitext(script_name)[0]
 
-def parse_vmf(file_path, classname="prop_static_scalable"):
+def parse_vmf(file_path, classnames = ["prop_static_scalable", "prop_dynamic_scalable", "prop_physics_scalable"]):
     entities_raw = []
     with open(file_path, 'r') as file:
         content = file.read()
-    #pattern = re.compile(rf'entity\s*\{{\s*("id"\s*"(\d+)"\s*)("classname"\s*"{re.escape(classname)}"\s*)(".*?"\s*)*?("model"\s*"(.*?)"\s*)("modelscale"\s*"(.*?)"\s*)(".*?"\s*)*\}}', re.DOTALL)
+
+    classnames_pattern = '|'.join(classnames)
+
     pattern = re.compile(
-        rf"""
-        entity\s*\{{\s*
-        ("id"\s*"(\d+)"\s*)
-        ("classname"\s*"{re.escape(classname)}"\s*)
-        (".*?"\s*)*?
-        ("model"\s*"(.*?)"\s*)
-        ("modelscale"\s*"(.*?)"\s*)
-        (".*?"\s*)*?
-        ("origin"\s*"(.*?)"\s*)
-        (".*?"\s*)*
-        \}}
-        """, 
-        re.DOTALL | re.VERBOSE
+        rf'entity\s*\{{'
+        rf'[^\{{}}]*"id"\s*"(?P<id>\d+)"\s*'
+        rf'[^\{{}}]*"classname"\s*\"(?P<classname>{classnames_pattern})\"\s*'
+        rf'[^\{{}}]*"model"\s*"(?P<model>[^"]+)"\s*'
+        rf'[^\{{}}]*"modelscale"\s*"(?P<modelscale>[^"]+)"\s*'
+        rf'[^\{{}}]*"origin"\s*"(?P<origin>[^"]+)"\s*',
+        re.DOTALL | re.MULTILINE
     )
-    matches = pattern.findall(content)
-
-    if debug_mode: print_and_log(f"matches: {matches}")
-
+    matches = list(pattern.finditer(content))
+    
+    print_and_log(f" ")
+    print_and_log(f"{len(matches)} entities with modelscale found")
+    
     for match in matches:
-        if debug_mode: print_and_log(f"match[1]: {match[1]}")
-        #if debug_mode: print_and_log(f"match[2]: {match[2]}")
-        #if debug_mode: print_and_log(f"match[3]: {match[3]}")
-        #if debug_mode: print_and_log(f"match[4]: {match[4]}")
-        if debug_mode: print_and_log(f"match[5]: {match[5]}")
-        #if debug_mode: print_and_log(f"match[6]: {match[6]}")
-        if debug_mode: print_and_log(f"match[7]: {match[7]}")
-        #if debug_mode: print_and_log(f"match[8]: {match[8]}")
-        #if debug_mode: print_and_log(f"match[9]: {match[9]}")
-        if debug_mode: print_and_log(f"match[10]: {match[10]}")
-        #if debug_mode: print_and_log(f"match[11]: {match[11]}")
-
-        origin = match[10][:match[10].find('"')]
-        if debug_mode: print_and_log(f"origin: {origin}")
+        if debug_mode: print_and_log(f" ")
         
-        modelscale = match[7]
-        if "," in match[7]:
-            print_and_log(Fore.YELLOW + f"Warning! Model scale of {get_file_name(match[5])}.mdl has a comma! Entity ID: {match[1]}. Entity origin: '{origin}'. Compiling with scale 1.")
+        entity_id = match.group('id')
+        if debug_mode: print_and_log(f"id: {entity_id}")
+        
+        classname = match.group('classname')
+        if debug_mode: print_and_log(f"classname: {classname}")
+        
+        model = match.group('model')
+        if debug_mode: print_and_log(f"model: {model}")
+        
+        modelscale = match.group('modelscale')
+        if debug_mode: print_and_log(f"modelscale: {modelscale}")
+        if "," in modelscale:
+            print_and_log(Fore.YELLOW + f"Warning! Model scale of {get_file_name(model)}.mdl has a comma! Entity ID: {entity_id}. Entity origin: '{origin}'. Compiling with scale 1.")
             modelscale = "1"
+        
+        origin = match.group('origin')
+        if debug_mode: print_and_log(f"origin: {origin}")
+
         entity_dict = {
-            "id": match[1],
-            "model": match[5],
+            "id": entity_id,
+            "model": model,
             "modelscale": modelscale
         }
+
         entities_raw.append(entity_dict)
+    
+    print_and_log(f" ")
 
     return entities_raw
 
@@ -1110,7 +1111,7 @@ def main():
     
     print_and_log(f"Processing initiated")
     
-    entities_raw = parse_vmf(vmf_in_path, classname="prop_static_scalable")
+    entities_raw = parse_vmf(vmf_in_path, classnames = ["prop_static_scalable"])
     if debug_mode: print_and_log(f"\nentities_raw: {entities_raw}")
     
     if force_recompile: print_and_log(f"Force recompile mode: scaled and static assets removing from project files...")
@@ -1129,9 +1130,11 @@ def main():
 
     if debug_mode: print_and_log(f"\n entities_ready: {entities_ready}")
     
+    print_and_log(f" ")
     print_and_log(f"Processing VMF...")
     convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir)
     
+    print_and_log(f" ")
     print_and_log(Fore.GREEN + f"props_scaling_recompiler has finished its work!")
     
     # Closing colorama
