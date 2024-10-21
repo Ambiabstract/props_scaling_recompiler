@@ -120,7 +120,7 @@ Video tutorial (English subtitles available):
 
 - Auto update of lights.rad (if the original prop is included in this file - its scaled versions will be added automatically).
 - Parsing the mdl header to see in advance the presence of the $staticprop parameter (reduce script runtime).
-- "_dir" ending support when parsing gameinfo.
+- Gameinfo parsing fixes ("_dir" ending issue and so on).
 - Portal 2 support research.
 - New entity - scaling physical props with preserving correct collision and converting any props to physical props.
 - New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
