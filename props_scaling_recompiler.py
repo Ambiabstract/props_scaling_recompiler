@@ -7,7 +7,7 @@ import argparse
 import io
 from colorama import init, Fore
 
-debug_mode = True
+debug_mode = False
 
 # Regular expression for deleting ANSI escape sequences
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -229,7 +229,10 @@ def process_entities_raw(game_dir, entities_raw, force_recompile):
             print_and_log(Fore.RED + f"ERROR! {get_file_name(entity['model'])}.mdl has wrong scale: {entity['modelscale']}. Should be more than 0.01! Skipping")
     
     entities_raw = entities_raw_temp
-
+    
+    entities_raw_len = len(entities_raw)
+    entities_raw_progress = 0
+    
     for entity in entities_raw:
         entity_id = entity['id']
         model = entity['model']
@@ -248,6 +251,13 @@ def process_entities_raw(game_dir, entities_raw, force_recompile):
                 entity['model'] = transform_mdl_path_to_hammer_style(mdl_path)
                 entity['modelscale'] = '1'
                 entities_ready.append(entity)
+
+        entities_raw_progress += 1
+        
+        if entities_raw_progress >= entities_raw_len:
+            print_and_log(f"Done!")
+        else:
+            print(f"{int(entities_raw_progress*100/entities_raw_len)}%", end="\r")
 
     return entities_ready, entities_todo
 
@@ -979,6 +989,11 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
     with open(vmf_out_path, 'r') as file:
         content = file.read()
 
+    entities_ready_len = len(entities_ready)
+    print_and_log(f"{entities_ready_len} entities to insert.")
+    
+    entities_progress = 0
+    
     for entity in entities_ready:
         if debug_mode: print_and_log(Fore.YELLOW + f"inserting to vmf: {entity}")
         entity_id = entity['id']
@@ -1009,7 +1024,14 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
             return updated_block
 
         content = pattern.sub(replacer, content)
-
+        
+        entities_progress += 1
+        
+        if entities_progress >= entities_ready_len:
+            print_and_log(f"Done!")
+        else:
+            print(f"{int(entities_progress*100/entities_ready_len)}%", end="\r")
+    
     with open(vmf_out_path, 'w') as file:
         if debug_mode: print_and_log(Fore.YELLOW + f"writing vmf...")
         file.write(content)
