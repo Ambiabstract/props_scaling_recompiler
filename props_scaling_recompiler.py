@@ -910,6 +910,11 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
             mdl_with_scales[mdl_name] = set()
         mdl_with_scales[mdl_name].add(modelscale)
 
+    all_source_engine_paths = os.path.abspath(os.path.join(get_script_path(), ".."))
+    search_paths = parse_search_paths(gameinfo_path)
+    search_paths = search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False)
+    search_paths = update_search_paths(search_paths, game_dir, all_source_engine_paths)
+
     real_mdl_paths = []
     for mdl_name in mdl_with_scales.keys():
         hammer_mdl_path = mdl_name
@@ -923,11 +928,6 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
             print_and_log(f"{mdl_name}.mdl not found in project content.")
             print_and_log(f"Trying to find {mdl_name}.mdl in paths from GameInfo...")
 
-            all_source_engine_paths = os.path.abspath(os.path.join(get_script_path(), ".."))
-            search_paths = parse_search_paths(gameinfo_path)
-            search_paths = search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False)
-            search_paths = update_search_paths(search_paths, game_dir, all_source_engine_paths)
-            
             mdl_path_from_other_contents = find_mdl_in_paths_from_gameinfo(search_paths, hammer_mdl_path)
             
             if mdl_path_from_other_contents != None:
