@@ -7,7 +7,7 @@ import argparse
 import io
 from colorama import init, Fore
 
-debug_mode = True
+debug_mode = False
 
 # Regular expression for deleting ANSI escape sequences
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -1184,7 +1184,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.2')
+    print_and_log(Fore.CYAN + f'props_scaling_recompiler DYN PHYS SCALE TEST')
     print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
     print_and_log(f'https://github.com/Ambiabstract')
     print_and_log(f'Discord: @Ambiabstract')
