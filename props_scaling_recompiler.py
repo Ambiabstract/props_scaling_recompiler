@@ -7,7 +7,7 @@ import argparse
 import io
 from colorama import init, Fore
 
-debug_mode = True
+debug_mode = False
 
 # Regular expression for deleting ANSI escape sequences
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -1037,6 +1037,7 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
         file.write(content)
 
 def lightsrad_updater(game_dir, entities_ready):
+    print_and_log(f"\n")
     lights_rad_path = os.path.join(game_dir, 'lights.rad')
     if not os.path.exists(lights_rad_path):
         print_and_log(f"lights.rad file not found")
@@ -1091,13 +1092,16 @@ def lightsrad_updater(game_dir, entities_ready):
                 lines.append(f"forcetextureshadow {model_noroot}\n")
         else:
             # If there is no string for the original model
-            found_scaled_line = any(f"forcetextureshadow {model_noroot}" in line for line in lines)
+            model_base = model_noroot.split('_scaled_')[0]
+            scaled_pattern = rf"forcetextureshadow {re.escape(model_base)}_scaled_\d+\.mdl"
             
-            if debug_mode: print_and_log(Fore.YELLOW + f"B found_scaled_line: {found_scaled_line}")
+            found_scaled_lines = [line for line in lines if re.search(scaled_pattern, line)]
             
-            if found_scaled_line:
+            if debug_mode: print_and_log(Fore.YELLOW + f"[B] found_scaled_lines: {found_scaled_lines}")
+            
+            if found_scaled_lines:
                 # Delete the line for the scaled model
-                lines = [line for line in lines if f"forcetextureshadow {model_noroot}" not in line]
+                lines = [line for line in lines if not re.search(scaled_pattern, line)]
 
     # Сохранение изменений в lights.rad
     with open(lights_rad_path, 'w', encoding='utf-8') as f:
@@ -1222,8 +1226,6 @@ def main():
     if debug_mode: print_and_log(f"\n entities_ready: {entities_ready}")
     
     lightsrad_updater(game_dir, entities_ready)
-    
-    input(f"zxcv")
     
     print_and_log(f" ")
     print_and_log(f"Processing VMF...")
