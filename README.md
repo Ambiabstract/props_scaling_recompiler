@@ -118,7 +118,6 @@ Video tutorial (English subtitles available):
 
 ## Future plans:
 
-- Auto update of lights.rad (if the original prop is included in this file - its scaled versions will be added automatically).
 - Parsing the mdl header to see in advance the presence of the $staticprop parameter (reduce script runtime).
 - Gameinfo parsing fixes ("_dir" ending issue and so on).
 - Portal 2 support research.
