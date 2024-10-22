@@ -129,7 +129,10 @@ def find_real_mdl_path(game_dir, hammer_mdl_path):
     mdl_filename = hammer_dirs[-1]
     hammer_dirs = hammer_dirs[:-1]
 
+    excluded_dirs = [".git", "sound", "scripts", "modelsrc", "screenshots", "media", "materials"]
+    
     for root, dirs, files in os.walk(game_dir):
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
         rel_path = os.path.relpath(root, game_dir)
         rel_parts = rel_path.split(os.sep)
         if debug_mode: print_and_log(f"rel_path: {rel_path}, rel_parts: {rel_parts}")
