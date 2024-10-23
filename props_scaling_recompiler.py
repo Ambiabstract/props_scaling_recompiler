@@ -255,6 +255,11 @@ def process_entities_raw(game_dir, entities_raw, force_recompile):
         mdl_name = get_file_name(model)
         mdl_name = process_mdl_name(mdl_name, modelscale)
         mdl_path = find_mdl_file(game_dir, mdl_name)
+        
+        # Вот где-то здесь нужно чтение заголовка .mdl
+        # mdl_path - путь к модельке если она лежит в проекте, 
+        # но нам бы по хорошему ещё уметь читать заголовки .mdl из кастомных папок, гейминфо путей и VPK
+        # если скейл равен единице и при этом в .mdl есть флаг статик проп - добавляем entity в entities_ready
 
         if force_recompile:
             entities_todo.append(entity)
