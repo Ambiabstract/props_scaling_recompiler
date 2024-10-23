@@ -5,6 +5,7 @@ import subprocess
 import shutil
 import argparse
 import io
+import time
 from colorama import init, Fore
 
 debug_mode = False
@@ -210,6 +211,9 @@ def remove_scaled_files(game_dir, mdl_name, remove_static=False):
 
 
 def remove_vmf_assets(entities_raw, game_dir, remove_static=False):
+    entities_raw_len = len(entities_raw)
+    entities_raw_progress = 0
+    
     for entity in entities_raw:
         if debug_mode: print_and_log(f"[remove_vmf_assets] entity: {entity}")
         model = entity['model']
@@ -217,6 +221,13 @@ def remove_vmf_assets(entities_raw, game_dir, remove_static=False):
         mdl_name = get_file_name(model)
         if debug_mode: print_and_log(f"[remove_vmf_assets] mdl_name: {mdl_name}")
         remove_scaled_files(game_dir, mdl_name, remove_static)
+        
+        entities_raw_progress += 1
+        
+        if entities_raw_progress >= entities_raw_len:
+            print_and_log(f"Progress: Done!")
+        else:
+            print(f"Progress: {int(entities_raw_progress*100/entities_raw_len)}%", end="\r")
 
 def process_entities_raw(game_dir, entities_raw, force_recompile):
     entities_ready = []
@@ -258,9 +269,9 @@ def process_entities_raw(game_dir, entities_raw, force_recompile):
         entities_raw_progress += 1
         
         if entities_raw_progress >= entities_raw_len:
-            print_and_log(f"Done!")
+            print_and_log(f"Progress: Done!")
         else:
-            print(f"{int(entities_raw_progress*100/entities_raw_len)}%", end="\r")
+            print(f"Progress: {int(entities_raw_progress*100/entities_raw_len)}%", end="\r")
 
     return entities_ready, entities_todo
 
@@ -482,7 +493,7 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
         if new_qc_path != None:
             compile_model(compiler_path, game_folder, new_qc_path)
         else:
-            print_and_log(Fore.YELLOW + f"Skip QC compiling: {qc_path}")
+            print_and_log(Fore.YELLOW + f"Skip QC compiling (new_qc_path is none for some reason):\n{qc_path}")
 
 def get_valid_path(prompt_message, valid_extension):
     while True:
@@ -617,7 +628,7 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
             return None
     
     if vpk_with_mdl != None:
-        print_and_log(Fore.GREEN + f"vpk with {mdl_name}.mdl found: {vpk_with_mdl}")
+        print_and_log(Fore.GREEN + f"vpk with {mdl_name}.mdl found:\n{vpk_with_mdl}")
         try:
             if debug_mode: print_and_log(Fore.YELLOW + f"Extracting {mdl_name}.mdl from vpk...")
             
@@ -785,7 +796,7 @@ def update_search_paths(search_paths, game_dir, all_source_engine_paths):
             print_and_log(f'{path}\t\t{ending}')
     for mode, path, ending in search_paths:
         if not os.path.exists(path):
-            print_and_log(Fore.YELLOW + f'Path from gameinfo.txt does not exist: {path}')
+            print_and_log(Fore.YELLOW + f'Path from gameinfo.txt does not exist:\n{path}\n')
     
     return search_paths
 
@@ -881,7 +892,7 @@ def only_vpk_paths_from_gameinfo(search_paths):
         if os.path.exists(vpk_file):
             existing_vpk_files.append(vpk_file)
         else:
-            print_and_log(Fore.YELLOW + f'VPK file from gameinfo.txt does not exist: {vpk_file}')
+            print_and_log(Fore.YELLOW + f'VPK file from gameinfo.txt does not exist:\n{vpk_file}\n')
 
     return existing_vpk_files
 
@@ -890,7 +901,8 @@ def delete_temp_vpks_content_folder():
     if os.path.exists(vpk_extract_folder):
         try:
             shutil.rmtree(vpk_extract_folder)
-            print_and_log(f"Folder with temp extracted VPKs content deleted: {vpk_extract_folder}")
+            print_and_log(f" ")
+            print_and_log(f"Folder with temp extracted VPKs content deleted:\n{vpk_extract_folder}")
         except Exception as e:
             print_and_log(Fore.RED + f"ERROR! Folder with extracted vpks content ({vpk_extract_folder}) cant be deleted: {e}")
     else:
@@ -910,6 +922,9 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
             mdl_with_scales[mdl_name] = set()
         mdl_with_scales[mdl_name].add(modelscale)
 
+    print_and_log(f" ")
+    print_and_log(f"Extracting paths from gameinfo.txt...")
+    
     all_source_engine_paths = os.path.abspath(os.path.join(get_script_path(), ".."))
     search_paths = parse_search_paths(gameinfo_path)
     search_paths = search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False)
@@ -927,9 +942,8 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
         if real_mdl_path:
             real_mdl_paths.append(real_mdl_path)
         else:
-            if debug_mode: print_and_log(f" ")
-            print_and_log(f"{mdl_name}.mdl not found in project content.")
-            print_and_log(f"Trying to find {mdl_name}.mdl in paths from GameInfo...")
+            print_and_log(f" ")
+            print_and_log(f"{mdl_name}.mdl not found in project content, trying to find in paths from GameInfo...")
 
             mdl_path_from_other_contents = find_mdl_in_paths_from_gameinfo(search_paths, hammer_mdl_path)
             
@@ -1031,18 +1045,18 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
         entities_progress += 1
         
         if entities_progress >= entities_ready_len:
-            print_and_log(f"Done!")
+            print_and_log(f"Progress: Done!")
         else:
-            print(f"{int(entities_progress*100/entities_ready_len)}%", end="\r")
+            print(f"Progress: {int(entities_progress*100/entities_ready_len)}%", end="\r")
     
     with open(vmf_out_path, 'w') as file:
         if debug_mode: print_and_log(Fore.YELLOW + f"writing vmf...")
         file.write(content)
 
 def lightsrad_updater(game_dir, entities_ready):
-    print_and_log(f"\n")
     lights_rad_path = os.path.join(game_dir, 'lights.rad')
     if not os.path.exists(lights_rad_path):
+        print_and_log(f" ")
         print_and_log(f"lights.rad file not found")
         return
 
@@ -1110,6 +1124,7 @@ def lightsrad_updater(game_dir, entities_ready):
     with open(lights_rad_path, 'w', encoding='utf-8') as f:
         f.writelines(lines)
 
+    print_and_log(f" ")
     print_and_log(f"lights.rad updated successfully.")
 
 def main():
@@ -1127,12 +1142,14 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.6')
+    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.7')
     print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
     print_and_log(f'https://github.com/Ambiabstract')
     print_and_log(f'Discord: @Ambiabstract')
     print(Fore.BLACK + f'ANUS SUPER SCALER COMPILER (ASSC) :DDDDDDDDDDDDDDDDDDDDDD xDdxXDXCCCDXXXXDXDXD' + Fore.RESET)
 
+    start_time = time.time()
+    
     script_path = get_script_path()
     
     if debug_mode == True:
@@ -1221,7 +1238,8 @@ def main():
     if debug_mode: print_and_log(f"\nentities_todo: {entities_todo}")
 
     if len(entities_todo) != 0:
-        print_and_log(f"There's something to do....")
+        print_and_log(f" ")
+        print_and_log(f"There's something to do...")
         entities_todo, entities_ready = entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_path, compiler_path, game_dir, convert_to_static, subfolders, vpkeditcli_path)
     else:
         print_and_log(Fore.GREEN + f"Nothing to recompile!")
@@ -1235,7 +1253,14 @@ def main():
     convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir)
     
     print_and_log(f" ")
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    hours, remainder = divmod(elapsed_time, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    print_and_log(f"Time spent: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds")
+    
     print_and_log(Fore.GREEN + f"props_scaling_recompiler has finished its work!")
+    print_and_log(f" ")
     
     # Closing colorama
     #deinit()
