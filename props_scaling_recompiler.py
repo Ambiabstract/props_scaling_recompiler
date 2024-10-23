@@ -129,7 +129,10 @@ def find_real_mdl_path(game_dir, hammer_mdl_path):
     mdl_filename = hammer_dirs[-1]
     hammer_dirs = hammer_dirs[:-1]
 
+    excluded_dirs = [".git", "sound", "scripts", "modelsrc", "screenshots", "media", "materials"]
+    
     for root, dirs, files in os.walk(game_dir):
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
         rel_path = os.path.relpath(root, game_dir)
         rel_parts = rel_path.split(os.sep)
         if debug_mode: print_and_log(f"rel_path: {rel_path}, rel_parts: {rel_parts}")
@@ -907,6 +910,14 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
             mdl_with_scales[mdl_name] = set()
         mdl_with_scales[mdl_name].add(modelscale)
 
+    all_source_engine_paths = os.path.abspath(os.path.join(get_script_path(), ".."))
+    search_paths = parse_search_paths(gameinfo_path)
+    search_paths = search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False)
+    search_paths = update_search_paths(search_paths, game_dir, all_source_engine_paths)
+    
+    vpk_paths_from_gameinfo = only_vpk_paths_from_gameinfo(search_paths)
+    if debug_mode: print_and_log(f"vpk_paths_from_gameinfo: \n{vpk_paths_from_gameinfo}")
+
     real_mdl_paths = []
     for mdl_name in mdl_with_scales.keys():
         hammer_mdl_path = mdl_name
@@ -920,11 +931,6 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
             print_and_log(f"{mdl_name}.mdl not found in project content.")
             print_and_log(f"Trying to find {mdl_name}.mdl in paths from GameInfo...")
 
-            all_source_engine_paths = os.path.abspath(os.path.join(get_script_path(), ".."))
-            search_paths = parse_search_paths(gameinfo_path)
-            search_paths = search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False)
-            search_paths = update_search_paths(search_paths, game_dir, all_source_engine_paths)
-            
             mdl_path_from_other_contents = find_mdl_in_paths_from_gameinfo(search_paths, hammer_mdl_path)
             
             if mdl_path_from_other_contents != None:
@@ -934,9 +940,6 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
                 if debug_mode: print_and_log(f"{mdl_name}.mdl not found in paths from gameinfo.txt")
                 print_and_log(f"Trying to find {mdl_name}.mdl in vpks...")
 
-                vpk_paths_from_gameinfo = only_vpk_paths_from_gameinfo(search_paths)
-                if debug_mode: print_and_log(f"vpk_paths_from_gameinfo: \n{vpk_paths_from_gameinfo}")
-                
                 extracted_mdl_path = extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_paths_from_gameinfo)
                 if debug_mode: print_and_log(Fore.YELLOW + f"extracted_mdl_path: {extracted_mdl_path}")
 
@@ -1124,7 +1127,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.5')
+    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.6')
     print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
     print_and_log(f'https://github.com/Ambiabstract')
     print_and_log(f'Discord: @Ambiabstract')
