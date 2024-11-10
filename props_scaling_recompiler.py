@@ -583,7 +583,7 @@ def get_vpkeditcli_tree(vpkeditcli_path, vpk_file):
 def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files):
     if debug_mode: print_and_log(f"1. hammer_mdl_path: {hammer_mdl_path}")
     mdl_folder_path_orig = os.path.dirname(hammer_mdl_path)
-    if debug_mode: print_and_log(f"2. mdl_folder_path: {mdl_folder_path}")
+    if debug_mode: print_and_log(f"2. mdl_folder_path_orig: {mdl_folder_path_orig}")
     mdl_folder_path = mdl_folder_path_orig + r"/"
     if debug_mode: print_and_log(f"3. mdl_folder_path: {mdl_folder_path}")
 
