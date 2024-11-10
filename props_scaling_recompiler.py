@@ -8,7 +8,7 @@ import io
 import time
 from colorama import init, Fore
 
-debug_mode = False
+debug_mode = True
 
 # Regular expression for deleting ANSI escape sequences
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -582,9 +582,9 @@ def get_vpkeditcli_tree(vpkeditcli_path, vpk_file):
 
 def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files):
     if debug_mode: print_and_log(f"1. hammer_mdl_path: {hammer_mdl_path}")
-    mdl_folder_path = os.path.dirname(hammer_mdl_path)
+    mdl_folder_path_orig = os.path.dirname(hammer_mdl_path)
     if debug_mode: print_and_log(f"2. mdl_folder_path: {mdl_folder_path}")
-    mdl_folder_path = mdl_folder_path + r"/"
+    mdl_folder_path = mdl_folder_path_orig + r"/"
     if debug_mode: print_and_log(f"3. mdl_folder_path: {mdl_folder_path}")
 
     mdl_name = os.path.splitext(os.path.basename(hammer_mdl_path))[0]
@@ -607,8 +607,10 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
     os.makedirs(vpk_extract_folder_model, exist_ok=True)
     os.makedirs(vpk_extract_folder_model_with_last_folder, exist_ok=True)
 
+    # надо искать не по имени модели, а по hammer_mdl_path!
     mdl_name_with_ext = mdl_name + ".mdl"
     if debug_mode: print_and_log(Fore.YELLOW + f"mdl_name_with_ext: {mdl_name_with_ext}")
+    if debug_mode: print_and_log(Fore.YELLOW + f"hammer_mdl_path: {hammer_mdl_path}")
     
     vpk_with_mdl = None
     
@@ -617,10 +619,13 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
             vpkeditcli_tree_out, vpkeditcli_tree_err = get_vpkeditcli_tree(vpkeditcli_path, vpk_file)
             #print_and_log(f"vpkeditcli_tree_out: {vpkeditcli_tree_out}")
             #print_and_log(f"vpkeditcli_tree_err: {vpkeditcli_tree_err}")
-            if mdl_name_with_ext in vpkeditcli_tree_out:
+            #if mdl_name_with_ext in vpkeditcli_tree_out:
+            if mdl_name_with_ext in vpkeditcli_tree_out and mdl_folder_path_orig in vpkeditcli_tree_out:
                 vpk_with_mdl = vpk_file
                 #if debug_mode: print_and_log(f"vpkeditcli_tree_out: {vpkeditcli_tree_out}")
                 if debug_mode: print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
+                if debug_mode: print_and_log(f"os.path.dirname(hammer_mdl_path): {os.path.dirname(hammer_mdl_path)}")
+                if debug_mode: print_and_log(f"hammer_mdl_path: {hammer_mdl_path}")
                 if debug_mode: print_and_log(f"mdl_folder_path: {mdl_folder_path}")
                 if debug_mode: print_and_log(f"vpk_extract_folder_model_with_last_folder: {vpk_extract_folder_model_with_last_folder}")
         except subprocess.CalledProcessError as e:
@@ -1142,7 +1147,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.7')
+    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.8')
     print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
     print_and_log(f'https://github.com/Ambiabstract')
     print_and_log(f'Discord: @Ambiabstract')
