@@ -8,7 +8,7 @@ import io
 import time
 from colorama import init, Fore
 
-debug_mode = True
+debug_mode = False
 
 # Regular expression for deleting ANSI escape sequences
 ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
@@ -581,20 +581,17 @@ def get_vpkeditcli_tree(vpkeditcli_path, vpk_file):
     return result.stdout, result.stderr
 
 def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files):
-    if debug_mode: print_and_log(f"1. hammer_mdl_path: {hammer_mdl_path}")
     mdl_folder_path_orig = os.path.dirname(hammer_mdl_path)
-    if debug_mode: print_and_log(f"2. mdl_folder_path_orig: {mdl_folder_path_orig}")
     mdl_folder_path = mdl_folder_path_orig + r"/"
-    if debug_mode: print_and_log(f"3. mdl_folder_path: {mdl_folder_path}")
 
     mdl_name = os.path.splitext(os.path.basename(hammer_mdl_path))[0]
-    if debug_mode: print_and_log(f"4. mdl_name: {mdl_name}")
+    mdl_name_with_ext = mdl_name + ".mdl"
+    
+    #mdl_parent_folder_name = os.path.basename(mdl_folder_path_orig)
 
     mdl_folder_path_without_name = mdl_folder_path.replace(f"{mdl_name}.mdl", '').strip(os.sep)
-    if debug_mode: print_and_log(f"5. mdl_folder_path_without_name: {mdl_folder_path_without_name}")
     
     mdl_folder_path_without_name_and_last_folder = '/'.join(mdl_folder_path_without_name.rstrip('/').split('/')[:-1]) + '/'
-    if debug_mode: print_and_log(f"5-2. mdl_folder_path_without_name_and_last_folder: {mdl_folder_path_without_name_and_last_folder}")
 
     if mdl_folder_path_without_name_and_last_folder == "/":
         mdl_folder_path_without_name_and_last_folder = ''
@@ -606,28 +603,93 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
     
     os.makedirs(vpk_extract_folder_model, exist_ok=True)
     os.makedirs(vpk_extract_folder_model_with_last_folder, exist_ok=True)
-
-    # надо искать не по имени модели, а по hammer_mdl_path!
-    mdl_name_with_ext = mdl_name + ".mdl"
-    if debug_mode: print_and_log(Fore.YELLOW + f"mdl_name_with_ext: {mdl_name_with_ext}")
-    if debug_mode: print_and_log(Fore.YELLOW + f"hammer_mdl_path: {hammer_mdl_path}")
     
+    
+    #print_and_log(f"mdl_folder_path_orig: {mdl_folder_path_orig}")
+    #print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
+    
+    #print_and_log(f"mdl_parent_folder_name: {mdl_parent_folder_name}")
+    
+    #mdl_with_parent_folder = mdl_parent_folder_name + "/" + mdl_name_with_ext
+    #print_and_log(f"mdl_with_parent_folder: {mdl_with_parent_folder}")
+
     vpk_with_mdl = None
     
     for vpk_file in vpk_files:
         try:
             vpkeditcli_tree_out, vpkeditcli_tree_err = get_vpkeditcli_tree(vpkeditcli_path, vpk_file)
             #print_and_log(f"vpkeditcli_tree_out: {vpkeditcli_tree_out}")
+            
             #print_and_log(f"vpkeditcli_tree_err: {vpkeditcli_tree_err}")
+            
+            #ебать это днище, но по другому может быть ошибка
+            mat_folder = "materials/" + mdl_folder_path_orig
+            vpkeditcli_tree_out = vpkeditcli_tree_out.replace(mat_folder, '')            
+            
             #if mdl_name_with_ext in vpkeditcli_tree_out:
-            if mdl_name_with_ext in vpkeditcli_tree_out and mdl_folder_path_orig in vpkeditcli_tree_out:
-                vpk_with_mdl = vpk_file
+            if mdl_folder_path_orig in vpkeditcli_tree_out and mdl_name_with_ext in vpkeditcli_tree_out:
+                
+                vpkeditcli_tree_out = vpkeditcli_tree_out.splitlines()
+                
+                folder_check = False
+                model_check = False
+                #дополнительная проверка
+                for line in vpkeditcli_tree_out:
+
+                    # Проверяем наличие mdl_folder_path_orig
+                    if mdl_folder_path_orig in line:
+                        folder_check = True
+                        #print_and_log(Fore.YELLOW + f"folder_check = True!")
+                        #print_and_log(Fore.YELLOW + f"line: {line}")
+                        continue
+                
+                    # Проверяем наличие mdl_name_with_ext после mdl_folder_path_orig
+                    if folder_check and mdl_name_with_ext in line:
+                        model_check = True
+                        #print_and_log(Fore.YELLOW + f"model_check = True!")
+                        #print_and_log(Fore.YELLOW + f"line: {line}")
+                        continue
+                
+                    # Проверяем, что не достигли строки, начинающейся с "models/"
+                    if line.startswith("models/"):
+                        #print_and_log(f"line: {line}")
+                        if folder_check and model_check:
+                            vpk_with_mdl = vpk_file
+                            break
+                        else:
+                            folder_check = False
+                            model_check = False
+
+                #print_and_log(f"vpk_file: {vpk_file}")
+                #print_and_log(f"mdl_folder_path_orig: {mdl_folder_path_orig}")
+                #print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
+                #print_and_log(f"folder_check: {folder_check}")
+                #print_and_log(f"model_check: {model_check}")
+                
+                #if folder_check and model_check:
+                #    vpk_with_mdl = vpk_file
+                
+                #input("zxcv")
+                
+                #print_and_log(f"vpkeditcli_tree_out: {vpkeditcli_tree_out}")
+                #print_and_log(f"mdl_folder_path_orig: {mdl_folder_path_orig}")
+                #print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
+                
                 #if debug_mode: print_and_log(f"vpkeditcli_tree_out: {vpkeditcli_tree_out}")
+                
+                #print_and_log(f"hammer_mdl_path_no_first_folder: {hammer_mdl_path_no_first_folder}")
+                #print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
+                #print_and_log(f"mdl_folder_path_orig: {mdl_folder_path_orig}")
+
                 if debug_mode: print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
                 if debug_mode: print_and_log(f"os.path.dirname(hammer_mdl_path): {os.path.dirname(hammer_mdl_path)}")
                 if debug_mode: print_and_log(f"hammer_mdl_path: {hammer_mdl_path}")
                 if debug_mode: print_and_log(f"mdl_folder_path: {mdl_folder_path}")
                 if debug_mode: print_and_log(f"vpk_extract_folder_model_with_last_folder: {vpk_extract_folder_model_with_last_folder}")
+        
+            if vpk_with_mdl != None:
+                break
+        
         except subprocess.CalledProcessError as e:
             print_and_log(Fore.RED + f"Error executing vpkeditcli: {e}")
             return None
@@ -888,7 +950,10 @@ def only_vpk_paths_from_gameinfo(search_paths):
             search_for_vpk(path, vpk_files)
         elif ending.endswith('.vpk'):
             if ending.endswith(".vpk") and all(sub not in ending for sub in ["_textures", "_materials", "_lang_", "_vo_", "_sound"]):
-                vpk_files.append(os.path.join(path, ending.replace(".vpk", "_dir.vpk")))
+                if not "_dir.vpk" in ending:
+                    vpk_files.append(os.path.join(path, ending.replace(".vpk", "_dir.vpk")))
+                else:
+                    vpk_files.append(os.path.join(path, ending))
         elif ending == '*.vpk':
             search_for_vpk(path, vpk_files)
 
