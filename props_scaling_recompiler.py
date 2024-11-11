@@ -1082,12 +1082,14 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
     entities_progress = 0
     
     for entity in entities_ready:
-        if debug_mode: print_and_log(Fore.YELLOW + f"inserting to vmf: {entity}")
+        #if debug_mode: print_and_log(Fore.YELLOW + f"inserting to vmf: {entity}")
+        #print_and_log(Fore.YELLOW + f"inserting to vmf: {entity}")
         entity_id = entity['id']
         new_model = entity['model']
         modelscale = entity['modelscale']
         
-        if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
+        #if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
+        #print_and_log(Fore.YELLOW + f"new_model: {new_model}")
         if debug_mode: print_and_log(Fore.YELLOW + f"modelscale: {modelscale}")
         
         if float(modelscale) == 1.0:
@@ -1098,7 +1100,8 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
             else:
                 new_model = new_model.replace('_static', '')
         
-        if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
+        #if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
+        #print_and_log(Fore.YELLOW + f"new_model: {new_model}")
 
         pattern = re.compile(
             r'entity\s*\{\s*"id"\s*"' + re.escape(entity_id) + r'"\s*("classname"\s*"prop_static_scalable"\s*)(".*?"\s*)*?("model"\s*".*?"\s*)(".*?"\s*)*\}', re.DOTALL
