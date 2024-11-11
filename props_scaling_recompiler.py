@@ -666,9 +666,15 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
                 #print_and_log(f"folder_check: {folder_check}")
                 #print_and_log(f"model_check: {model_check}")
                 
-                #if folder_check and model_check:
-                #    vpk_with_mdl = vpk_file
+                if folder_check and model_check:
+                    vpk_with_mdl = vpk_file
+                    break
                 
+                #if vpk_with_mdl != None:
+                #    print_and_log(Fore.GREEN + f"Vsyo kruto 1")
+                #else:
+                #    print_and_log(Fore.RED + f"Chto-to ne tak!")
+                #
                 #input("zxcv")
                 
                 #print_and_log(f"vpkeditcli_tree_out: {vpkeditcli_tree_out}")
@@ -687,12 +693,15 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
                 if debug_mode: print_and_log(f"mdl_folder_path: {mdl_folder_path}")
                 if debug_mode: print_and_log(f"vpk_extract_folder_model_with_last_folder: {vpk_extract_folder_model_with_last_folder}")
         
-            if vpk_with_mdl != None:
-                break
+            #if vpk_with_mdl != None:
+            #    print_and_log(Fore.GREEN + f"Vsyo kruto 2")
+            #    break
         
         except subprocess.CalledProcessError as e:
             print_and_log(Fore.RED + f"Error executing vpkeditcli: {e}")
             return None
+    
+    #print_and_log(Fore.GREEN + f"GOOOOL")
     
     if vpk_with_mdl != None:
         print_and_log(Fore.GREEN + f"vpk with {mdl_name}.mdl found:\n{vpk_with_mdl}")
@@ -1030,7 +1039,7 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
                 if extracted_mdl_path != None:
                     real_mdl_paths.append(extracted_mdl_path)
                 else:
-                    print_and_log(Fore.RED + f"Can't extract {mdl_name} from VPKs, skipping")
+                    print_and_log(Fore.RED + f"Can't extract {mdl_name}.mdl from VPKs, skipping")
 
     for real_mdl_path in real_mdl_paths:
         mdl_file_name = get_file_name(real_mdl_path)
