@@ -52,6 +52,8 @@ def parse_vmf(file_path, classnames = ["prop_static_scalable", "prop_dynamic_sca
         rf'[^\{{}}]*"classname"\s*\"(?P<classname>{classnames_pattern})\"\s*'
         rf'[^\{{}}]*"model"\s*"(?P<model>[^"]+)"\s*'
         rf'[^\{{}}]*"modelscale"\s*"(?P<modelscale>[^"]+)"\s*'
+        # "rendercolor" "222 22 22"
+        rf'[^\{{}}]*"rendercolor"\s*"(?P<rendercolor>[^"]+)"\s*'
         rf'[^\{{}}]*"origin"\s*"(?P<origin>[^"]+)"\s*',
         re.DOTALL | re.MULTILINE
     )
@@ -77,6 +79,9 @@ def parse_vmf(file_path, classnames = ["prop_static_scalable", "prop_dynamic_sca
         if "," in modelscale:
             print_and_log(Fore.YELLOW + f"Warning! Model scale of {get_file_name(model)}.mdl has a comma! Entity ID: {entity_id}. Entity origin: '{origin}'. Compiling with scale 1.")
             modelscale = "1"
+        
+        rendercolor = match.group('rendercolor')
+        #print_and_log(f"rendercolor: {rendercolor}")
         
         origin = match.group('origin')
         if debug_mode: print_and_log(f"origin: {origin}")
@@ -251,6 +256,7 @@ def process_entities_raw(game_dir, entities_raw, force_recompile):
         entity_id = entity['id']
         model = entity['model']
         modelscale = entity['modelscale']
+        rendercolor = entity['rendercolor']
 
         mdl_name = get_file_name(model)
         mdl_name = process_mdl_name(mdl_name, modelscale)
@@ -995,12 +1001,18 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
     for entity in entities_todo:
         model = entity['model']
         modelscale = entity['modelscale']
+        rendercolor = entity['rendercolor']
         mdl_name = model
         
         if mdl_name not in mdl_with_scales:
             mdl_with_scales[mdl_name] = set()
         mdl_with_scales[mdl_name].add(modelscale)
+        mdl_with_scales[mdl_name].add(rendercolor)
 
+    print_and_log(f"mdl_with_scales: {mdl_with_scales}")
+    
+    input("zxcv")
+    
     print_and_log(f" ")
     print_and_log(f"Extracting paths from gameinfo.txt...")
     
@@ -1224,7 +1236,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.8')
+    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.9')
     print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
     print_and_log(f'https://github.com/Ambiabstract')
     print_and_log(f'Discord: @Ambiabstract')
