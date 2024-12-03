@@ -7,6 +7,7 @@ import argparse
 import io
 import time
 from colorama import init, Fore
+import pickle
 
 debug_mode = False
 
@@ -54,6 +55,8 @@ def parse_vmf(file_path, classnames = ["prop_static_scalable", "prop_dynamic_sca
         rf'[^\{{}}]*"modelscale"\s*"(?P<modelscale>[^"]+)"\s*'
         # "rendercolor" "222 22 22"
         rf'[^\{{}}]*"rendercolor"\s*"(?P<rendercolor>[^"]+)"\s*'
+        #"skin" "0"
+        rf'[^\{{}}]*"skin"\s*"(?P<skin>[^"]+)"\s*'
         rf'[^\{{}}]*"origin"\s*"(?P<origin>[^"]+)"\s*',
         re.DOTALL | re.MULTILINE
     )
@@ -81,20 +84,27 @@ def parse_vmf(file_path, classnames = ["prop_static_scalable", "prop_dynamic_sca
             modelscale = "1"
         
         rendercolor = match.group('rendercolor')
-        #print_and_log(f"rendercolor: {rendercolor}")
+        print_and_log(f"84 rendercolor: {rendercolor}")
         
-        origin = match.group('origin')
-        if debug_mode: print_and_log(f"origin: {origin}")
+        skin = match.group('skin')
+        print_and_log(f"89 skin: {skin}")
+        
+        #origin = match.group('origin')
+        #if debug_mode: print_and_log(f"origin: {origin}")
 
         entity_dict = {
             "id": entity_id,
             "model": model,
-            "modelscale": modelscale
+            "modelscale": modelscale,
+            "rendercolor": rendercolor,
+            "skin": skin
         }
 
         entities_raw.append(entity_dict)
     
     print_and_log(f" ")
+
+    print_and_log(f"107 entities_raw: {entities_raw}")
 
     return entities_raw
 
@@ -237,7 +247,7 @@ def remove_vmf_assets(entities_raw, game_dir, remove_static=False):
 def process_entities_raw(game_dir, entities_raw, force_recompile):
     entities_ready = []
     entities_todo = []
-
+    
     entities_raw_temp = []
     for entity in entities_raw:
         #if float(entity['modelscale']) == 1.0: # This was before we started converting 
@@ -267,6 +277,11 @@ def process_entities_raw(game_dir, entities_raw, force_recompile):
         else:
             if mdl_path is None:
                 entities_todo.append(entity)
+            #elif rendercolor is not f"255 255 255": #вот тут чота происходит непонятновое((((
+            #    entities_todo.append(entity)
+            #    print_and_log(f"entity: {entity}                         ")
+            #    print_and_log(f"rendercolor: '{rendercolor}'                         ")
+            #    input("zfsfgh                         ")
             else:
                 entity['model'] = transform_mdl_path_to_hammer_style(mdl_path)
                 entity['modelscale'] = '1'
@@ -996,6 +1011,47 @@ def delete_temp_vpks_content_folder():
 def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_path, compiler_path, game_dir, convert_to_static, subfolders, vpkeditcli_path):
     #vpk_extract_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mdl_scaler_vpk_extract")
     vpk_extract_folder = os.path.join(get_script_path(), extracted_vpks_folder_name)
+
+    psr_cache_data_raw = {}
+    for entity in entities_todo:
+        model = entity['model']
+        modelscale = entity['modelscale']
+        rendercolor = entity['rendercolor']
+        skin = entity['skin']
+        
+        if model not in psr_cache_data_raw:
+            psr_cache_data_raw[model] = {"scales": [], "colors": []}
+        if modelscale not in psr_cache_data_raw[model]["scales"]:
+            psr_cache_data_raw[model]["scales"].append(modelscale)
+        if len(psr_cache_data_raw[model]["colors"]) < 31:
+            if [[rendercolor], [skin]] not in psr_cache_data_raw[model]["colors"]:
+                psr_cache_data_raw[model]["colors"].append([[rendercolor], [skin]])
+
+    print_and_log(f"1030 psr_cache_data_raw: {psr_cache_data_raw}")
+
+    input("zxcv")
+
+    psr_cache_data = {
+        "model_1": {
+            "scales": [1.0, 1.2, 1.5], 
+            "colors": [                
+                [["255 255 255"], [0]],
+                [["255 0 0 "], [1]],
+                [["0 255 0"], [2]]
+            ]
+        },
+        "model_2": {
+            "scales": [1.0],           
+            "colors": []               
+        },
+        "model_3": {
+            "scales": [0.8, 1.3],      
+            "colors": [                
+                [["255 255 0"], [0]],
+                [["255 0 255"], [1]]
+            ]
+        }
+    }
 
     mdl_with_scales = {}
     for entity in entities_todo:
