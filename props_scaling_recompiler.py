@@ -108,6 +108,130 @@ def parse_vmf(file_path, classnames = ["prop_static_scalable", "prop_dynamic_sca
 
     return entities_raw
 
+def process_vmf(game_dir, file_path, force_recompile=False, classnames = ["prop_static_scalable", "prop_dynamic_scalable", "prop_physics_scalable"]):
+    entities_raw = []
+    entities_ready = []
+    entities_todo = []
+    
+    with open(file_path, 'r') as file:
+        content = file.read()
+
+    classnames_pattern = '|'.join(classnames)
+
+    pattern = re.compile(
+        rf'entity\s*\{{'
+        rf'[^\{{}}]*"id"\s*"(?P<id>\d+)"\s*'
+        rf'[^\{{}}]*"classname"\s*\"(?P<classname>{classnames_pattern})\"\s*'
+        rf'[^\{{}}]*"model"\s*"(?P<model>[^"]+)"\s*'
+        rf'[^\{{}}]*"modelscale"\s*"(?P<modelscale>[^"]+)"\s*'
+        # "rendercolor" "222 22 22"
+        rf'[^\{{}}]*"rendercolor"\s*"(?P<rendercolor>[^"]+)"\s*'
+        #"skin" "0"
+        rf'[^\{{}}]*"skin"\s*"(?P<skin>[^"]+)"\s*'
+        rf'[^\{{}}]*"origin"\s*"(?P<origin>[^"]+)"\s*',
+        re.DOTALL | re.MULTILINE
+    )
+    matches = list(pattern.finditer(content))
+    
+    entities_matches_len = len(matches)
+    
+    if entities_matches_len == 0:
+        print_and_log(f"No prop_static_scalable entities found.")
+        return entities_raw, entities_ready, entities_todo
+    
+    print_and_log(f" ")
+    print_and_log(f"{entities_matches_len} prop_static_scalable entities found.")
+    print_and_log(f"Processing VMF, please wait...")
+    
+    entities_matches_progress = 0
+    for match in matches:
+        print(f"Progress: {int(entities_matches_progress*100/entities_matches_len)}%", end="\r")
+        entities_matches_progress += 1
+
+        if debug_mode: print_and_log(f"                ")
+        
+        entity_id = match.group('id')
+        if debug_mode: print_and_log(f"id: {entity_id}")
+        
+        classname = match.group('classname')
+        if debug_mode: print_and_log(f"classname: {classname}")
+        
+        model = match.group('model')
+        if debug_mode: print_and_log(f"model: {model}")
+        
+        origin = match.group('origin')
+        #if debug_mode: print_and_log(f"origin: {origin}")
+        
+        modelscale = match.group('modelscale')
+        if debug_mode: print_and_log(f"modelscale: {modelscale}")
+        if "," in modelscale:
+            print_and_log(Fore.YELLOW + f"Warning! Model scale of {get_file_name(model)}.mdl has a comma! Entity ID: {entity_id}. Entity origin: '{origin}'. Compiling with scale 1.")
+            modelscale = "1"
+
+        if float(modelscale) < 0.01:
+            print_and_log(Fore.RED + f"ERROR! {get_file_name(model)}.mdl has wrong scale: {modelscale}. Should be more than 0.01. Entity ID: {entity_id}. Entity origin: '{origin}'. Skipping!")
+            continue
+
+        rendercolor = match.group('rendercolor')
+        #print_and_log(f"                ")
+        #print_and_log(f"84 rendercolor: {rendercolor}")
+        
+        skin = match.group('skin')
+        #print_and_log(f"89 skin: {skin}")
+
+        entity_dict = {
+            "id": entity_id,
+            "model": model,
+            "modelscale": modelscale,
+            "rendercolor": rendercolor,
+            "skin": skin
+        }
+        
+        entities_raw.append(entity_dict)
+
+        if force_recompile:
+            entities_todo.append(entity_dict)
+            continue
+        else:
+            mdl_name = get_file_name(model)
+            mdl_name_scaled = process_mdl_name(mdl_name, modelscale)
+            mdl_scaled_path = find_mdl_file(game_dir, mdl_name_scaled)
+            if mdl_scaled_path is None:
+                entities_todo.append(entity_dict)
+            #elif rendercolor is not f"255 255 255": #вот тут чота происходит непонятновое((((
+            #    entities_todo.append(entity_dict)
+            #    print_and_log(f"entity_dict: {entity_dict}                         ")
+            #    print_and_log(f"rendercolor: '{rendercolor}'                         ")
+            #    input("zfsfgh                         ")
+            else:
+                entity_dict_ready = {
+                    "id": entity_id,
+                    "model": transform_mdl_path_to_hammer_style(mdl_scaled_path),
+                    "modelscale": '1',
+                    "rendercolor": rendercolor,
+                    "skin": skin
+                }
+                entities_ready.append(entity_dict_ready)
+
+    print_and_log(f"Progress: Done!")
+    
+    print_and_log(f" ")
+
+    if force_recompile: print_and_log(f"Force recompile mode: scaled and static assets removing from project files...")
+    if force_recompile: remove_vmf_assets(entities_raw, game_dir, remove_static=True)
+    
+    print_and_log(f" ")
+    print_and_log(f"{len(entities_raw)} entities_raw: {entities_raw}")
+    print_and_log(f" ")
+    print_and_log(f"{len(entities_ready)} entities_ready: {entities_ready}")
+    print_and_log(f" ")
+    print_and_log(f"{len(entities_todo)} entities_todo: {entities_todo}")
+    print_and_log(f" ")
+    
+    input("sfgsfg")
+
+    return entities_raw, entities_ready, entities_todo
+
 def find_mdl_file(game_dir, mdl_name):
     mdl_filename = f"{mdl_name}.mdl"
     for root, dirs, files in os.walk(game_dir):
@@ -247,6 +371,8 @@ def remove_vmf_assets(entities_raw, game_dir, remove_static=False):
 def process_entities_raw(game_dir, entities_raw, force_recompile):
     entities_ready = []
     entities_todo = []
+    
+    #вот тут надо два цикла в один объединить!!!!!!!!!!!!!!!!!!!!!!!
     
     entities_raw_temp = []
     for entity in entities_raw:
@@ -1031,7 +1157,7 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
 
     input("zxcv")
 
-    psr_cache_data = {
+    psr_cache_data_test = {
         "model_1": {
             "scales": [1.0, 1.2, 1.5], 
             "colors": [                
@@ -1374,18 +1500,32 @@ def main():
     compiler_path = os.path.join(script_path, "studiomdl.exe")
     convert_to_static = False
     
-    print_and_log(f"Processing initiated")
+    #print_and_log(f"Processing initiated")
     
-    entities_raw = parse_vmf(vmf_in_path, classnames = ["prop_static_scalable"])
+    
+    # parse_vmf и process_entities_raw надо объединить в один процесс! 
+    # читаем vmf, сразу же отбраковываем все неправильные скейлы, сразу же сравниваем с кэшем,
+    # и за один проход на выходе получаем список того, что надо рекомпильнуть или покрасить!
+    
+    # если коротко сформулировать, то не нужна отдельная функция валидации, тем более с двумя циклами внутри,
+    # если всё это можно валидировать на лету в parse_vmf
+    
+    # также стоит учитывать что force_recompile режим нужно перенести тоже в обработчик оригинального vmf,
+    # но включать его надо только в том случае если на уровне нашёлся хотя бы один ассет подходящего класса
+    
+    
+    #entities_raw = parse_vmf(vmf_in_path, classnames = ["prop_static_scalable"])
+    
+    entities_raw, entities_ready, entities_todo = process_vmf(game_dir, vmf_in_path, force_recompile, classnames = ["prop_static_scalable"])
     if debug_mode: print_and_log(f"\nentities_raw: {entities_raw}")
     
-    if force_recompile: print_and_log(f"Force recompile mode: scaled and static assets removing from project files...")
-    if force_recompile: remove_vmf_assets(entities_raw, game_dir, remove_static=True)
-    
-    print_and_log(f"Validating prop_static_scalable entities...")
-    entities_ready, entities_todo = process_entities_raw(game_dir, entities_raw, force_recompile)
-    if debug_mode: print_and_log(f"\nentities_ready: {entities_ready}")
-    if debug_mode: print_and_log(f"\nentities_todo: {entities_todo}")
+    if len(entities_raw) == 0:
+        return
+ 
+    #print_and_log(f"Validating prop_static_scalable entities...")
+    #entities_ready, entities_todo = process_entities_raw(game_dir, entities_raw, force_recompile)
+    #if debug_mode: print_and_log(f"\nentities_ready: {entities_ready}")
+    #if debug_mode: print_and_log(f"\nentities_todo: {entities_todo}")
 
     if len(entities_todo) != 0:
         print_and_log(f" ")
