@@ -174,7 +174,7 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
     
     if entities_matches_len == 0:
         print_and_log(f"No prop_static_scalable entities found.")
-        return entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_todo
+        return entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo
 
     if os.path.exists('props_scaling_recompiler_cache.pkl'):
         with open('props_scaling_recompiler_cache.pkl', 'rb') as f:
@@ -314,7 +314,7 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
 
     print_and_log(f"{len(psr_cache_data_ready)} models in global cache.")
     print_and_log(f"{len(psr_cache_data_raw)} original models in this VMF.")
-    print_and_log(f"{len(psr_cache_data_todo)} versions to do for this VMF.")
+    print_and_log(f"{len(psr_cache_data_todo)} models to recompile for this VMF.")
     print_and_log(f" ")
     
     with open('props_scaling_recompiler_cache.pkl', 'wb') as f:
@@ -1226,16 +1226,9 @@ def delete_temp_vpks_content_folder():
     else:
             if debug_mode: print_and_log(f"{vpk_extract_folder}' does not exist.")
 
-def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_path, compiler_path, game_dir, convert_to_static, subfolders, vpkeditcli_path):
+def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo, ccld_path, gameinfo_path, compiler_path, game_dir, convert_to_static, subfolders, vpkeditcli_path):
     #vpk_extract_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mdl_scaler_vpk_extract")
     vpk_extract_folder = os.path.join(get_script_path(), extracted_vpks_folder_name)
-
-    psr_cache_data_raw = {}
-    add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin)
-
-    print_and_log(f"1030 psr_cache_data_raw: {psr_cache_data_raw}")
-
-    input("zxcv")
 
     '''
     psr_cache_data_test = {
@@ -1260,6 +1253,7 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
         }
     }
     '''
+    
     
     mdl_with_scales = {}
     for entity in entities_todo:
@@ -1500,11 +1494,10 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.0.9')
+    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.1.0')
     print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
     print_and_log(f'https://github.com/Ambiabstract')
     print_and_log(f'Discord: @Ambiabstract')
-    print(Fore.BLACK + f'ANUS SUPER SCALER COMPILER (ASSC) :DDDDDDDDDDDDDDDDDDDDDD xDdxXDXCCCDXXXXDXDXD' + Fore.RESET)
 
     start_time = time.time()
     
@@ -1516,7 +1509,8 @@ def main():
     if check_bin_folder(script_path) == True:
         pass
     else:
-        input("\nPress Enter to exit...")
+        print(f" ")
+        input("Press Enter to exit...")
         return
     
     if find_file(script_path, filename_ext = "CrowbarCommandLineDecomp.exe") == True:
@@ -1601,36 +1595,23 @@ def main():
     
     entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo = process_vmf(game_dir, vmf_in_path, psr_cache_data_ready, force_recompile, classnames = ["prop_static_scalable"])
     #if debug_mode: print_and_log(f"\nentities_raw: {entities_raw}")
-    
-    input("sfgd")
-    
+
     if len(entities_raw) == 0:
         return
- 
+    
     #print_and_log(f"Validating prop_static_scalable entities...")
     #entities_ready, entities_todo = process_entities_raw(game_dir, entities_raw, force_recompile)
     #if debug_mode: print_and_log(f"\nentities_ready: {entities_ready}")
     #if debug_mode: print_and_log(f"\nentities_todo: {entities_todo}")
-    
-    psr_cache_data_todo = {}
-    for entity in entities_todo:
-        psr_cache_data_todo = add_to_cache(psr_cache_data_todo, model, modelscale, rendercolor, skin)
 
-    print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
-    
-    input("sfgsfg")
-    
-    
     if len(entities_todo) != 0:
         print_and_log(f" ")
         print_and_log(f"There's something to do...")
-        entities_todo, entities_ready = entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_path, compiler_path, game_dir, convert_to_static, subfolders, vpkeditcli_path)
+        entities_todo, entities_ready = entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo, ccld_path, gameinfo_path, compiler_path, game_dir, convert_to_static, subfolders, vpkeditcli_path)
     else:
         print_and_log(Fore.GREEN + f"Nothing to recompile!")
 
     if debug_mode: print_and_log(f"\n entities_ready: {entities_ready}")
-    
-    input("sfgsfg")
     
     lightsrad_updater(game_dir, entities_ready)
     
