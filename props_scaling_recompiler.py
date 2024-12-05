@@ -108,10 +108,47 @@ def parse_vmf(file_path, classnames = ["prop_static_scalable", "prop_dynamic_sca
 
     return entities_raw
 
-def process_vmf(game_dir, file_path, force_recompile=False, classnames = ["prop_static_scalable", "prop_dynamic_scalable", "prop_physics_scalable"]):
+def add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin):
+    if model not in psr_cache_data:
+        psr_cache_data[model] = {"scales": [], "colors": []}
+    if modelscale not in psr_cache_data[model]["scales"]:
+        psr_cache_data[model]["scales"].append(modelscale)
+    if len(psr_cache_data[model]["colors"]) < 31:
+        if [[rendercolor], [skin]] not in psr_cache_data[model]["colors"]:
+            psr_cache_data[model]["colors"].append([[rendercolor], [skin]])
+    else:
+        print_and_log(Fore.RED + f"ERROR! {get_file_name(model)}.mdl has too many skins, can't add another color!")
+    
+    #print_and_log(f"122 psr_cache_data: {psr_cache_data}")
+    
+    return psr_cache_data
+
+def check_psr_data(psr_cache_data_check, psr_cache_data_ready):
+    for model, model_data in psr_cache_data_check.items():
+        if model not in psr_cache_data_ready:
+            return False
+        
+        # Проверяем масштаб
+        scales_check = set(model_data.get('scales', []))
+        scales_ready = set(psr_cache_data_ready[model].get('scales', []))
+        if not scales_check.issubset(scales_ready):
+            return False
+        
+        # Проверяем пары color-skin
+        colors_check = model_data.get('colors', [])
+        colors_ready = psr_cache_data_ready[model].get('colors', [])
+        if not any(color_check in colors_ready for color_check in colors_check):
+            return False
+    
+    return True
+
+def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False, classnames = ["prop_static_scalable", "prop_dynamic_scalable", "prop_physics_scalable"]):
     entities_raw = []
     entities_ready = []
     entities_todo = []
+    psr_cache_data_raw = {}
+    #psr_cache_data_ready = {}
+    psr_cache_data_todo = {}
     
     with open(file_path, 'r') as file:
         content = file.read()
@@ -137,12 +174,16 @@ def process_vmf(game_dir, file_path, force_recompile=False, classnames = ["prop_
     
     if entities_matches_len == 0:
         print_and_log(f"No prop_static_scalable entities found.")
-        return entities_raw, entities_ready, entities_todo
+        return entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_todo
+
+    if os.path.exists('props_scaling_recompiler_cache.pkl'):
+        with open('props_scaling_recompiler_cache.pkl', 'rb') as f:
+            psr_cache_data_ready = pickle.load(f)
     
     print_and_log(f" ")
     print_and_log(f"{entities_matches_len} prop_static_scalable entities found.")
     print_and_log(f"Processing VMF, please wait...")
-    
+
     entities_matches_progress = 0
     for match in matches:
         print(f"Progress: {int(entities_matches_progress*100/entities_matches_len)}%", end="\r")
@@ -178,7 +219,24 @@ def process_vmf(game_dir, file_path, force_recompile=False, classnames = ["prop_
         
         skin = match.group('skin')
         #print_and_log(f"89 skin: {skin}")
-
+        
+        psr_cache_data_raw = add_to_cache(psr_cache_data_raw, model, modelscale, rendercolor, skin)
+        #print_and_log(f"201 psr_cache_data_raw: {psr_cache_data_raw}")
+        
+        '''
+        if model not in psr_cache_data_raw:
+            psr_cache_data_raw[model] = {"scales": [], "colors": []}
+        if modelscale not in psr_cache_data_raw[model]["scales"]:
+            psr_cache_data_raw[model]["scales"].append(modelscale)
+        if len(psr_cache_data_raw[model]["colors"]) < 31:
+            if [[rendercolor], [skin]] not in psr_cache_data_raw[model]["colors"]:
+                psr_cache_data_raw[model]["colors"].append([[rendercolor], [skin]])
+        else:
+            print_and_log(f"[string 191] {model} too many skins and colors!")
+    
+        print_and_log(f"193 psr_cache_data_raw: {psr_cache_data_raw}")
+        '''
+        
         entity_dict = {
             "id": entity_id,
             "model": model,
@@ -191,13 +249,25 @@ def process_vmf(game_dir, file_path, force_recompile=False, classnames = ["prop_
 
         if force_recompile:
             entities_todo.append(entity_dict)
+            psr_cache_data_todo = psr_cache_data_raw
             continue
         else:
+            if len(psr_cache_data_ready) != 0:
+                psr_cache_data_empty = {}
+                psr_cache_data_check = add_to_cache(psr_cache_data_empty, model, modelscale, rendercolor, skin)
+                #print_and_log(f"psr_cache_data_check: {psr_cache_data_check}")
+                #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
+                if check_psr_data(psr_cache_data_check, psr_cache_data_ready):
+                    entities_ready.append(entity_dict)
+                    psr_cache_data_ready = add_to_cache(psr_cache_data_ready, model, modelscale, rendercolor, skin)
+                    continue
             mdl_name = get_file_name(model)
             mdl_name_scaled = process_mdl_name(mdl_name, modelscale)
             mdl_scaled_path = find_mdl_file(game_dir, mdl_name_scaled)
             if mdl_scaled_path is None:
                 entities_todo.append(entity_dict)
+                psr_cache_data_todo = add_to_cache(psr_cache_data_todo, model, modelscale, rendercolor, skin)
+                #print_and_log(f"238 psr_cache_data_todo: {psr_cache_data_todo}")
             #elif rendercolor is not f"255 255 255": #вот тут чота происходит непонятновое((((
             #    entities_todo.append(entity_dict)
             #    print_and_log(f"entity_dict: {entity_dict}                         ")
@@ -212,6 +282,8 @@ def process_vmf(game_dir, file_path, force_recompile=False, classnames = ["prop_
                     "skin": skin
                 }
                 entities_ready.append(entity_dict_ready)
+                psr_cache_data_ready = add_to_cache(psr_cache_data_ready, model, modelscale, rendercolor, skin)
+                #print_and_log(f"254 psr_cache_data_ready: {psr_cache_data_ready}")
 
     print_and_log(f"Progress: Done!")
     
@@ -220,6 +292,7 @@ def process_vmf(game_dir, file_path, force_recompile=False, classnames = ["prop_
     if force_recompile: print_and_log(f"Force recompile mode: scaled and static assets removing from project files...")
     if force_recompile: remove_vmf_assets(entities_raw, game_dir, remove_static=True)
     
+    '''
     print_and_log(f" ")
     print_and_log(f"{len(entities_raw)} entities_raw: {entities_raw}")
     print_and_log(f" ")
@@ -227,10 +300,29 @@ def process_vmf(game_dir, file_path, force_recompile=False, classnames = ["prop_
     print_and_log(f" ")
     print_and_log(f"{len(entities_todo)} entities_todo: {entities_todo}")
     print_and_log(f" ")
+    '''
     
-    input("sfgsfg")
+    '''
+    print_and_log(f" ")
+    print_and_log(f"{len(psr_cache_data_raw)} psr_cache_data_raw: {psr_cache_data_raw}")
+    print_and_log(f" ")
+    print_and_log(f"{len(psr_cache_data_ready)} psr_cache_data_ready: {psr_cache_data_ready}")
+    print_and_log(f" ")
+    print_and_log(f"{len(psr_cache_data_todo)} psr_cache_data_todo: {psr_cache_data_todo}")
+    print_and_log(f" ")
+    '''
 
-    return entities_raw, entities_ready, entities_todo
+    print_and_log(f"{len(psr_cache_data_ready)} models in global cache.")
+    print_and_log(f"{len(psr_cache_data_raw)} original models in this VMF.")
+    print_and_log(f"{len(psr_cache_data_todo)} versions to do for this VMF.")
+    print_and_log(f" ")
+    
+    with open('props_scaling_recompiler_cache.pkl', 'wb') as f:
+        pickle.dump(psr_cache_data_ready, f)
+        print_and_log(f"Cache saved.")
+        print_and_log(f" ")
+    
+    return entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo
 
 def find_mdl_file(game_dir, mdl_name):
     mdl_filename = f"{mdl_name}.mdl"
@@ -1139,24 +1231,13 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
     vpk_extract_folder = os.path.join(get_script_path(), extracted_vpks_folder_name)
 
     psr_cache_data_raw = {}
-    for entity in entities_todo:
-        model = entity['model']
-        modelscale = entity['modelscale']
-        rendercolor = entity['rendercolor']
-        skin = entity['skin']
-        
-        if model not in psr_cache_data_raw:
-            psr_cache_data_raw[model] = {"scales": [], "colors": []}
-        if modelscale not in psr_cache_data_raw[model]["scales"]:
-            psr_cache_data_raw[model]["scales"].append(modelscale)
-        if len(psr_cache_data_raw[model]["colors"]) < 31:
-            if [[rendercolor], [skin]] not in psr_cache_data_raw[model]["colors"]:
-                psr_cache_data_raw[model]["colors"].append([[rendercolor], [skin]])
+    add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin)
 
     print_and_log(f"1030 psr_cache_data_raw: {psr_cache_data_raw}")
 
     input("zxcv")
 
+    '''
     psr_cache_data_test = {
         "model_1": {
             "scales": [1.0, 1.2, 1.5], 
@@ -1178,7 +1259,8 @@ def entities_todo_processor(entities_todo, entities_ready, ccld_path, gameinfo_p
             ]
         }
     }
-
+    '''
+    
     mdl_with_scales = {}
     for entity in entities_todo:
         model = entity['model']
@@ -1513,11 +1595,14 @@ def main():
     # также стоит учитывать что force_recompile режим нужно перенести тоже в обработчик оригинального vmf,
     # но включать его надо только в том случае если на уровне нашёлся хотя бы один ассет подходящего класса
     
+    psr_cache_data_ready = {}    
     
     #entities_raw = parse_vmf(vmf_in_path, classnames = ["prop_static_scalable"])
     
-    entities_raw, entities_ready, entities_todo = process_vmf(game_dir, vmf_in_path, force_recompile, classnames = ["prop_static_scalable"])
-    if debug_mode: print_and_log(f"\nentities_raw: {entities_raw}")
+    entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo = process_vmf(game_dir, vmf_in_path, psr_cache_data_ready, force_recompile, classnames = ["prop_static_scalable"])
+    #if debug_mode: print_and_log(f"\nentities_raw: {entities_raw}")
+    
+    input("sfgd")
     
     if len(entities_raw) == 0:
         return
@@ -1526,7 +1611,16 @@ def main():
     #entities_ready, entities_todo = process_entities_raw(game_dir, entities_raw, force_recompile)
     #if debug_mode: print_and_log(f"\nentities_ready: {entities_ready}")
     #if debug_mode: print_and_log(f"\nentities_todo: {entities_todo}")
+    
+    psr_cache_data_todo = {}
+    for entity in entities_todo:
+        psr_cache_data_todo = add_to_cache(psr_cache_data_todo, model, modelscale, rendercolor, skin)
 
+    print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
+    
+    input("sfgsfg")
+    
+    
     if len(entities_todo) != 0:
         print_and_log(f" ")
         print_and_log(f"There's something to do...")
@@ -1535,6 +1629,8 @@ def main():
         print_and_log(Fore.GREEN + f"Nothing to recompile!")
 
     if debug_mode: print_and_log(f"\n entities_ready: {entities_ready}")
+    
+    input("sfgsfg")
     
     lightsrad_updater(game_dir, entities_ready)
     
