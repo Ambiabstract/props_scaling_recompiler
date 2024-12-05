@@ -290,6 +290,8 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
     print_and_log(f" ")
 
     if force_recompile: print_and_log(f"Force recompile mode: scaled and static assets removing from project files...")
+    if force_recompile and os.path.exists('props_scaling_recompiler_cache.pkl'):
+        os.remove('props_scaling_recompiler_cache.pkl')
     if force_recompile: remove_vmf_assets(entities_raw, game_dir, remove_static=True)
     
     '''
@@ -1254,7 +1256,7 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
     }
     '''
     
-    
+    '''
     mdl_with_scales = {}
     for entity in entities_todo:
         model = entity['model']
@@ -1268,8 +1270,9 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
         mdl_with_scales[mdl_name].add(rendercolor)
 
     print_and_log(f"mdl_with_scales: {mdl_with_scales}")
+    '''
     
-    input("zxcv")
+    #print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
     
     print_and_log(f" ")
     print_and_log(f"Extracting paths from gameinfo.txt...")
@@ -1282,9 +1285,13 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
     vpk_paths_from_gameinfo = only_vpk_paths_from_gameinfo(search_paths)
     if debug_mode: print_and_log(f"vpk_paths_from_gameinfo: \n{vpk_paths_from_gameinfo}")
 
+    #print_and_log(f"psr_cache_data_todo.keys(): {psr_cache_data_todo.keys()}")
+    
+    print_and_log(f"Searching for models real paths...")
+    #real_mdl_paths_len = len(psr_cache_data_todo.keys())
+    #real_mdl_paths_progress = 0
     real_mdl_paths = []
-    for mdl_name in mdl_with_scales.keys():
-        hammer_mdl_path = mdl_name
+    for hammer_mdl_path in psr_cache_data_todo.keys():
         if debug_mode: print_and_log(f"hammer_mdl_path: {hammer_mdl_path}")
         mdl_name = get_file_name(hammer_mdl_path)
         real_mdl_path = find_real_mdl_path(game_dir, hammer_mdl_path)
@@ -1310,7 +1317,16 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
                     real_mdl_paths.append(extracted_mdl_path)
                 else:
                     print_and_log(Fore.RED + f"Can't extract {mdl_name}.mdl from VPKs, skipping")
+        '''
+        real_mdl_paths_progress += 1
+        if real_mdl_paths_progress >= real_mdl_paths_len:
+            print_and_log(f"Progress: Done!")
+        else:
+            print(f"Progress: {int(real_mdl_paths_progress*100/real_mdl_paths_len)}%", end="\r")
+        '''
 
+    input("zxcv")
+    
     for real_mdl_path in real_mdl_paths:
         mdl_file_name = get_file_name(real_mdl_path)
         mdl_name = transform_mdl_path_to_hammer_style(real_mdl_path)
