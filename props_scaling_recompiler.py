@@ -710,10 +710,9 @@ def rescale_qc_file(qc_path, scale, hammer_mdl_path, psr_cache_data_todo, psr_ca
                 new_model_name = f"_do_not_compile_me!"
                 #!!!!!!!!!!!!!!!!! add_to_cache
                 #, psr_cache_data_todo, psr_cache_data_ready
-                if hammer_mdl_path in psr_cache_data_ready:
-                    print_and_log(Fore.GREEN + f"{model_name}.mdl is already static prop. Updating cache.")
-                    psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0")
-                    save_global_cache(psr_cache_data_ready)
+                print_and_log(Fore.GREEN + f"{model_name}.mdl is already a static prop. Updating cache.")
+                psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0")
+                save_global_cache(psr_cache_data_ready)
                 return None
             else:
                 if debug_mode: print_and_log(Fore.YELLOW + f"!!! blyat")
