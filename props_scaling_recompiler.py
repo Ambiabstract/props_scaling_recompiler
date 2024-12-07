@@ -1581,7 +1581,7 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready,
         
         if float(modelscale) == 1.0:
             mdl_name = get_file_name(new_model)
-            real_mdl_path = find_file_in_subfolders(game_dir, f"{mdl_name}.mdl")
+            real_mdl_path = find_file_in_subfolders(game_dir, f"{mdl_name}.mdl") #вот эта функция жрёт больше всего, надо кэшировать однозначно
             if real_mdl_path:
                 # эта ветка срабатывает если модель была динамическая и стала статическая с постфиком _static
                 pass
