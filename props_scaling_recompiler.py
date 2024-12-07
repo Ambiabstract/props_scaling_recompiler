@@ -1583,8 +1583,10 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready,
             mdl_name = get_file_name(new_model)
             real_mdl_path = find_file_in_subfolders(game_dir, f"{mdl_name}.mdl")
             if real_mdl_path:
+                # эта ветка срабатывает если модель была динамическая и стала статическая с постфиком _static
                 pass
             else:
+                #если в имени нет _static значит либо оригинальная модель статичная либо компиляция сдохла, предполагаем первое
                 new_model = new_model.replace('_static', '')
         
         if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
