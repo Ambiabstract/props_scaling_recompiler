@@ -131,6 +131,37 @@ def add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin, real_mdl_
     
     return psr_cache_data
 
+def remove_from_cache(psr_cache_data, model, modelscales_to_remove=None, rendercolors_to_remove=None, skins_to_remove=None, remove_real_mdl_path=False):
+    # Проверяем, есть ли модель в словаре
+    if model not in psr_cache_data:
+        print_and_log(f"Model {model} not found in cache!")
+        return psr_cache_data
+    
+    # Удаление масштабов из 'scales'
+    if modelscales_to_remove:
+        original_scales = psr_cache_data[model].get('scales', [])
+        psr_cache_data[model]['scales'] = [scale for scale in original_scales if scale not in modelscales_to_remove]
+        print_and_log(f"Removed scales {modelscales_to_remove} from {model}. Remaining scales: {psr_cache_data[model]['scales']}")
+    
+    # Удаление пар rendercolor и skin из 'colors'
+    if rendercolors_to_remove or skins_to_remove:
+        original_colors = psr_cache_data[model].get('colors', [])
+        psr_cache_data[model]['colors'] = [
+            color_pair for color_pair in original_colors
+            if not (
+                (rendercolors_to_remove and color_pair[0][0] in rendercolors_to_remove) or
+                (skins_to_remove and color_pair[1][0] in skins_to_remove)
+            )
+        ]
+        print_and_log(f"Removed specified colors/skins from {model}. Remaining colors: {psr_cache_data[model]['colors']}")
+    
+    # Удаление 'real_mdl_path', если указано
+    if remove_real_mdl_path and 'real_mdl_path' in psr_cache_data[model]:
+        del psr_cache_data[model]['real_mdl_path']
+        print_and_log(f"Removed real_mdl_path from {model}.")
+    
+    return psr_cache_data
+
 def check_psr_data(psr_cache_data_check, psr_cache_data_ready):
     for model, model_data in psr_cache_data_check.items():
         if model not in psr_cache_data_ready:
@@ -314,7 +345,7 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
     
     print_and_log(f" ")
 
-    if force_recompile: print_and_log(f"Force recompile mode: scaled and static assets removing from project files...")
+    if force_recompile: print_and_log(Fore.YELLOW + f"Force recompile mode: scaled and static assets removing from project files...")
     if force_recompile and os.path.exists('props_scaling_recompiler_cache.pkl'):
         os.remove('props_scaling_recompiler_cache.pkl')
     if force_recompile: remove_vmf_assets(entities_raw, game_dir, remove_static=True)
@@ -559,7 +590,7 @@ def run_ccld(mdl_path, ccld_path, decomp_folder):
     except Exception as e:
         print_and_log(Fore.RED + f"ERROR: {e}")
 
-def compile_model(compiler_path, game_folder, qc_path):
+def compile_model(compiler_path, game_folder, qc_path, hammer_mdl_path, scale, rendercolor, skin, psr_cache_data_todo, psr_cache_data_ready):
     command = [
         compiler_path,
         "-game", game_folder,
@@ -571,7 +602,22 @@ def compile_model(compiler_path, game_folder, qc_path):
     try:
         result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print_and_log("Output:", result.stdout.decode())
+        output = result.stdout.decode('utf-8')
         #print_and_log("Errors:", result.stderr.decode())
+        #"Completed "metal_cup_mug_scaled_100.qc""
+        #print_and_log(f"607! qc_path: {qc_path}")
+        print_and_log(f"608! os.path.basename(qc_path): {os.path.basename(qc_path)}")
+        print_and_log(f"610! hammer_mdl_path: {hammer_mdl_path}")
+        print_and_log(f"611! scale: {scale}")
+        if f'Completed "{os.path.basename(qc_path)}"' in output:
+            # !!!!! Вот тут можно добавлять готовые модели в список на встраивание в ВМФ
+            # add_to_cache
+            psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, scale, rendercolor, skin)
+            save_global_cache(psr_cache_data_ready)
+            #print_and_log(f"609! COMPLETED!!!!!!!111111111111111")
+        else:
+            print_and_log(f"613! BLYAAAAAAAAAAAAAAAAAAAAAAT")
+        #input("sgsfgdgf233")
     except subprocess.CalledProcessError as e:
         print_and_log(Fore.RED + f"Model compilation failed! An error occurred: {e}")
         print_and_log("Output:", e.stdout.decode())
@@ -761,11 +807,15 @@ def copy_and_rescale_qc(qc_path, scale, convert_to_static, subfolders, hammer_md
 def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready):    
     scales = list(set(map(float, scales.split())))
     scales.sort()
+    
+    #temp
+    rendercolor = "255 255 255"
+    skin = "0"
 
     for scale in scales:
         new_qc_path = copy_and_rescale_qc(qc_path, scale, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready)
         if new_qc_path != None:
-            compile_model(compiler_path, game_folder, new_qc_path)
+            compile_model(compiler_path, game_folder, new_qc_path, hammer_mdl_path, scale, rendercolor, skin, psr_cache_data_todo, psr_cache_data_ready)
         else:
             print_and_log(Fore.YELLOW + f"Skip QC compiling (new_qc_path is none for some reason):\n{qc_path}")
 
@@ -777,7 +827,7 @@ def get_valid_path(prompt_message, valid_extension):
         else:
             print_and_log(Fore.RED + f"File not found, path is incorrect, or file does not have {valid_extension} extension. Try again.")
 
-def decompile_dialog(mdl_path, ccld_path):    
+def decompile_dialog(mdl_path, ccld_path, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready):    
     model_name = os.path.splitext(os.path.basename(mdl_path))[0]
     decomp_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mdl_scaler_decomp")
     #decomp_folder = r"C:\Code\PYTHON\PROP_STATIC_SCALABLE\props_scaling_recompiler_temp\decomp_folder_debug"
@@ -788,7 +838,11 @@ def decompile_dialog(mdl_path, ccld_path):
         if debug_mode: print_and_log(f"mdl_path exist: {mdl_path}")
         if debug_mode: print_and_log(f"running decompilation...")
     else:
-        print_and_log(Fore.RED + f"ERROR! mdl_path is not exist: {mdl_path}")
+        print_and_log(Fore.RED + f"ERROR! mdl_path does not exist: {mdl_path}")
+        #print_and_log(f"823 test! psr_cache_data_ready: {psr_cache_data_ready}")
+        psr_cache_data_ready = remove_from_cache(psr_cache_data_ready, model=hammer_mdl_path, modelscales_to_remove=None, rendercolors_to_remove=None, skins_to_remove=None, remove_real_mdl_path=mdl_path)
+        save_global_cache(psr_cache_data_ready)
+        #print_and_log(f"825 test! psr_cache_data_ready: {psr_cache_data_ready}")
         return None
     
     run_ccld(mdl_path, ccld_path, decomp_folder)
@@ -839,7 +893,8 @@ def decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path,
     if debug_mode: print_and_log(f"compiler_path: {compiler_path}")
     if debug_mode: print_and_log(f"mdl_path: {mdl_path}")
     if debug_mode: print_and_log(f"scales: {scales}")
-    qc_path = decompile_dialog(mdl_path, ccld_path)
+    qc_path = decompile_dialog(mdl_path, ccld_path, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready)
+    if qc_path is None: return
     if debug_mode: print_and_log(f"qc_path: {qc_path}")
     game_folder = gameinfo_path.rsplit('\\', 1)[0]
     if debug_mode: print_and_log(f"game_folder: {game_folder}")
@@ -1418,13 +1473,8 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
     '''
 
     input("lets see")
-    
-    # Skip QC compiling (new_qc_path is none for some reason)
-    # вот эта хуйня выше наверное пофиксится если в QC обнаруживаем параметр статик проп 
-    # и добавляем скейл этой модели 1 в глобальный кэш готового
-    
-    save_global_cache(psr_cache_data_ready)
 
+    '''
     for real_mdl_path in real_mdl_paths:
         mdl_file_name = get_file_name(real_mdl_path)
         mdl_name = transform_mdl_path_to_hammer_style(real_mdl_path)
@@ -1433,7 +1483,8 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
             continue
         scales = " ".join(mdl_with_scales[mdl_name])
         decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, real_mdl_path, scales, convert_to_static, subfolders)
-
+    '''
+    
     for entity in entities_todo:
         model = entity['model']
         modelscale = entity['modelscale']
