@@ -372,6 +372,7 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
 
     print_and_log(f"{len(psr_cache_data_ready)} models in global cache.")
     print_and_log(f"{len(psr_cache_data_raw)} original models in this VMF.")
+    print_and_log(f"{len(entities_raw)} models variations in this VMF.")
     print_and_log(f"{len(psr_cache_data_todo)} models to recompile for this VMF.")
     print_and_log(f" ")
     
@@ -1375,10 +1376,10 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
 
     #print_and_log(f"psr_cache_data_todo.keys(): {psr_cache_data_todo.keys()}")
     
-    print_and_log(f" ")
-    print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
-    print_and_log(f" ")
-    print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
+    #print_and_log(f" ")
+    #print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
+    #print_and_log(f" ")
+    #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
     
     
     #add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin, real_mdl_path)
@@ -1472,7 +1473,7 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
     print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
     '''
 
-    input("lets see")
+    #input("lets see")
 
     '''
     for real_mdl_path in real_mdl_paths:
@@ -1485,6 +1486,21 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
         decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, real_mdl_path, scales, convert_to_static, subfolders)
     '''
     
+    psr_cache_data_ready_load = load_global_cache()
+    if psr_cache_data_ready_load != None: psr_cache_data_ready = psr_cache_data_ready_load
+
+    #print_and_log(f" ")
+    #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
+    #print_and_log(f" ")
+    #print_and_log(f"entities_raw: {entities_raw}")
+    #print_and_log(f" ")
+    #print_and_log(f"entities_todo: {entities_todo}")
+    #print_and_log(f" ")
+    #print_and_log(f"entities_ready: {entities_ready}")
+    
+    #input("soooooooooo see")
+    
+    '''
     for entity in entities_todo:
         model = entity['model']
         modelscale = entity['modelscale']
@@ -1501,12 +1517,13 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
         entity['model'] = new_model
 
         entities_ready.append(entity)
-
+    '''    
+    
     delete_temp_vpks_content_folder()
     
     return entities_todo, entities_ready
 
-def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
+def convert_vmf(game_dir, vmf_in_path, vmf_out_path, entities_ready, psr_cache_data_ready):
     if debug_mode: print_and_log(f"convert_vmf start...")
     if debug_mode: print_and_log(Fore.YELLOW + f"vmf_in_path: {vmf_in_path}")
     if debug_mode: print_and_log(Fore.YELLOW + f"vmf_out_path: {vmf_out_path}")
@@ -1520,32 +1537,79 @@ def convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir):
     with open(vmf_out_path, 'r') as file:
         content = file.read()
 
-    entities_ready_len = len(entities_ready)
-    print_and_log(f"{entities_ready_len} entities to insert.")
+    entities_ready_scaled = []
+    #entities_ready_scaled_len = len(entities_ready)
+    #entities_ready_scaled_progress = 0
+    for entity in entities_ready:
+        model = entity['model']
+        modelscale = entity['modelscale']
+        base_name, ext = os.path.splitext(model)
+        
+        if float(modelscale) == 1.0:
+            new_model = f"{base_name}_static{ext}"
+        else:
+            new_model = f"{base_name}_scaled_{int(float(modelscale) * 100)}{ext}"
+        
+        if subfolders == True and float(modelscale) != 1.0:
+            new_model = os.path.join(os.path.dirname(new_model), 'scaled', os.path.basename(new_model)).replace('\\', '/')
+
+        entity['model'] = new_model
+
+        entities_ready_scaled.append(entity)
+
+    entities_ready_scaled_len = len(entities_ready_scaled)
+    print_and_log(f"{entities_ready_scaled_len} entities to insert into the VMF.")
     
     entities_progress = 0
     
-    for entity in entities_ready:
+    for entity in entities_ready_scaled:
         #if debug_mode: print_and_log(Fore.YELLOW + f"inserting to vmf: {entity}")
         #print_and_log(Fore.YELLOW + f"inserting to vmf: {entity}")
         entity_id = entity['id']
         new_model = entity['model']
         modelscale = entity['modelscale']
         
-        #if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
-        #print_and_log(Fore.YELLOW + f"new_model: {new_model}")
-        if debug_mode: print_and_log(Fore.YELLOW + f"modelscale: {modelscale}")
+        base_name, ext = os.path.splitext(new_model)
         
+        #if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
+        print_and_log(Fore.YELLOW + f"new_model (old name): {new_model}")
+        print_and_log(Fore.YELLOW + f"base_name: {base_name}")
+        print_and_log(Fore.YELLOW + f"ext: {ext}")
+        print_and_log(Fore.YELLOW + f"modelscale: {modelscale}")
+        
+        input("sgsfgfv")
+
+        #if not "_scaled_" in model:
+        #    continue
+        
+        #if float(modelscale) == 1.0:
+        #    if new_model in psr_cache_data_ready:
+        #        real_mdl_path = psr_cache_data_ready[new_model].get('real_mdl_path', None)
+        #    if not real_mdl_path:
+        #        new_model = f"{base_name}_static{ext}"
+            
+            
+        #else:
+        #    new_model = f"{base_name}_scaled_{int(float(modelscale) * 100)}{ext}"
+        
+        if subfolders == True and float(modelscale) != 1.0:
+            new_model = os.path.join(os.path.dirname(new_model), 'scaled', os.path.basename(new_model)).replace('\\', '/')
+
+        entity['model'] = new_model
+
+
+
         if float(modelscale) == 1.0:
             mdl_name = get_file_name(new_model)
-            real_mdl_path = find_file_in_subfolders(game_dir, f"{mdl_name}.mdl")
+            #real_mdl_path = find_file_in_subfolders(game_dir, f"{mdl_name}.mdl")
+            if new_model in psr_cache_data_ready:
+                real_mdl_path = psr_cache_data_ready[new_model].get('real_mdl_path', None)
             if real_mdl_path:
                 pass
             else:
                 new_model = new_model.replace('_static', '')
         
-        #if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
-        #print_and_log(Fore.YELLOW + f"new_model: {new_model}")
+        print_and_log(Fore.YELLOW + f"new_model (new name): {new_model}")
 
         pattern = re.compile(
             r'entity\s*\{\s*"id"\s*"' + re.escape(entity_id) + r'"\s*("classname"\s*"prop_static_scalable"\s*)(".*?"\s*)*?("model"\s*".*?"\s*)(".*?"\s*)*\}', re.DOTALL
@@ -1659,7 +1723,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.1.0')
+    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.1.0a')
     print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
     print_and_log(f'https://github.com/Ambiabstract')
     print_and_log(f'Discord: @Ambiabstract')
@@ -1778,11 +1842,31 @@ def main():
 
     if debug_mode: print_and_log(f"\n entities_ready: {entities_ready}")
     
-    lightsrad_updater(game_dir, entities_ready)
+    psr_cache_data_ready_load = load_global_cache()
+    if psr_cache_data_ready_load != None: psr_cache_data_ready = psr_cache_data_ready_load
+    
+    #print_and_log(f" ")
+    #print_and_log(f"entities_ready: {entities_ready}")
+    #print_and_log(f" ")
+    #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
+    print_and_log(f" ")
+    print_and_log(f"len(entities_raw): {len(entities_raw)}")
+    print_and_log(f" ")
+    print_and_log(f"entities_raw: {entities_raw}")
+    print_and_log(f" ")
+    print_and_log(f"len(entities_ready): {len(entities_ready)}")
+    print_and_log(f" ")
+    print_and_log(f"entities_ready: {entities_ready}")
+    #print_and_log(f" ")
+    #print_and_log(f"psr_cache_data_raw: {psr_cache_data_raw}")
+    
+    input("894jfskfdg999999")
+    
+    #lightsrad_updater(game_dir, entities_ready)
     
     print_and_log(f" ")
     print_and_log(f"Processing output VMF, please wait...")
-    convert_vmf(vmf_in_path, vmf_out_path, entities_ready, game_dir)
+    convert_vmf(game_dir, vmf_in_path, vmf_out_path, entities_ready, psr_cache_data_ready)
     
     print_and_log(f" ")
     end_time = time.time()
