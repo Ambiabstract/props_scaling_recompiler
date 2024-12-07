@@ -607,17 +607,17 @@ def compile_model(compiler_path, game_folder, qc_path, hammer_mdl_path, scale, r
         #print_and_log("Errors:", result.stderr.decode())
         #"Completed "metal_cup_mug_scaled_100.qc""
         #print_and_log(f"607! qc_path: {qc_path}")
-        print_and_log(f"608! os.path.basename(qc_path): {os.path.basename(qc_path)}")
-        print_and_log(f"610! hammer_mdl_path: {hammer_mdl_path}")
-        print_and_log(f"611! scale: {scale}")
+        #print_and_log(f"608! os.path.basename(qc_path): {os.path.basename(qc_path)}")
+        #print_and_log(f"610! hammer_mdl_path: {hammer_mdl_path}")
+        #print_and_log(f"611! scale: {scale}")
         if f'Completed "{os.path.basename(qc_path)}"' in output:
             # !!!!! Вот тут можно добавлять готовые модели в список на встраивание в ВМФ
             # add_to_cache
             psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, scale, rendercolor, skin)
             save_global_cache(psr_cache_data_ready)
             #print_and_log(f"609! COMPLETED!!!!!!!111111111111111")
-        else:
-            print_and_log(f"613! BLYAAAAAAAAAAAAAAAAAAAAAAT")
+        #else:
+        #    print_and_log(Fore.RED + f"Model compilation failed!")
         #input("sgsfgdgf233")
     except subprocess.CalledProcessError as e:
         print_and_log(Fore.RED + f"Model compilation failed! An error occurred: {e}")
@@ -760,7 +760,7 @@ def rescale_qc_file(qc_path, scale, hammer_mdl_path, psr_cache_data_todo, psr_ca
                 print_and_log(Fore.GREEN + f"{model_name}.mdl is already a static prop. Updating cache.")
                 psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0")
                 save_global_cache(psr_cache_data_ready)
-                return None
+                return f"static_prop"
             else:
                 if debug_mode: print_and_log(Fore.YELLOW + f"!!! blyat")
                 new_model_name = f"{model_name}_scaled_{int(scale * 100)}.mdl"
@@ -815,10 +815,14 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
 
     for scale in scales:
         new_qc_path = copy_and_rescale_qc(qc_path, scale, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready)
-        if new_qc_path != None:
-            compile_model(compiler_path, game_folder, new_qc_path, hammer_mdl_path, scale, rendercolor, skin, psr_cache_data_todo, psr_cache_data_ready)
-        else:
+        if new_qc_path == None:
             print_and_log(Fore.YELLOW + f"Skip QC compiling (new_qc_path is none for some reason):\n{qc_path}")
+        elif new_qc_path == "static_prop":
+            print_and_log(f'Skip QC compiling, "{hammer_mdl_path}" is static prop.')
+            pass
+        else:
+            compile_model(compiler_path, game_folder, new_qc_path, hammer_mdl_path, scale, rendercolor, skin, psr_cache_data_todo, psr_cache_data_ready)
+            
 
 def get_valid_path(prompt_message, valid_extension):
     while True:
@@ -1523,7 +1527,7 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
     
     return entities_todo, entities_ready
 
-def convert_vmf(game_dir, vmf_in_path, vmf_out_path, entities_ready, psr_cache_data_ready):
+def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready, psr_cache_data_ready):
     if debug_mode: print_and_log(f"convert_vmf start...")
     if debug_mode: print_and_log(Fore.YELLOW + f"vmf_in_path: {vmf_in_path}")
     if debug_mode: print_and_log(Fore.YELLOW + f"vmf_out_path: {vmf_out_path}")
@@ -1559,57 +1563,27 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, entities_ready, psr_cache_d
 
     entities_ready_scaled_len = len(entities_ready_scaled)
     print_and_log(f"{entities_ready_scaled_len} entities to insert into the VMF.")
-    
+
     entities_progress = 0
     
     for entity in entities_ready_scaled:
-        #if debug_mode: print_and_log(Fore.YELLOW + f"inserting to vmf: {entity}")
-        #print_and_log(Fore.YELLOW + f"inserting to vmf: {entity}")
+        if debug_mode: print_and_log(Fore.YELLOW + f"inserting to vmf: {entity}")
         entity_id = entity['id']
         new_model = entity['model']
         modelscale = entity['modelscale']
         
-        base_name, ext = os.path.splitext(new_model)
+        if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
+        if debug_mode: print_and_log(Fore.YELLOW + f"modelscale: {modelscale}")
         
-        #if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
-        print_and_log(Fore.YELLOW + f"new_model (old name): {new_model}")
-        print_and_log(Fore.YELLOW + f"base_name: {base_name}")
-        print_and_log(Fore.YELLOW + f"ext: {ext}")
-        print_and_log(Fore.YELLOW + f"modelscale: {modelscale}")
-        
-        input("sgsfgfv")
-
-        #if not "_scaled_" in model:
-        #    continue
-        
-        #if float(modelscale) == 1.0:
-        #    if new_model in psr_cache_data_ready:
-        #        real_mdl_path = psr_cache_data_ready[new_model].get('real_mdl_path', None)
-        #    if not real_mdl_path:
-        #        new_model = f"{base_name}_static{ext}"
-            
-            
-        #else:
-        #    new_model = f"{base_name}_scaled_{int(float(modelscale) * 100)}{ext}"
-        
-        if subfolders == True and float(modelscale) != 1.0:
-            new_model = os.path.join(os.path.dirname(new_model), 'scaled', os.path.basename(new_model)).replace('\\', '/')
-
-        entity['model'] = new_model
-
-
-
         if float(modelscale) == 1.0:
             mdl_name = get_file_name(new_model)
-            #real_mdl_path = find_file_in_subfolders(game_dir, f"{mdl_name}.mdl")
-            if new_model in psr_cache_data_ready:
-                real_mdl_path = psr_cache_data_ready[new_model].get('real_mdl_path', None)
+            real_mdl_path = find_file_in_subfolders(game_dir, f"{mdl_name}.mdl")
             if real_mdl_path:
                 pass
             else:
                 new_model = new_model.replace('_static', '')
         
-        print_and_log(Fore.YELLOW + f"new_model (new name): {new_model}")
+        if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
 
         pattern = re.compile(
             r'entity\s*\{\s*"id"\s*"' + re.escape(entity_id) + r'"\s*("classname"\s*"prop_static_scalable"\s*)(".*?"\s*)*?("model"\s*".*?"\s*)(".*?"\s*)*\}', re.DOTALL
@@ -1625,10 +1599,10 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, entities_ready, psr_cache_d
         
         entities_progress += 1
         
-        if entities_progress >= entities_ready_len:
+        if entities_progress >= entities_ready_scaled_len:
             print_and_log(f"Progress: Done!")
         else:
-            print(f"Progress: {int(entities_progress*100/entities_ready_len)}%", end="\r")
+            print(f"Progress: {int(entities_progress*100/entities_ready_scaled_len)}%", end="\r")
     
     with open(vmf_out_path, 'w') as file:
         if debug_mode: print_and_log(Fore.YELLOW + f"writing vmf...")
@@ -1849,24 +1823,24 @@ def main():
     #print_and_log(f"entities_ready: {entities_ready}")
     #print_and_log(f" ")
     #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
-    print_and_log(f" ")
+    #print_and_log(f" ")
     print_and_log(f"len(entities_raw): {len(entities_raw)}")
-    print_and_log(f" ")
-    print_and_log(f"entities_raw: {entities_raw}")
-    print_and_log(f" ")
+    #print_and_log(f" ")
+    #print_and_log(f"entities_raw: {entities_raw}")
+    #print_and_log(f" ")
     print_and_log(f"len(entities_ready): {len(entities_ready)}")
-    print_and_log(f" ")
-    print_and_log(f"entities_ready: {entities_ready}")
+    #print_and_log(f" ")
+    #print_and_log(f"entities_ready: {entities_ready}")
     #print_and_log(f" ")
     #print_and_log(f"psr_cache_data_raw: {psr_cache_data_raw}")
     
-    input("894jfskfdg999999")
+    #input("894jfskfdg999999")
     
     #lightsrad_updater(game_dir, entities_ready)
     
     print_and_log(f" ")
     print_and_log(f"Processing output VMF, please wait...")
-    convert_vmf(game_dir, vmf_in_path, vmf_out_path, entities_ready, psr_cache_data_ready)
+    convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready, psr_cache_data_ready)
     
     print_and_log(f" ")
     end_time = time.time()
