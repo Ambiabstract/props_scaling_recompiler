@@ -108,18 +108,28 @@ def parse_vmf(file_path, classnames = ["prop_static_scalable", "prop_dynamic_sca
 
     return entities_raw
 
-def add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin, real_mdl_path=None):
+def add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin, real_mdl_path=None, is_static=False):
+    model = model.lower()
+    
     if model not in psr_cache_data:
         psr_cache_data[model] = {
             "scales": [],
             "colors": [],
-            "real_mdl_path": real_mdl_path
+            "real_mdl_path": real_mdl_path,
+            "is_static": is_static  # Добавляем is_static при инициализации модели
         }
     else:
         # Обновляем real_mdl_path, если он отличается
-        if real_mdl_path != None and psr_cache_data[model].get("real_mdl_path") != real_mdl_path:
+        if real_mdl_path is not None and psr_cache_data[model].get("real_mdl_path") != real_mdl_path:
             psr_cache_data[model]["real_mdl_path"] = real_mdl_path
-    
+        
+        # Обновляем is_static, если передано новое значение
+        if psr_cache_data[model].get("is_static") != is_static:
+            psr_cache_data[model]["is_static"] = is_static
+            print_and_log(Fore.YELLOW + f"НУ КА ЁПТА is_static ИЗМЕНИЛСЯ:")
+            print_and_log(Fore.YELLOW + f"model: {model}")
+            print_and_log(Fore.YELLOW + f"model: {is_static}")
+
     if modelscale not in psr_cache_data[model]["scales"]:
         psr_cache_data[model]["scales"].append(modelscale)
     
@@ -131,7 +141,7 @@ def add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin, real_mdl_
     
     return psr_cache_data
 
-def remove_from_cache(psr_cache_data, model, modelscales_to_remove=None, rendercolors_to_remove=None, skins_to_remove=None, remove_real_mdl_path=False):
+def remove_from_cache(psr_cache_data, model, modelscales_to_remove=None, rendercolors_to_remove=None, skins_to_remove=None, remove_real_mdl_path=False, remove_is_static=False):
     # Проверяем, есть ли модель в словаре
     if model not in psr_cache_data:
         print_and_log(f"Model {model} not found in cache!")
@@ -159,6 +169,11 @@ def remove_from_cache(psr_cache_data, model, modelscales_to_remove=None, renderc
     if remove_real_mdl_path and 'real_mdl_path' in psr_cache_data[model]:
         del psr_cache_data[model]['real_mdl_path']
         print_and_log(f"Removed real_mdl_path from {model}.")
+    
+    # Удаление 'is_static', если указано
+    if remove_is_static and 'is_static' in psr_cache_data[model]:
+        del psr_cache_data[model]['is_static']
+        print_and_log(f"Removed is_static from {model}.")
     
     return psr_cache_data
 
@@ -604,6 +619,13 @@ def compile_model(compiler_path, game_folder, qc_path, hammer_mdl_path, scale, r
         qc_path
     ]
     
+    #попытка починить сбрасывающийся is_static=True для awning001a
+    #print_and_log(Fore.YELLOW + f'КОМПИЛЯЦИЯ МОДЕЛИ')
+    #print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
+    #psr_cache_data_ready_load = load_global_cache()
+    #if psr_cache_data_ready_load != None: psr_cache_data_ready = psr_cache_data_ready_load
+    #print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
+    
     try:
         result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print_and_log("Output:", result.stdout.decode())
@@ -617,8 +639,13 @@ def compile_model(compiler_path, game_folder, qc_path, hammer_mdl_path, scale, r
         if f'Completed "{os.path.basename(qc_path)}"' in output:
             # !!!!! Вот тут можно добавлять готовые модели в список на встраивание в ВМФ
             # add_to_cache
-            psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, scale, rendercolor, skin)
+            print_and_log(Fore.YELLOW + f"ПРИКОЛ ЗАЛУПЫ 1")
+            print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
+            is_static = psr_cache_data_ready.get(hammer_mdl_path, {}).get("is_static", None)
+            psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, scale, rendercolor, skin, is_static=is_static)
             save_global_cache(psr_cache_data_ready)
+            print_and_log(Fore.YELLOW + f"ПРИКОЛ ЗАЛУПЫ 2")
+            print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
             #print_and_log(f"609! COMPLETED!!!!!!!111111111111111")
         #else:
         #    print_and_log(Fore.RED + f"Model compilation failed!")
@@ -761,9 +788,12 @@ def rescale_qc_file(qc_path, scale, hammer_mdl_path, psr_cache_data_todo, psr_ca
                 new_model_name = f"_do_not_compile_me!"
                 #!!!!!!!!!!!!!!!!! add_to_cache
                 #, psr_cache_data_todo, psr_cache_data_ready
+                print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
                 print_and_log(Fore.GREEN + f"{model_name}.mdl is already a static prop. Updating cache.")
-                psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0")
+                #real_mdl_path = psr_cache_data_ready.get(hammer_mdl_path, {}).get("real_mdl_path")
+                psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0"''', real_mdl_path''', is_static=True)
                 save_global_cache(psr_cache_data_ready)
+                print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
                 return f"static_prop"
             else:
                 if debug_mode: print_and_log(Fore.YELLOW + f"!!! blyat")
@@ -812,6 +842,13 @@ def copy_and_rescale_qc(qc_path, scale, convert_to_static, subfolders, hammer_md
 def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready):    
     scales = list(set(map(float, scales.split())))
     scales.sort()
+    
+    # попытка починить сбрасывающийся is_static=True для awning001a
+    #print_and_log(Fore.YELLOW + f'РЕСКЕЙЛ И КОМПИЛЯЦИЯ МОДЕЛИ')
+    #print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
+    #psr_cache_data_ready_load = load_global_cache()
+    #if psr_cache_data_ready_load != None: psr_cache_data_ready = psr_cache_data_ready_load
+    #print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
     
     #temp
     rendercolor = "255 255 255"
@@ -1497,8 +1534,9 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
     psr_cache_data_ready_load = load_global_cache()
     if psr_cache_data_ready_load != None: psr_cache_data_ready = psr_cache_data_ready_load
 
-    #print_and_log(f" ")
-    #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
+    print_and_log(f" ")
+    print_and_log(f"КОНЕЦ ВСЯКОЙ КОМПИЛЯЦИИ ДЕКОМПИЛЯЦИИ")
+    print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
     #print_and_log(f" ")
     #print_and_log(f"entities_raw: {entities_raw}")
     #print_and_log(f" ")
@@ -1580,14 +1618,29 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready,
         if debug_mode: print_and_log(Fore.YELLOW + f"modelscale: {modelscale}")
         
         if float(modelscale) == 1.0:
-            mdl_name = get_file_name(new_model)
-            real_mdl_path = find_file_in_subfolders(game_dir, f"{mdl_name}.mdl") #вот эта функция жрёт больше всего, надо кэшировать однозначно
-            if real_mdl_path:
-                # эта ветка срабатывает если модель была динамическая и стала статическая с постфиком _static
-                pass
+            #psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", is_static=True)
+            #save_global_cache(psr_cache_data_ready)
+            
+            # Проверяем наличие real_mdl_path в кэше
+            hammer_mdl_path = new_model.replace('_static', '')
+            if hammer_mdl_path in psr_cache_data_ready:
+                is_static = psr_cache_data_ready[hammer_mdl_path].get('is_static', None)
+                print_and_log(f"hammer_mdl_path: {hammer_mdl_path}")
+                print_and_log(f"is_static: {is_static}")
+                if is_static:
+                    #эта ветка срабатывает если оригинальная модель была статичная и надо использовать имя без _static
+                    new_model = hammer_mdl_path
+                    #new_model = new_model.replace('_static', '')
+                    #print_and_log(Fore.GREEN + f"{mdl_name}.mdl found in cache!")
             else:
-                #если в имени нет _static значит либо оригинальная модель статичная либо компиляция сдохла, предполагаем первое
-                new_model = new_model.replace('_static', '')
+                mdl_name = get_file_name(new_model)
+                real_mdl_path = find_file_in_subfolders(game_dir, f"{mdl_name}.mdl") #вот эта функция жрёт больше всего во всём инсёрте
+                if real_mdl_path:
+                    # эта ветка срабатывает если модель была динамическая и стала статическая с постфиком _static
+                    pass
+                else:
+                    #если в имени нет _static значит либо оригинальная модель статичная либо компиляция сдохла, предполагаем первое
+                    new_model = new_model.replace('_static', '')
         
         if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
 
