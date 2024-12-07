@@ -313,8 +313,9 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
                 psr_cache_data_check = add_to_cache(psr_cache_data_empty, model, modelscale, rendercolor, skin)
                 #print_and_log(f"psr_cache_data_check: {psr_cache_data_check}")
                 #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
+                # Если собранная энтитя в psr_cache_data_check уже есть в глобальном кэше - добавляем в реди и нет смысла это компилить
                 if check_psr_data(psr_cache_data_check, psr_cache_data_ready):
-                    entities_ready.append(entity_dict)
+                    #entities_ready.append(entity_dict)
                     psr_cache_data_ready = add_to_cache(psr_cache_data_ready, model, modelscale, rendercolor, skin)
                     continue
             mdl_name = get_file_name(model)
@@ -330,6 +331,7 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
             #    print_and_log(f"rendercolor: '{rendercolor}'                         ")
             #    input("zfsfgh                         ")
             else:
+                '''
                 entity_dict_ready = {
                     "id": entity_id,
                     "model": transform_mdl_path_to_hammer_style(mdl_scaled_path),
@@ -337,7 +339,9 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
                     "rendercolor": rendercolor,
                     "skin": skin
                 }
-                entities_ready.append(entity_dict_ready)
+                '''
+                #entities_ready.append(entity_dict_ready)
+                #entities_ready.append(entity_dict)
                 psr_cache_data_ready = add_to_cache(psr_cache_data_ready, model, modelscale, rendercolor, skin)
                 #print_and_log(f"254 psr_cache_data_ready: {psr_cache_data_ready}")
 
@@ -1824,11 +1828,11 @@ def main():
     #print_and_log(f" ")
     #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
     #print_and_log(f" ")
-    print_and_log(f"len(entities_raw): {len(entities_raw)}")
+    #print_and_log(f"len(entities_raw): {len(entities_raw)}")
     #print_and_log(f" ")
     #print_and_log(f"entities_raw: {entities_raw}")
     #print_and_log(f" ")
-    print_and_log(f"len(entities_ready): {len(entities_ready)}")
+    #print_and_log(f"len(entities_ready): {len(entities_ready)}")
     #print_and_log(f" ")
     #print_and_log(f"entities_ready: {entities_ready}")
     #print_and_log(f" ")
@@ -1838,9 +1842,11 @@ def main():
     
     #lightsrad_updater(game_dir, entities_ready)
     
+    # entities_ready = entities_raw just because
+    
     print_and_log(f" ")
     print_and_log(f"Processing output VMF, please wait...")
-    convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready, psr_cache_data_ready)
+    convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_raw, psr_cache_data_ready)
     
     print_and_log(f" ")
     end_time = time.time()
