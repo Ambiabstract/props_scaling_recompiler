@@ -103,6 +103,12 @@ def remove_from_cache(psr_cache_data, model, modelscales_to_remove=None, renderc
     return psr_cache_data
 
 def check_psr_data(psr_cache_data_check, psr_cache_data_ready):
+    #print_and_log(f"                                 ")
+    #print_and_log(f"CHECK PSR DATA:")
+    #print_and_log(f"psr_cache_data_check: {psr_cache_data_check}")
+    #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
+    #print_and_log(f"                                 ")
+
     for model, model_data in psr_cache_data_check.items():
         if model not in psr_cache_data_ready:
             return False
@@ -221,12 +227,16 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
         if debug_mode: print_and_log(f"modelscale: {modelscale}")
         if "," in modelscale:
             print_and_log(Fore.YELLOW + f"Warning! Model scale of {get_file_name(model)}.mdl has a comma! Entity ID: {entity_id}. Entity origin: '{origin}'. Compiling with scale 1.")
-            modelscale = "1"
+            modelscale = "1.0"
 
         if float(modelscale) < 0.01:
             print_and_log(Fore.RED + f"ERROR! {get_file_name(model)}.mdl has wrong scale: {modelscale}. Should be more than 0.01. Entity ID: {entity_id}. Entity origin: '{origin}'. Skipping!")
             continue
 
+        # Funny fix
+        modelscale = float(modelscale) 
+        modelscale = str(modelscale)
+        
         rendercolor = match.group('rendercolor')
         #print_and_log(f"                ")
         #print_and_log(f"84 rendercolor: {rendercolor}")
@@ -259,20 +269,38 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
                 #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
                 
                 # Если собранная энтитя в psr_cache_data_check уже есть в глобальном кэше - добавляем в реди и нет смысла это компилить
+                # вот тут надо проверять единичные статичные модели, должны попадать в реди
                 if check_psr_data(psr_cache_data_check, psr_cache_data_ready):
                     #entities_ready.append(entity_dict)
                     #print_and_log(f"check_psr_data: True")
                     is_static = psr_cache_data_ready.get(model, {}).get("is_static", None)
+                    #print_and_log(f"model: {model}")
+                    #print_and_log(f"modelscale: {modelscale}")
+                    #print_and_log(f"is_static from global cache: {is_static}")
+                    #print_and_log(f"psr_cache_data_ready before add to cache: {psr_cache_data_ready}")
+                    #if float(modelscale) == 1:
+                    #    print_and_log(f"model: {model}")
+                    #    print_and_log(f"is_static: {is_static}")
+                    #    print_and_log(f"psr_cache_data_ready before add to cache: {psr_cache_data_ready}")
                     psr_cache_data_ready = add_to_cache(psr_cache_data_ready, model, modelscale, rendercolor, skin, is_static=is_static)
+                    #print_and_log(f"psr_cache_data_ready after add to cache: {psr_cache_data_ready}")
                     continue
-                #print_and_log(f"check_psr_data: False")
+                #else:
+                #    print_and_log(f"check_psr_data: False")
+                #    print_and_log(f" ")
+                #    print_and_log(f"psr_cache_data_ready before add to cache: {psr_cache_data_ready}")
+                #    print_and_log(f" ")
+                #    print_and_log(f"model: {model}")
+                #    print_and_log(f"modelscale: {modelscale}")
+                #    is_static = psr_cache_data_ready.get(model, {}).get("is_static", None)
+                #    print_and_log(f"is_static from global cache: {is_static}")
             mdl_name = get_file_name(model)
             mdl_name_scaled = process_mdl_name(mdl_name, modelscale)
             mdl_scaled_path = find_mdl_file(game_dir, mdl_name_scaled)
             if mdl_scaled_path is None:
                 entities_todo.append(entity_dict)
                 psr_cache_data_todo = add_to_cache(psr_cache_data_todo, model, modelscale, rendercolor, skin)
-                #print_and_log(f"238 psr_cache_data_todo: {psr_cache_data_todo}")
+                #print_and_log(f"303! psr_cache_data_todo: {psr_cache_data_todo}")
             #elif rendercolor is not f"255 255 255": #вот тут чота происходит непонятновое((((
             #    entities_todo.append(entity_dict)
             #    print_and_log(f"entity_dict: {entity_dict}                         ")
@@ -302,8 +330,9 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
     if force_recompile and os.path.exists('props_scaling_recompiler_cache.pkl'):
         os.remove('props_scaling_recompiler_cache.pkl')
     if force_recompile: remove_vmf_assets(entities_raw, game_dir, remove_static=True)
+    if force_recompile: print_and_log(f" ")
 
-    print_and_log(f"{len(psr_cache_data_ready)} models in global cache.")
+    print_and_log(f"{len(psr_cache_data_ready)} models in cache.")
     print_and_log(f"{len(psr_cache_data_raw)} original models in this VMF.")
     print_and_log(f"{len(entities_raw)} models variations in this VMF.")
     print_and_log(f"{len(psr_cache_data_todo)} models to recompile for this VMF.")
@@ -621,7 +650,7 @@ def rescale_qc_file(qc_path, scale, hammer_mdl_path, psr_cache_data_todo, psr_ca
                 new_model_name = f"_do_not_compile_me!"
                 print_and_log(Fore.GREEN + f"{model_name}.mdl is already a static prop. Updating cache.")
                 #real_mdl_path = psr_cache_data_ready.get(hammer_mdl_path, {}).get("real_mdl_path")
-                psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", is_static=True)
+                psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", is_static=True)
                 save_global_cache(psr_cache_data_ready)
                 #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
                 return f"static_prop"
@@ -670,6 +699,11 @@ def copy_and_rescale_qc(qc_path, scale, convert_to_static, subfolders, hammer_md
     return new_qc_path
 
 def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready):    
+    #print_and_log(f" ")
+    #print_and_log(f"RESCALE AND COMPILE:")
+    #print_and_log(f"scales: {scales}")
+    #print_and_log(f" ")
+    
     scales = list(set(map(float, scales.split())))
     scales.sort()
 
@@ -685,7 +719,7 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
         if new_qc_path == None:
             print_and_log(Fore.YELLOW + f"Skip QC compiling (new_qc_path is none for some reason):\n{qc_path}")
         elif new_qc_path == "static_prop":
-            print_and_log(f'Skip QC compiling, "{hammer_mdl_path}" is static prop.')
+            print_and_log(f'Skip QC compiling, "{hammer_mdl_path}" is static prop and has scale 1.')
             pass
         else:
             compile_model(compiler_path, game_folder, new_qc_path, hammer_mdl_path, scale, rendercolor, skin, psr_cache_data_todo, psr_cache_data_ready)
@@ -1173,6 +1207,7 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
         
         mdl_name = get_file_name(hammer_mdl_path)
         scales_list = psr_cache_data_todo[hammer_mdl_path].get('scales', [])
+        #print_and_log(f"scales_list: {scales_list}")
         scales = " ".join(scales_list)  # Преобразуем список scales в строку
         
         # Проверяем наличие real_mdl_path в кэше
@@ -1188,8 +1223,8 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
         if real_mdl_path:
             #real_mdl_paths.append(real_mdl_path)
             is_static = psr_cache_data_ready.get(hammer_mdl_path, {}).get("is_static", None)
-            psr_cache_data_todo = add_to_cache(psr_cache_data_todo, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", real_mdl_path=real_mdl_path, is_static=is_static)
-            psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", real_mdl_path=real_mdl_path, is_static=is_static)
+            psr_cache_data_todo = add_to_cache(psr_cache_data_todo, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", real_mdl_path=real_mdl_path, is_static=is_static)
+            psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", real_mdl_path=real_mdl_path, is_static=is_static)
             
             decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, real_mdl_path, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready)
             continue
@@ -1202,8 +1237,8 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
             
             if mdl_path_from_other_contents != None:
                 is_static = psr_cache_data_ready.get(hammer_mdl_path, {}).get("is_static", None)
-                psr_cache_data_todo = add_to_cache(psr_cache_data_todo, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", real_mdl_path=mdl_path_from_other_contents, is_static=is_static)
-                psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", real_mdl_path=mdl_path_from_other_contents, is_static=is_static)
+                psr_cache_data_todo = add_to_cache(psr_cache_data_todo, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", real_mdl_path=mdl_path_from_other_contents, is_static=is_static)
+                psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", real_mdl_path=mdl_path_from_other_contents, is_static=is_static)
                 print_and_log(Fore.GREEN + f"{mdl_name}.mdl found!")
                 
                 decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, mdl_path_from_other_contents, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready)
@@ -1217,8 +1252,8 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
 
                 if extracted_mdl_path != None:
                     #real_mdl_paths.append(extracted_mdl_path)
-                    psr_cache_data_todo = add_to_cache(psr_cache_data_todo, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", real_mdl_path=extracted_mdl_path)
-                    #psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", real_mdl_path=extracted_mdl_path)
+                    psr_cache_data_todo = add_to_cache(psr_cache_data_todo, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", real_mdl_path=extracted_mdl_path)
+                    #psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", real_mdl_path=extracted_mdl_path)
                     print_and_log(Fore.GREEN + f"{mdl_name}.mdl found!")
                     
                     decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, extracted_mdl_path, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready)
@@ -1282,7 +1317,7 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready,
         if debug_mode: print_and_log(Fore.YELLOW + f"modelscale: {modelscale}")
         
         if float(modelscale) == 1.0:
-            #psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", is_static=True)
+            #psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", is_static=True)
             #save_global_cache(psr_cache_data_ready)
             
             # Проверяем наличие real_mdl_path в кэше
@@ -1420,7 +1455,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    psr_description_name = f"props_scaling_recompiler 1.1.0a"
+    psr_description_name = f"props_scaling_recompiler 1.1.0b"
     psr_description_author = f"Shitcoded by Ambiabstract (Sergey Shavin)"
     psr_description_github = f"https://github.com/Ambiabstract"
     psr_description_discord = f"Discord: @Ambiabstract"
@@ -1513,7 +1548,19 @@ def main():
     compiler_path = os.path.join(script_path, "studiomdl.exe")
     convert_to_static = False
 
-    psr_cache_data_ready = {}    
+    psr_cache_data_ready = {}
+    psr_cache_data_ready_load = load_global_cache()
+    print_and_log(f" ")
+    #print_and_log(f"psr_cache_data_ready_load: {psr_cache_data_ready_load}")
+    if psr_cache_data_ready_load != None: 
+        psr_cache_data_ready = psr_cache_data_ready_load
+        print_and_log(f"Cache loaded: props_scaling_recompiler_cache.pkl")
+    else:
+        print_and_log(f"Cache not found.")
+    
+    #print_and_log(f" ")
+    #print_and_log(f"GLOBAL CACHE ON THE START:")
+    #print_and_log(f"{psr_cache_data_ready}")
 
     entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo = process_vmf(game_dir, vmf_in_path, psr_cache_data_ready, force_recompile, classnames = ["prop_static_scalable"])
 
