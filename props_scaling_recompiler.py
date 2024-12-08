@@ -651,7 +651,10 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
     scales = list(set(map(float, scales.split())))
     scales.sort()
 
-    #temp
+    # temp
+    # где-то вот тут надо добывать из raw или todo все rendercolor и все skin
+    # создавать материалы
+    # после этого надо добавлять всё сначала в оригинальный qc и только потом копировать набор qc для поскейленных
     rendercolor = "255 255 255"
     skin = "0"
 
@@ -734,7 +737,6 @@ def find_file_in_subfolders(directory, filename_with_extension):
     return result
 
 def decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, mdl_path, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready):
-    if debug_mode: print_and_log(f"\ndecompile_rescale_and_compile_model start\n")
     if debug_mode: print_and_log(f"ccld_path: {ccld_path}")
     if debug_mode: print_and_log(f"gameinfo_path: {gameinfo_path}")
     if debug_mode: print_and_log(f"compiler_path: {compiler_path}")
