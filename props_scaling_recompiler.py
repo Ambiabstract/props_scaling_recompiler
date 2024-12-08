@@ -40,74 +40,6 @@ def get_script_name():
         script_name = os.path.basename(os.path.abspath(__file__))
     return os.path.splitext(script_name)[0]
 
-def parse_vmf(file_path, classnames = ["prop_static_scalable", "prop_dynamic_scalable", "prop_physics_scalable"]):
-    entities_raw = []
-    with open(file_path, 'r') as file:
-        content = file.read()
-
-    classnames_pattern = '|'.join(classnames)
-
-    pattern = re.compile(
-        rf'entity\s*\{{'
-        rf'[^\{{}}]*"id"\s*"(?P<id>\d+)"\s*'
-        rf'[^\{{}}]*"classname"\s*\"(?P<classname>{classnames_pattern})\"\s*'
-        rf'[^\{{}}]*"model"\s*"(?P<model>[^"]+)"\s*'
-        rf'[^\{{}}]*"modelscale"\s*"(?P<modelscale>[^"]+)"\s*'
-        # "rendercolor" "222 22 22"
-        rf'[^\{{}}]*"rendercolor"\s*"(?P<rendercolor>[^"]+)"\s*'
-        #"skin" "0"
-        rf'[^\{{}}]*"skin"\s*"(?P<skin>[^"]+)"\s*'
-        rf'[^\{{}}]*"origin"\s*"(?P<origin>[^"]+)"\s*',
-        re.DOTALL | re.MULTILINE
-    )
-    matches = list(pattern.finditer(content))
-    
-    print_and_log(f" ")
-    print_and_log(f"{len(matches)} entities with modelscale found")
-    
-    for match in matches:
-        if debug_mode: print_and_log(f" ")
-        
-        entity_id = match.group('id')
-        if debug_mode: print_and_log(f"id: {entity_id}")
-        
-        classname = match.group('classname')
-        if debug_mode: print_and_log(f"classname: {classname}")
-        
-        model = match.group('model')
-        if debug_mode: print_and_log(f"model: {model}")
-        
-        modelscale = match.group('modelscale')
-        if debug_mode: print_and_log(f"modelscale: {modelscale}")
-        if "," in modelscale:
-            print_and_log(Fore.YELLOW + f"Warning! Model scale of {get_file_name(model)}.mdl has a comma! Entity ID: {entity_id}. Entity origin: '{origin}'. Compiling with scale 1.")
-            modelscale = "1"
-        
-        rendercolor = match.group('rendercolor')
-        print_and_log(f"84 rendercolor: {rendercolor}")
-        
-        skin = match.group('skin')
-        print_and_log(f"89 skin: {skin}")
-        
-        #origin = match.group('origin')
-        #if debug_mode: print_and_log(f"origin: {origin}")
-
-        entity_dict = {
-            "id": entity_id,
-            "model": model,
-            "modelscale": modelscale,
-            "rendercolor": rendercolor,
-            "skin": skin
-        }
-
-        entities_raw.append(entity_dict)
-    
-    print_and_log(f" ")
-
-    print_and_log(f"107 entities_raw: {entities_raw}")
-
-    return entities_raw
-
 def add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin, real_mdl_path=None, is_static=False):
     model = model.lower()
     
@@ -116,17 +48,15 @@ def add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin, real_mdl_
             "scales": [],
             "colors": [],
             "real_mdl_path": real_mdl_path,
-            "is_static": is_static  # Добавляем is_static при инициализации модели
+            "is_static": is_static
         }
     else:
-        # Обновляем real_mdl_path, если он отличается
         if real_mdl_path is not None and psr_cache_data[model].get("real_mdl_path") != real_mdl_path:
             psr_cache_data[model]["real_mdl_path"] = real_mdl_path
-        
-        # Обновляем is_static, если передано новое значение
+
         if psr_cache_data[model].get("is_static") != is_static:
             psr_cache_data[model]["is_static"] = is_static
-            #print_and_log(Fore.YELLOW + f"НУ КА ЁПТА is_static ИЗМЕНИЛСЯ:")
+            #print_and_log(Fore.YELLOW + f"ATTENTION! is_static changed:")
             #print_and_log(Fore.YELLOW + f"model: {model}")
             #print_and_log(Fore.YELLOW + f"model: {is_static}")
 
@@ -142,18 +72,15 @@ def add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin, real_mdl_
     return psr_cache_data
 
 def remove_from_cache(psr_cache_data, model, modelscales_to_remove=None, rendercolors_to_remove=None, skins_to_remove=None, remove_real_mdl_path=False, remove_is_static=False):
-    # Проверяем, есть ли модель в словаре
     if model not in psr_cache_data:
         print_and_log(f"Model {model} not found in cache!")
         return psr_cache_data
-    
-    # Удаление масштабов из 'scales'
+
     if modelscales_to_remove:
         original_scales = psr_cache_data[model].get('scales', [])
         psr_cache_data[model]['scales'] = [scale for scale in original_scales if scale not in modelscales_to_remove]
         print_and_log(f"Removed scales {modelscales_to_remove} from {model}. Remaining scales: {psr_cache_data[model]['scales']}")
-    
-    # Удаление пар rendercolor и skin из 'colors'
+
     if rendercolors_to_remove or skins_to_remove:
         original_colors = psr_cache_data[model].get('colors', [])
         psr_cache_data[model]['colors'] = [
@@ -164,13 +91,11 @@ def remove_from_cache(psr_cache_data, model, modelscales_to_remove=None, renderc
             )
         ]
         print_and_log(f"Removed specified colors/skins from {model}. Remaining colors: {psr_cache_data[model]['colors']}")
-    
-    # Удаление 'real_mdl_path', если указано
+
     if remove_real_mdl_path and 'real_mdl_path' in psr_cache_data[model]:
         del psr_cache_data[model]['real_mdl_path']
         print_and_log(f"Removed real_mdl_path from {model}.")
-    
-    # Удаление 'is_static', если указано
+
     if remove_is_static and 'is_static' in psr_cache_data[model]:
         del psr_cache_data[model]['is_static']
         print_and_log(f"Removed is_static from {model}.")
@@ -178,22 +103,15 @@ def remove_from_cache(psr_cache_data, model, modelscales_to_remove=None, renderc
     return psr_cache_data
 
 def check_psr_data(psr_cache_data_check, psr_cache_data_ready):
-    #print_and_log(f"check psr data")
-    #print_and_log(f"psr_cache_data_check: {psr_cache_data_check}")
-    #print_and_log(f" ")
-    #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
-
     for model, model_data in psr_cache_data_check.items():
         if model not in psr_cache_data_ready:
             return False
-        
-        # Проверяем масштаб
+
         scales_check = set(model_data.get('scales', []))
         scales_ready = set(psr_cache_data_ready[model].get('scales', []))
         if not scales_check.issubset(scales_ready):
             return False
-        
-        # Проверяем пары color-skin
+
         colors_check = model_data.get('colors', [])
         colors_ready = psr_cache_data_ready[model].get('colors', [])
         if not any(color_check in colors_ready for color_check in colors_check):
@@ -218,7 +136,6 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
     entities_ready = []
     entities_todo = []
     psr_cache_data_raw = {}
-    #psr_cache_data_ready = {}
     psr_cache_data_todo = {}
     
     with open(file_path, 'r') as file:
@@ -294,25 +211,10 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
         
         skin = match.group('skin')
         #print_and_log(f"89 skin: {skin}")
-        
-        #is_static = psr_cache_data_ready.get(hammer_mdl_path, {}).get("is_static", None)
+
         psr_cache_data_raw = add_to_cache(psr_cache_data_raw, model, modelscale, rendercolor, skin)
         #print_and_log(f"201 psr_cache_data_raw: {psr_cache_data_raw}")
-        
-        '''
-        if model not in psr_cache_data_raw:
-            psr_cache_data_raw[model] = {"scales": [], "colors": []}
-        if modelscale not in psr_cache_data_raw[model]["scales"]:
-            psr_cache_data_raw[model]["scales"].append(modelscale)
-        if len(psr_cache_data_raw[model]["colors"]) < 31:
-            if [[rendercolor], [skin]] not in psr_cache_data_raw[model]["colors"]:
-                psr_cache_data_raw[model]["colors"].append([[rendercolor], [skin]])
-        else:
-            print_and_log(f"[string 191] {model} too many skins and colors!")
-    
-        print_and_log(f"193 psr_cache_data_raw: {psr_cache_data_raw}")
-        '''
-        
+
         entity_dict = {
             "id": entity_id,
             "model": model,
@@ -338,12 +240,10 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
                 if check_psr_data(psr_cache_data_check, psr_cache_data_ready):
                     #entities_ready.append(entity_dict)
                     #print_and_log(f"check_psr_data: True")
-                    #input("sgfgsdfg")
                     is_static = psr_cache_data_ready.get(model, {}).get("is_static", None)
                     psr_cache_data_ready = add_to_cache(psr_cache_data_ready, model, modelscale, rendercolor, skin, is_static=is_static)
                     continue
                 #print_and_log(f"check_psr_data: False")
-                #input("sgfgsdfg222")
             mdl_name = get_file_name(model)
             mdl_name_scaled = process_mdl_name(mdl_name, modelscale)
             mdl_scaled_path = find_mdl_file(game_dir, mdl_name_scaled)
@@ -380,39 +280,13 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
     if force_recompile and os.path.exists('props_scaling_recompiler_cache.pkl'):
         os.remove('props_scaling_recompiler_cache.pkl')
     if force_recompile: remove_vmf_assets(entities_raw, game_dir, remove_static=True)
-    
-    '''
-    print_and_log(f" ")
-    print_and_log(f"{len(entities_raw)} entities_raw: {entities_raw}")
-    print_and_log(f" ")
-    print_and_log(f"{len(entities_ready)} entities_ready: {entities_ready}")
-    print_and_log(f" ")
-    print_and_log(f"{len(entities_todo)} entities_todo: {entities_todo}")
-    print_and_log(f" ")
-    '''
-    
-    '''
-    print_and_log(f" ")
-    print_and_log(f"{len(psr_cache_data_raw)} psr_cache_data_raw: {psr_cache_data_raw}")
-    print_and_log(f" ")
-    print_and_log(f"{len(psr_cache_data_ready)} psr_cache_data_ready: {psr_cache_data_ready}")
-    print_and_log(f" ")
-    print_and_log(f"{len(psr_cache_data_todo)} psr_cache_data_todo: {psr_cache_data_todo}")
-    print_and_log(f" ")
-    '''
 
     print_and_log(f"{len(psr_cache_data_ready)} models in global cache.")
     print_and_log(f"{len(psr_cache_data_raw)} original models in this VMF.")
     print_and_log(f"{len(entities_raw)} models variations in this VMF.")
     print_and_log(f"{len(psr_cache_data_todo)} models to recompile for this VMF.")
     print_and_log(f" ")
-    
-    '''
-    with open('props_scaling_recompiler_cache.pkl', 'wb') as f:
-        pickle.dump(psr_cache_data_ready, f)
-        print_and_log(f"Cache saved.")
-        print_and_log(f" ")
-    '''
+
     save_global_cache(psr_cache_data_ready)
     
     return entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo
@@ -553,60 +427,6 @@ def remove_vmf_assets(entities_raw, game_dir, remove_static=False):
         else:
             print(f"Progress: {int(entities_raw_progress*100/entities_raw_len)}%", end="\r")
 
-def process_entities_raw(game_dir, entities_raw, force_recompile):
-    entities_ready = []
-    entities_todo = []
-    
-    #вот тут надо два цикла в один объединить!!!!!!!!!!!!!!!!!!!!!!!
-    
-    entities_raw_temp = []
-    for entity in entities_raw:
-        #if float(entity['modelscale']) == 1.0: # This was before we started converting 
-        #    entities_ready.append(entity)      # any type of assets to static props.
-        if float(entity['modelscale']) >= 0.01:
-            entities_raw_temp.append(entity)
-        else:
-            print_and_log(Fore.RED + f"ERROR! {get_file_name(entity['model'])}.mdl has wrong scale: {entity['modelscale']}. Should be more than 0.01! Skipping")
-    
-    entities_raw = entities_raw_temp
-    
-    entities_raw_len = len(entities_raw)
-    entities_raw_progress = 0
-    
-    for entity in entities_raw:
-        entity_id = entity['id']
-        model = entity['model']
-        modelscale = entity['modelscale']
-        rendercolor = entity['rendercolor']
-
-        mdl_name = get_file_name(model)
-        mdl_name = process_mdl_name(mdl_name, modelscale)
-        mdl_path = find_mdl_file(game_dir, mdl_name)
-
-        if force_recompile:
-            entities_todo.append(entity)
-        else:
-            if mdl_path is None:
-                entities_todo.append(entity)
-            #elif rendercolor is not f"255 255 255": #вот тут чота происходит непонятновое((((
-            #    entities_todo.append(entity)
-            #    print_and_log(f"entity: {entity}                         ")
-            #    print_and_log(f"rendercolor: '{rendercolor}'                         ")
-            #    input("zfsfgh                         ")
-            else:
-                entity['model'] = transform_mdl_path_to_hammer_style(mdl_path)
-                entity['modelscale'] = '1'
-                entities_ready.append(entity)
-
-        entities_raw_progress += 1
-        
-        if entities_raw_progress >= entities_raw_len:
-            print_and_log(f"Progress: Done!")
-        else:
-            print(f"Progress: {int(entities_raw_progress*100/entities_raw_len)}%", end="\r")
-
-    return entities_ready, entities_todo
-
 def run_ccld(mdl_path, ccld_path, decomp_folder):
     print_and_log(f"\nDecompilation started with CrowbarCommandLineDecomp:\n")
     try:
@@ -630,38 +450,17 @@ def compile_model(compiler_path, game_folder, qc_path, hammer_mdl_path, scale, r
         "-verbose",
         qc_path
     ]
-    
-    #попытка починить сбрасывающийся is_static=True для awning001a
-    #print_and_log(Fore.YELLOW + f'КОМПИЛЯЦИЯ МОДЕЛИ')
-    #print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
-    #psr_cache_data_ready_load = load_global_cache()
-    #if psr_cache_data_ready_load != None: psr_cache_data_ready = psr_cache_data_ready_load
-    #print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
-    
+
     try:
         result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         print_and_log("Output:", result.stdout.decode())
         output = result.stdout.decode('utf-8')
-        #print_and_log("Errors:", result.stderr.decode())
-        #"Completed "metal_cup_mug_scaled_100.qc""
-        #print_and_log(f"607! qc_path: {qc_path}")
-        #print_and_log(f"608! os.path.basename(qc_path): {os.path.basename(qc_path)}")
-        #print_and_log(f"610! hammer_mdl_path: {hammer_mdl_path}")
-        #print_and_log(f"611! scale: {scale}")
         if f'Completed "{os.path.basename(qc_path)}"' in output:
-            # !!!!! Вот тут можно добавлять готовые модели в список на встраивание в ВМФ
-            # add_to_cache
-            #print_and_log(Fore.YELLOW + f"ПРИКОЛ ЗАЛУПЫ 1")
-            #print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
             is_static = psr_cache_data_ready.get(hammer_mdl_path, {}).get("is_static", None)
             psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, scale, rendercolor, skin, is_static=is_static)
             save_global_cache(psr_cache_data_ready)
-            #print_and_log(Fore.YELLOW + f"ПРИКОЛ ЗАЛУПЫ 2")
-            #print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
-            #print_and_log(f"609! COMPLETED!!!!!!!111111111111111")
         #else:
         #    print_and_log(Fore.RED + f"Model compilation failed!")
-        #input("sgsfgdgf233")
     except subprocess.CalledProcessError as e:
         print_and_log(Fore.RED + f"Model compilation failed! An error occurred: {e}")
         print_and_log("Output:", e.stdout.decode())
@@ -798,9 +597,6 @@ def rescale_qc_file(qc_path, scale, hammer_mdl_path, psr_cache_data_todo, psr_ca
             elif float(scale) == 1.0:
                 if debug_mode: print_and_log(Fore.YELLOW + f"!!! float(scale) != 1.0")
                 new_model_name = f"_do_not_compile_me!"
-                #!!!!!!!!!!!!!!!!! add_to_cache
-                #, psr_cache_data_todo, psr_cache_data_ready
-                #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
                 print_and_log(Fore.GREEN + f"{model_name}.mdl is already a static prop. Updating cache.")
                 #real_mdl_path = psr_cache_data_ready.get(hammer_mdl_path, {}).get("real_mdl_path")
                 psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", is_static=True)
@@ -854,14 +650,7 @@ def copy_and_rescale_qc(qc_path, scale, convert_to_static, subfolders, hammer_md
 def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready):    
     scales = list(set(map(float, scales.split())))
     scales.sort()
-    
-    # попытка починить сбрасывающийся is_static=True для awning001a
-    #print_and_log(Fore.YELLOW + f'РЕСКЕЙЛ И КОМПИЛЯЦИЯ МОДЕЛИ')
-    #print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
-    #psr_cache_data_ready_load = load_global_cache()
-    #if psr_cache_data_ready_load != None: psr_cache_data_ready = psr_cache_data_ready_load
-    #print_and_log(f'psr_cache_data_ready: {psr_cache_data_ready}')
-    
+
     #temp
     rendercolor = "255 255 255"
     skin = "0"
@@ -990,15 +779,6 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
     
     os.makedirs(vpk_extract_folder_model, exist_ok=True)
     os.makedirs(vpk_extract_folder_model_with_last_folder, exist_ok=True)
-    
-    
-    #print_and_log(f"mdl_folder_path_orig: {mdl_folder_path_orig}")
-    #print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
-    
-    #print_and_log(f"mdl_parent_folder_name: {mdl_parent_folder_name}")
-    
-    #mdl_with_parent_folder = mdl_parent_folder_name + "/" + mdl_name_with_ext
-    #print_and_log(f"mdl_with_parent_folder: {mdl_with_parent_folder}")
 
     vpk_with_mdl = None
     
@@ -1006,7 +786,6 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
         try:
             vpkeditcli_tree_out, vpkeditcli_tree_err = get_vpkeditcli_tree(vpkeditcli_path, vpk_file)
             #print_and_log(f"vpkeditcli_tree_out: {vpkeditcli_tree_out}")
-            
             #print_and_log(f"vpkeditcli_tree_err: {vpkeditcli_tree_err}")
             
             #ебать это днище, но по другому может быть ошибка
@@ -1046,50 +825,21 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
                         else:
                             folder_check = False
                             model_check = False
-
-                #print_and_log(f"vpk_file: {vpk_file}")
-                #print_and_log(f"mdl_folder_path_orig: {mdl_folder_path_orig}")
-                #print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
-                #print_and_log(f"folder_check: {folder_check}")
-                #print_and_log(f"model_check: {model_check}")
                 
                 if folder_check and model_check:
                     vpk_with_mdl = vpk_file
                     break
-                
-                #if vpk_with_mdl != None:
-                #    print_and_log(Fore.GREEN + f"Vsyo kruto 1")
-                #else:
-                #    print_and_log(Fore.RED + f"Chto-to ne tak!")
-                #
-                #input("zxcv")
-                
-                #print_and_log(f"vpkeditcli_tree_out: {vpkeditcli_tree_out}")
-                #print_and_log(f"mdl_folder_path_orig: {mdl_folder_path_orig}")
-                #print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
-                
-                #if debug_mode: print_and_log(f"vpkeditcli_tree_out: {vpkeditcli_tree_out}")
-                
-                #print_and_log(f"hammer_mdl_path_no_first_folder: {hammer_mdl_path_no_first_folder}")
-                #print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
-                #print_and_log(f"mdl_folder_path_orig: {mdl_folder_path_orig}")
 
                 if debug_mode: print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
                 if debug_mode: print_and_log(f"os.path.dirname(hammer_mdl_path): {os.path.dirname(hammer_mdl_path)}")
                 if debug_mode: print_and_log(f"hammer_mdl_path: {hammer_mdl_path}")
                 if debug_mode: print_and_log(f"mdl_folder_path: {mdl_folder_path}")
                 if debug_mode: print_and_log(f"vpk_extract_folder_model_with_last_folder: {vpk_extract_folder_model_with_last_folder}")
-        
-            #if vpk_with_mdl != None:
-            #    print_and_log(Fore.GREEN + f"Vsyo kruto 2")
-            #    break
-        
+
         except subprocess.CalledProcessError as e:
             print_and_log(Fore.RED + f"Error executing vpkeditcli: {e}")
             return None
-    
-    #print_and_log(Fore.GREEN + f"GOOOOL")
-    
+
     if vpk_with_mdl != None:
         print_and_log(Fore.GREEN + f"vpk with {mdl_name}.mdl found:\n{vpk_with_mdl}")
         try:
@@ -1378,48 +1128,6 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
     #vpk_extract_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mdl_scaler_vpk_extract")
     vpk_extract_folder = os.path.join(get_script_path(), extracted_vpks_folder_name)
 
-    '''
-    psr_cache_data_test = {
-        "model_1": {
-            "scales": [1.0, 1.2, 1.5], 
-            "colors": [                
-                [["255 255 255"], [0]],
-                [["255 0 0 "], [1]],
-                [["0 255 0"], [2]]
-            ]
-        },
-        "model_2": {
-            "scales": [1.0],           
-            "colors": []               
-        },
-        "model_3": {
-            "scales": [0.8, 1.3],      
-            "colors": [                
-                [["255 255 0"], [0]],
-                [["255 0 255"], [1]]
-            ]
-        }
-    }
-    '''
-    
-    '''
-    mdl_with_scales = {}
-    for entity in entities_todo:
-        model = entity['model']
-        modelscale = entity['modelscale']
-        rendercolor = entity['rendercolor']
-        mdl_name = model
-        
-        if mdl_name not in mdl_with_scales:
-            mdl_with_scales[mdl_name] = set()
-        mdl_with_scales[mdl_name].add(modelscale)
-        mdl_with_scales[mdl_name].add(rendercolor)
-
-    print_and_log(f"mdl_with_scales: {mdl_with_scales}")
-    '''
-    
-    #print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
-    
     print_and_log(f" ")
     print_and_log(f"Extracting paths from gameinfo.txt...")
     
@@ -1431,16 +1139,6 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
     vpk_paths_from_gameinfo = only_vpk_paths_from_gameinfo(search_paths)
     if debug_mode: print_and_log(f"vpk_paths_from_gameinfo: \n{vpk_paths_from_gameinfo}")
 
-    #print_and_log(f"psr_cache_data_todo.keys(): {psr_cache_data_todo.keys()}")
-    
-    #print_and_log(f" ")
-    #print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
-    #print_and_log(f" ")
-    #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
-    
-    
-    #add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin, real_mdl_path)
-    
     print_and_log(f" ")
     print_and_log(f"Searching for models real paths...")
     #real_mdl_paths_len = len(psr_cache_data_todo.keys())
@@ -1471,25 +1169,14 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
             
             decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, real_mdl_path, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready)
             continue
-            
-            '''
-            print_and_log(f" ")
-            print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
-            print_and_log(f" ")
-            print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
-            
-            input("good")
-            '''
+
         else:
-            #continue
-            #input("bad")
             print_and_log(f" ")
             print_and_log(f"{mdl_name}.mdl not found in project content, trying to find in paths from GameInfo...")
 
             mdl_path_from_other_contents = find_mdl_in_paths_from_gameinfo(search_paths, hammer_mdl_path)
             
             if mdl_path_from_other_contents != None:
-                #real_mdl_paths.append(mdl_path_from_other_contents)
                 is_static = psr_cache_data_ready.get(hammer_mdl_path, {}).get("is_static", None)
                 psr_cache_data_todo = add_to_cache(psr_cache_data_todo, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", real_mdl_path=mdl_path_from_other_contents, is_static=is_static)
                 psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1", rendercolor="255 255 255", skin="0", real_mdl_path=mdl_path_from_other_contents, is_static=is_static)
@@ -1514,71 +1201,10 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
                     continue
                 else:
                     print_and_log(Fore.RED + f"Can't extract {mdl_name}.mdl from VPKs, skipping")
-        '''
-        real_mdl_paths_progress += 1
-        if real_mdl_paths_progress >= real_mdl_paths_len:
-            print_and_log(f"Progress: Done!")
-        else:
-            print(f"Progress: {int(real_mdl_paths_progress*100/real_mdl_paths_len)}%", end="\r")
-        '''
-        
-        # вот тут можно продолжить 
-        #decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, real_mdl_path, scales, convert_to_static, subfolders, psr_cache_data_todo, psr_cache_data_ready)
 
-    '''
-    print_and_log(f" ")
-    print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
-    print_and_log(f" ")
-    print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
-    '''
-
-    #input("lets see")
-
-    '''
-    for real_mdl_path in real_mdl_paths:
-        mdl_file_name = get_file_name(real_mdl_path)
-        mdl_name = transform_mdl_path_to_hammer_style(real_mdl_path)
-        if mdl_name == None:
-            print_and_log(Fore.RED + f"Cant recompile and scale {mdl_file_name}.mdl because of hammer style path transform error, skipping :(")
-            continue
-        scales = " ".join(mdl_with_scales[mdl_name])
-        decompile_rescale_and_compile_model(ccld_path, gameinfo_path, compiler_path, real_mdl_path, scales, convert_to_static, subfolders)
-    '''
-    
     psr_cache_data_ready_load = load_global_cache()
     if psr_cache_data_ready_load != None: psr_cache_data_ready = psr_cache_data_ready_load
 
-    #print_and_log(f" ")
-    #print_and_log(f"КОНЕЦ ВСЯКОЙ КОМПИЛЯЦИИ ДЕКОМПИЛЯЦИИ")
-    #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
-    #print_and_log(f" ")
-    #print_and_log(f"entities_raw: {entities_raw}")
-    #print_and_log(f" ")
-    #print_and_log(f"entities_todo: {entities_todo}")
-    #print_and_log(f" ")
-    #print_and_log(f"entities_ready: {entities_ready}")
-    
-    #input("soooooooooo see")
-    
-    '''
-    for entity in entities_todo:
-        model = entity['model']
-        modelscale = entity['modelscale']
-        base_name, ext = os.path.splitext(model)
-        
-        if float(modelscale) == 1.0:
-            new_model = f"{base_name}_static{ext}"
-        else:
-            new_model = f"{base_name}_scaled_{int(float(modelscale) * 100)}{ext}"
-        
-        if subfolders == True and float(modelscale) != 1.0:
-            new_model = os.path.join(os.path.dirname(new_model), 'scaled', os.path.basename(new_model)).replace('\\', '/')
-
-        entity['model'] = new_model
-
-        entities_ready.append(entity)
-    '''    
-    
     delete_temp_vpks_content_folder()
     
     return entities_todo, entities_ready
@@ -1587,7 +1213,7 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready,
     if debug_mode: print_and_log(f"convert_vmf start...")
     if debug_mode: print_and_log(Fore.YELLOW + f"vmf_in_path: {vmf_in_path}")
     if debug_mode: print_and_log(Fore.YELLOW + f"vmf_out_path: {vmf_out_path}")
-    # Create a destination directory if it does not exist
+
     out_dir = os.path.dirname(vmf_out_path)
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
@@ -1862,34 +1488,13 @@ def main():
     ccld_path = os.path.join(script_path, "CrowbarCommandLineDecomp.exe")
     compiler_path = os.path.join(script_path, "studiomdl.exe")
     convert_to_static = False
-    
-    #print_and_log(f"Processing initiated")
-    
-    
-    # parse_vmf и process_entities_raw надо объединить в один процесс! 
-    # читаем vmf, сразу же отбраковываем все неправильные скейлы, сразу же сравниваем с кэшем,
-    # и за один проход на выходе получаем список того, что надо рекомпильнуть или покрасить!
-    
-    # если коротко сформулировать, то не нужна отдельная функция валидации, тем более с двумя циклами внутри,
-    # если всё это можно валидировать на лету в parse_vmf
-    
-    # также стоит учитывать что force_recompile режим нужно перенести тоже в обработчик оригинального vmf,
-    # но включать его надо только в том случае если на уровне нашёлся хотя бы один ассет подходящего класса
-    
+
     psr_cache_data_ready = {}    
-    
-    #entities_raw = parse_vmf(vmf_in_path, classnames = ["prop_static_scalable"])
-    
+
     entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo = process_vmf(game_dir, vmf_in_path, psr_cache_data_ready, force_recompile, classnames = ["prop_static_scalable"])
-    #if debug_mode: print_and_log(f"\nentities_raw: {entities_raw}")
 
     if len(entities_raw) == 0:
         return
-    
-    #print_and_log(f"Validating prop_static_scalable entities...")
-    #entities_ready, entities_todo = process_entities_raw(game_dir, entities_raw, force_recompile)
-    #if debug_mode: print_and_log(f"\nentities_ready: {entities_ready}")
-    #if debug_mode: print_and_log(f"\nentities_todo: {entities_todo}")
 
     if len(entities_todo) != 0:
         print_and_log(f" ")
@@ -1917,9 +1522,7 @@ def main():
     #print_and_log(f"entities_ready: {entities_ready}")
     #print_and_log(f" ")
     #print_and_log(f"psr_cache_data_raw: {psr_cache_data_raw}")
-    
-    #input("894jfskfdg999999")
-    
+
     #lightsrad_updater(game_dir, entities_ready)
     
     # entities_ready = entities_raw just because
