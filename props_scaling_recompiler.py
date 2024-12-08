@@ -143,6 +143,18 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
 
     classnames_pattern = '|'.join(classnames)
 
+    pattern_old_fgd = re.compile(
+        rf'entity\s*\{{'
+        rf'[^\{{}}]*"id"\s*"(?P<id>\d+)"\s*'
+        rf'[^\{{}}]*"classname"\s*\"(?P<classname>{classnames_pattern})\"\s*'
+        rf'[^\{{}}]*"model"\s*"(?P<model>[^"]+)"\s*'
+        rf'[^\{{}}]*"modelscale"\s*"(?P<modelscale>[^"]+)"\s*',
+        re.DOTALL | re.MULTILINE
+    )
+    matches_old_fgd = list(pattern_old_fgd.finditer(content))
+    
+    entities_matches_old_fgd_len = len(matches_old_fgd)
+    
     pattern = re.compile(
         rf'entity\s*\{{'
         rf'[^\{{}}]*"id"\s*"(?P<id>\d+)"\s*'
@@ -160,8 +172,18 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
     
     entities_matches_len = len(matches)
     
-    if entities_matches_len == 0:
-        print_and_log(f"No prop_static_scalable entities found.")
+    if entities_matches_old_fgd_len == 0:
+            print_and_log(f"No prop_static_scalable entities found.")
+            return entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo
+    
+    if entities_matches_len < entities_matches_old_fgd_len:
+        print_and_log(f" ")
+        print_and_log(Fore.RED + f"ERROR: old entities KeyValues detected!")
+        print_and_log(Fore.YELLOW + f"Please update the FGD file to new version and restart the Hammer++.")
+        print_and_log(Fore.YELLOW + f"It is required for a work of the new version of the tool.")
+        print_and_log(Fore.YELLOW + f"Props will not be scaled!")
+        print_and_log(f" ")
+        input("Press any key to continue.")
         return entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo
 
     '''
@@ -1212,9 +1234,9 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
     return entities_todo, entities_ready
 
 def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready, psr_cache_data_ready):
-    if debug_mode: print_and_log(f"convert_vmf start...")
-    if debug_mode: print_and_log(Fore.YELLOW + f"vmf_in_path: {vmf_in_path}")
-    if debug_mode: print_and_log(Fore.YELLOW + f"vmf_out_path: {vmf_out_path}")
+    #print_and_log(f"convert_vmf start...")
+    print_and_log(f"vmf_in_path: {vmf_in_path}")
+    print_and_log(f"vmf_out_path: {vmf_out_path}")
 
     out_dir = os.path.dirname(vmf_out_path)
     if not os.path.exists(out_dir):
@@ -1496,6 +1518,16 @@ def main():
     entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo = process_vmf(game_dir, vmf_in_path, psr_cache_data_ready, force_recompile, classnames = ["prop_static_scalable"])
 
     if len(entities_raw) == 0:
+        print_and_log(f"Copying VMF...")
+        print_and_log(f"vmf_in_path: {vmf_in_path}")
+        print_and_log(f"vmf_out_path: {vmf_out_path}")
+    
+        out_dir = os.path.dirname(vmf_out_path)
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+    
+        shutil.copy2(vmf_in_path, vmf_out_path)
+        print_and_log(f"Done.")
         return
 
     if len(entities_todo) != 0:
