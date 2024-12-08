@@ -1770,10 +1770,15 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    print_and_log(Fore.CYAN + f'props_scaling_recompiler 1.1.0a')
-    print_and_log(f'Shitcoded by Ambiabstract (Sergey Shavin)')
-    print_and_log(f'https://github.com/Ambiabstract')
-    print_and_log(f'Discord: @Ambiabstract')
+    psr_description_name = f"props_scaling_recompiler 1.1.0a"
+    psr_description_author = f"Shitcoded by Ambiabstract (Sergey Shavin)"
+    psr_description_github = f"https://github.com/Ambiabstract"
+    psr_description_discord = f"Discord: @Ambiabstract"
+    
+    print_and_log(Fore.CYAN + f'{psr_description_name}')
+    print_and_log(f'{psr_description_author}')
+    print_and_log(f'{psr_description_github}')
+    print_and_log(f'{psr_description_discord}')
 
     start_time = time.time()
     
@@ -1809,7 +1814,7 @@ def main():
     # delete temporary shit if it didn't deleted last time on error
     delete_temp_vpks_content_folder()
     
-    parser = argparse.ArgumentParser(description=f"props_scaling_recompiler")
+    parser = argparse.ArgumentParser(description=f"props_scaling_recompiler usage:")
     
     parser.add_argument('-game', type=str, required=True, help='Path to the game directory')
     parser.add_argument('-vmf_in', type=str, required=True, help='Path to the input .vmf file')
@@ -1821,10 +1826,16 @@ def main():
         args = parser.parse_args()
     except SystemExit as e:
         os.system('cls' if os.name == 'nt' else 'clear')
+        print_and_log(Fore.CYAN + f'{psr_description_name}')
+        print_and_log(f'{psr_description_author}')
+        print_and_log(f'{psr_description_github}')
+        print_and_log(f'{psr_description_discord}')
+        print_and_log(f' ')
         print_and_log(Fore.RED + f"ERROR! Input args not found!")
         if e.code != 0:  # if the exit code is not 0, it means there was an error in parsing arguments
             parser.print_help()
-        input("\nPress Enter to exit...")
+        print_and_log(f' ')
+        input("Press Enter to exit...")
         sys.exit(e.code)
 
     game_dir = args.game
