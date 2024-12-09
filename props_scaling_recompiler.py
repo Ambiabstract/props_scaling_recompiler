@@ -185,7 +185,7 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
     if entities_matches_len < entities_matches_old_fgd_len:
         print_and_log(f" ")
         print_and_log(Fore.RED + f"ERROR: old entities KeyValues detected!")
-        print_and_log(Fore.YELLOW + f"Please update the FGD file to new version and restart the Hammer++.")
+        print_and_log(Fore.YELLOW + f"Please update the FGD file to new version, restart the Hammer++ and save your map (that save will update entities KeyValues).")
         print_and_log(Fore.YELLOW + f"It is required for a work of the new version of the tool.")
         print_and_log(Fore.YELLOW + f"Props will not be scaled!")
         print_and_log(f" ")
@@ -1455,7 +1455,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    psr_description_name = f"props_scaling_recompiler 1.1.0b"
+    psr_description_name = f"props_scaling_recompiler 1.1.0"
     psr_description_author = f"Shitcoded by Ambiabstract (Sergey Shavin)"
     psr_description_github = f"https://github.com/Ambiabstract"
     psr_description_discord = f"Discord: @Ambiabstract"
