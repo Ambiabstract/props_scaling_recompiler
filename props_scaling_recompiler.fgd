@@ -5,7 +5,7 @@
 
 @include "base.fgd"
 
-@PointClass base(prop_static, Studiomodel) studioprop() = prop_static_scalable : "Scalable Static Prop and also prop_static_override"
+@PointClass base(prop_static, Studiomodel, RenderFields) studioprop() = prop_static_scalable : "Scalable Static Prop and also prop_static_override"
 [
 	//nothing here and its okay
 ]
