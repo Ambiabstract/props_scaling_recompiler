@@ -116,15 +116,12 @@ Video tutorial (English subtitles available):
 
 2. There may be errors when compiling some dynamic props, for example “models/props_c17/door02_double.mdl”. Whether this will be fixed in the future is still unknown.
 
-## Future plans:
+3. Portal 2, Garry's Mod is not supported. Only Source SDK 2013.
 
-- Parsing the mdl header to see in advance the presence of the $staticprop parameter (reduce script runtime).
-- Gameinfo parsing fixes ("_dir" ending issue and so on).
-- Portal 2 support research.
+## Future plans:
 - New entity - scaling physical props with preserving correct collision and converting any props to physical props.
 - New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
 - New feature for painting static props, analogous to "rendercolor" from newer versions of the engine.
-- Static Prop Combine analog. Merger of several models into one static prop. This functionality is already available in Propper++, but we have some ideas how to improve it.
 
 ## Credits:
 Thanks to ficool2 for Hammer++ and Propper++
