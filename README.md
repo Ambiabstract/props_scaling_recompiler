@@ -122,6 +122,7 @@ Video tutorial (English subtitles available):
 - New entity - scaling physical props with preserving correct collision and converting any props to physical props.
 - New entity - scaling dynamic props with preserving correct collision and converting any props to dynamic props.
 - New feature for painting static props, analogous to "rendercolor" from newer versions of the engine.
+- Scaled versions size info.
 
 ## Credits:
 Thanks to ficool2 for Hammer++ and Propper++
