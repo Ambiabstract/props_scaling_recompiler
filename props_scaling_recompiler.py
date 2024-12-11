@@ -238,11 +238,15 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
         modelscale = str(modelscale)
         
         rendercolor = match.group('rendercolor')
+        #global g_rendercolor
+        #g_rendercolor = rendercolor
         
         #print_and_log(f"                                ")
         #print_and_log(f"242! rendercolor: {rendercolor}")
         
         skin = match.group('skin')
+        #global g_skin
+        #g_skin = skin
         #print_and_log(f"245! skin: {skin}")
 
         psr_cache_data_raw = add_to_cache(psr_cache_data_raw, model, modelscale, rendercolor, skin)
@@ -266,35 +270,41 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
             if len(psr_cache_data_ready) != 0:
                 psr_cache_data_empty = {}
                 psr_cache_data_check = add_to_cache(psr_cache_data_empty, model, modelscale, rendercolor, skin)
-                #print_and_log(f"psr_cache_data_check: {psr_cache_data_check}")
-                #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
+                print_and_log(f"psr_cache_data_check: {psr_cache_data_check}")
+                print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
                 
                 # Если собранная энтитя в psr_cache_data_check уже есть в глобальном кэше - добавляем в реди и нет смысла это компилить
                 # вот тут надо проверять единичные статичные модели, должны попадать в реди, в прошлый раз ошибка была связана с тем что check_psr_data видит скейл 1 отличным от 1.0
                 if check_psr_data(psr_cache_data_check, psr_cache_data_ready):
                     #entities_ready.append(entity_dict)
-                    #print_and_log(f"check_psr_data: True")
+                    print_and_log(f"check_psr_data: True")
                     is_static = psr_cache_data_ready.get(model, {}).get("is_static", None)
                     #print_and_log(f"model: {model}")
                     #print_and_log(f"modelscale: {modelscale}")
                     #print_and_log(f"is_static from global cache: {is_static}")
                     #print_and_log(f"psr_cache_data_ready before add to cache: {psr_cache_data_ready}")
                     #if float(modelscale) == 1:
-                    #    print_and_log(f"model: {model}")
+                    print_and_log(f"model: {model}")
+                    print_and_log(f"rendercolor: {rendercolor}")
+                    print_and_log(f"skin: {skin}")
                     #    print_and_log(f"is_static: {is_static}")
                     #    print_and_log(f"psr_cache_data_ready before add to cache: {psr_cache_data_ready}")
                     psr_cache_data_ready = add_to_cache(psr_cache_data_ready, model, modelscale, rendercolor, skin, is_static=is_static)
                     #print_and_log(f"psr_cache_data_ready after add to cache: {psr_cache_data_ready}")
+                    #input("Всё в порядке (якобы)")
                     continue
-                #else:
-                #    print_and_log(f"check_psr_data: False")
-                #    print_and_log(f" ")
-                #    print_and_log(f"psr_cache_data_ready before add to cache: {psr_cache_data_ready}")
-                #    print_and_log(f" ")
-                #    print_and_log(f"model: {model}")
-                #    print_and_log(f"modelscale: {modelscale}")
-                #    is_static = psr_cache_data_ready.get(model, {}).get("is_static", None)
-                #    print_and_log(f"is_static from global cache: {is_static}")
+                else:
+                    print_and_log(f"check_psr_data: False")
+                    #print_and_log(f" ")
+                    #print_and_log(f"psr_cache_data_ready before add to cache: {psr_cache_data_ready}")
+                    print_and_log(f" ")
+                    print_and_log(f"model: {model}")
+                    print_and_log(f"rendercolor: {rendercolor}")
+                    print_and_log(f"skin: {skin}")
+                    #print_and_log(f"modelscale: {modelscale}")
+                    #is_static = psr_cache_data_ready.get(model, {}).get("is_static", None)
+                    #print_and_log(f"is_static from global cache: {is_static}")
+                    #input("Не всё в порядке")
             mdl_name = get_file_name(model)
             mdl_name_scaled = process_mdl_name(mdl_name, modelscale)
             mdl_scaled_path = find_mdl_file(game_dir, mdl_name_scaled)
@@ -709,10 +719,53 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
     scales = list(set(map(float, scales.split())))
     scales.sort()
 
-    # temp
+    # temp 2
     # где-то вот тут надо добывать из raw или todo все rendercolor и все skin
-    # создавать материалы
-    # после этого надо добавлять всё сначала в оригинальный qc и только потом копировать набор qc для поскейленных
+    # прочитать оригинальный qc
+    # найти в нём smd ref
+    # прочитать smd ref, получить имя оригинального материала
+    # найти оригинальный материал в контенте или впк
+    # создать материалы с нужными параметрами
+    # после этого добавить все комбинации всё сначала в оригинальный qc и только потом копировать набор qc для поскейленных
+    
+    # g_rendercolor
+    # g_skin
+    
+    #print_and_log(f"g_rendercolor: {g_rendercolor}")
+    #print_and_log(f"g_skin: {g_skin}")
+    
+    print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
+    print_and_log(f" ")
+    colors = psr_cache_data_todo.get(hammer_mdl_path, {}).get("colors", None)
+    print_and_log(f" ")
+    print_and_log(f"colors: {colors}")
+    
+    with open(qc_path, 'r') as file:
+        lines = file.readlines()
+    
+    print_and_log(f" ")
+    print_and_log(f"lines:")
+    for line in lines:
+        print_and_log(f"{line}")
+    
+    print_and_log(f" ")
+    input("cheeeeeeeck")
+    
+    # тут нужна такая функция:
+    # на вход идёт game_folder, qc_path и colors
+    # в ней должны:
+    # проверяться что только один материал используется
+    # вычисляться все комбинации цветов и скинов
+    # находиться этот самый материал (в том числе в впк надо искать)
+    # клонирование и попутное редактирование материалов со всеми комбинациями
+    
+    # g_search_paths - глобальная переменная где есть пути из гейминфо
+    
+    # нужны аналоги функций для материала:
+    # find_real_mdl_path - поиск в файлах проекта
+    # find_mdl_in_paths_from_gameinfo - поиск по путям из гейминфо кроме впк
+    # extract_mdl - поиск по путям из гейминфо в впк
+    
     rendercolor = "255 255 255"
     skin = "0"
 
@@ -1192,6 +1245,8 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
     search_paths = parse_search_paths(gameinfo_path)
     search_paths = search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False)
     search_paths = update_search_paths(search_paths, game_dir, all_source_engine_paths)
+    global g_search_paths
+    g_search_paths = search_paths
     
     vpk_paths_from_gameinfo = only_vpk_paths_from_gameinfo(search_paths)
     if debug_mode: print_and_log(f"vpk_paths_from_gameinfo: \n{vpk_paths_from_gameinfo}")
@@ -1211,7 +1266,17 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
         
         # Проверяем наличие real_mdl_path в кэше
         if hammer_mdl_path in psr_cache_data_ready:
+            # вот тут берём рендерколоры и скины
             real_mdl_path = psr_cache_data_ready[hammer_mdl_path].get('real_mdl_path', None)
+            rendercolor = psr_cache_data_ready[hammer_mdl_path].get('rendercolor', None)
+            skin = psr_cache_data_ready[hammer_mdl_path].get('skin', None)
+            
+            print_and_log(f"real_mdl_path: {real_mdl_path}")
+            print_and_log(f"rendercolor: {rendercolor}")
+            print_and_log(f"skin: {skin}")
+            
+            input("zcvbbbbe")
+            
             if real_mdl_path is not None:
                 print_and_log(Fore.GREEN + f"{mdl_name}.mdl found in cache!")
                 
