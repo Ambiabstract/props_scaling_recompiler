@@ -719,21 +719,6 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
     scales = list(set(map(float, scales.split())))
     scales.sort()
 
-    # temp 2
-    # где-то вот тут надо добывать из raw или todo все rendercolor и все skin
-    # прочитать оригинальный qc
-    # найти в нём smd ref
-    # прочитать smd ref, получить имя оригинального материала
-    # найти оригинальный материал в контенте или впк
-    # создать материалы с нужными параметрами
-    # после этого добавить все комбинации всё сначала в оригинальный qc и только потом копировать набор qc для поскейленных
-    
-    # g_rendercolor
-    # g_skin
-    
-    #print_and_log(f"g_rendercolor: {g_rendercolor}")
-    #print_and_log(f"g_skin: {g_skin}")
-    
     print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
     print_and_log(f" ")
     colors = psr_cache_data_todo.get(hammer_mdl_path, {}).get("colors", None)
@@ -749,9 +734,19 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
         print_and_log(f"{line}")
     
     print_and_log(f" ")
-    input("cheeeeeeeck")
+    print_and_log(f"qc_path: {qc_path}")
     
-    # тут нужна такая функция:
+    # вот тут должен работать покрасчик
+    # порядок действий:
+    # добывать из raw или todo все rendercolor и все skin
+    # прочитать оригинальный qc
+    # найти в нём smd ref
+    # прочитать smd ref, получить имя оригинального материала (набор материалов, но берём только первый)
+    # найти оригинальный материал в контенте или впк
+    # создать материалы с нужными параметрами
+    # после этого добавить все комбинации сначала в оригинальный
+    # и только после этого уже пойдёт копироваться набор qc для поскейленных
+
     # на вход идёт game_folder, qc_path и colors
     # в ней должны:
     # проверяться что только один материал используется
@@ -759,12 +754,19 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
     # находиться этот самый материал (в том числе в впк надо искать)
     # клонирование и попутное редактирование материалов со всеми комбинациями
     
-    # g_search_paths - глобальная переменная где есть пути из гейминфо
-    
     # нужны аналоги функций для материала:
     # find_real_mdl_path - поиск в файлах проекта
     # find_mdl_in_paths_from_gameinfo - поиск по путям из гейминфо кроме впк
     # extract_mdl - поиск по путям из гейминфо в впк
+    
+    # g_search_paths - глобальная переменная где есть пути из гейминфо
+    # да и вообще надо юзать глобальные переменные
+    
+    #print_and_log(f"g_rendercolor: {g_rendercolor}")
+    #print_and_log(f"g_skin: {g_skin}")
+
+    print_and_log(f" ")
+    input("cheeeeeeeck")
     
     rendercolor = "255 255 255"
     skin = "0"
