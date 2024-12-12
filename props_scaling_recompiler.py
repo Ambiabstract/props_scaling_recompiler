@@ -710,6 +710,87 @@ def copy_and_rescale_qc(qc_path, scale, convert_to_static, subfolders, hammer_md
     new_qc_path = rescale_qc_file(new_qc_path, scale, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready, convert_to_static, subfolders)
     return new_qc_path
 
+def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
+    with open(qc_path, 'r', encoding='utf-8') as file:
+        content = file.read()
+    
+    #print_and_log(f" ")
+    #print_and_log(f"lines:")
+    #for line in lines:
+    #    print_and_log(f"{line}")
+    
+    print_and_log(f" ")
+    print_and_log(f"content:")
+    print_and_log(f"{content}")
+    
+    print_and_log(f" ")
+    print_and_log(f"qc_path: {qc_path}")
+    
+    studio_value = None
+    match_smd = re.search(r'\$bodygroup\s+"[^"]+"\s*{[^}]*studio\s+"([^"]+)"', content, re.DOTALL)
+    if match_smd:
+        studio_value = match_smd.group(1)
+     
+    print_and_log(f" ")
+    print_and_log(f"studio_value: {studio_value}")
+    
+    qc_folder = os.path.dirname(qc_path)
+    smd_path = os.path.join(qc_folder, studio_value)
+    smd_path = os.path.normpath(smd_path)
+    
+    print_and_log(f" ")
+    print_and_log(f"smd_path: {smd_path}")
+    
+    unique_materials = None
+    try:
+        with open(smd_path, 'r', encoding='utf-8') as smd_file:
+            smd_content = smd_file.read()
+        print_and_log(f" ")
+        print_and_log(f"smd_content:")
+        print_and_log(f"{smd_content}")
+        print_and_log(f" ")
+        print_and_log(f"qc_path: {qc_path}")
+
+        triangles_section = re.search(r'triangles(.*?)(end|$)', smd_content, re.DOTALL)
+        if triangles_section:
+            triangles_content = triangles_section.group(1)
+            materials = re.findall(r'^\s*(\S+)\s*$', triangles_content, re.MULTILINE)
+            unique_materials = list(set(materials))
+        else:
+            print_and_log(Fore.RED + f"Error: No triangles section found in the SMD file {studio_value}.")
+    except FileNotFoundError:
+        print_and_log(Fore.RED + f"Error: SMD file not found: {studio_value}")
+        return None
+    except Exception as e:
+        print_and_log(Fore.RED + f"Error: {e}")
+        return None
+    
+    first_material = None
+    first_material_ext = None
+    if unique_materials:
+        first_material = unique_materials[0]
+        first_material_ext = first_material + ".vmt"
+    
+    print_and_log(f" ")
+    print_and_log(f"unique_materials: {unique_materials}")
+    print_and_log(f" ")
+    print_and_log(f"first_material: {first_material}")
+    print_and_log(f" ")
+    print_and_log(f"first_material_ext: {first_material_ext}")
+    
+    # тут надо получать из qc $cdmaterials "models\props\"
+    # и таким образом получать hammerlike_mat_path
+    # который в свою очередь будет подавать в аналоги функций:
+    # find_real_mdl_path - поиск материала в файлах проекта                     - find_real_vmt_path
+    # find_mdl_in_paths_from_gameinfo - поиск материала по папкам из гейминфо   - find_vmt_in_paths_from_gameinfo
+    # extract_mdl - поиск по впк из гейминфо                                    - extract_vmt
+    # 
+    
+    
+    qc_path_painted = qc_path
+    return qc_path_painted
+
+
 def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready):    
     #print_and_log(f" ")
     #print_and_log(f"RESCALE AND COMPILE:")
@@ -724,17 +805,8 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
     colors = psr_cache_data_todo.get(hammer_mdl_path, {}).get("colors", None)
     print_and_log(f" ")
     print_and_log(f"colors: {colors}")
-    
-    with open(qc_path, 'r') as file:
-        lines = file.readlines()
-    
-    print_and_log(f" ")
-    print_and_log(f"lines:")
-    for line in lines:
-        print_and_log(f"{line}")
-    
-    print_and_log(f" ")
-    print_and_log(f"qc_path: {qc_path}")
+
+    qc_path_painted = model_painter(game_folder, qc_path, hammer_mdl_path, colors)
     
     # вот тут должен работать покрасчик
     # порядок действий:
