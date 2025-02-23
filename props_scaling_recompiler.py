@@ -735,14 +735,20 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     print_and_log(f"studio_value: {studio_value}")
     
     qc_folder = os.path.dirname(qc_path)
-    smd_path = os.path.join(qc_folder, studio_value)
-    smd_path = os.path.normpath(smd_path)
+    smd_path = None
+    if studio_value:
+        smd_path = os.path.join(qc_folder, studio_value)
+        smd_path = os.path.normpath(smd_path)
     
     print_and_log(f" ")
     print_and_log(f"smd_path: {smd_path}")
     
     unique_materials = None
     try:
+        if not smd_path or not os.path.exists(smd_path):
+            print_and_log(Fore.RED + f"Error: SMD file not found: {studio_value}")
+            return None
+        
         with open(smd_path, 'r', encoding='utf-8') as smd_file:
             smd_content = smd_file.read()
         print_and_log(f" ")
@@ -779,13 +785,29 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     print_and_log(f"first_material_ext: {first_material_ext}")
     
     # тут надо получать из qc $cdmaterials "models\props\"
-    # и таким образом получать hammerlike_mat_path
-    # который в свою очередь будет подавать в аналоги функций:
+
+    def get_qc_cdmaterials(qc_path):
+        with open(qc_path, 'r', encoding='utf-8') as f:
+            qc_content = f.read()
+        cdmaterials = re.findall(r'\$cdmaterials\s+"([^"]+)"', qc_content, re.MULTILINE)
+        cdmaterials = [path.replace("\\", "/") for path in cdmaterials]
+        return cdmaterials
+    
+    cdmaterials = get_qc_cdmaterials(qc_path)
+    
+    print_and_log(f" ")
+    print_and_log(f"cdmaterials: {cdmaterials}")
+    
+    possible_materials_paths = [f"materials/{path}/{first_material_ext}" for path in cdmaterials]
+    possible_materials_paths = [path.replace("//", "/") for path in possible_materials_paths]
+    
+    print_and_log(f" ")
+    print_and_log(f"possible_materials_paths: {possible_materials_paths}")
+    
+    # аналоги функций:
     # find_real_mdl_path - поиск материала в файлах проекта                     - find_real_vmt_path
     # find_mdl_in_paths_from_gameinfo - поиск материала по папкам из гейминфо   - find_vmt_in_paths_from_gameinfo
     # extract_mdl - поиск по впк из гейминфо                                    - extract_vmt
-    # 
-    
     
     qc_path_painted = qc_path
     return qc_path_painted
