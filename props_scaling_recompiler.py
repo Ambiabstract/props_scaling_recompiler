@@ -745,6 +745,34 @@ def copy_and_rescale_qc(qc_path, scale, convert_to_static, subfolders, hammer_md
     new_qc_path = rescale_qc_file(new_qc_path, scale, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready, convert_to_static, subfolders)
     return new_qc_path
 
+def get_material_names(qc_content: str) -> list:
+    """
+    Возвращает список уникальных имён материалов из блока:
+    $texturegroup "skinfamilies" { ... }
+    """
+    # Шаблон для поиска содержимого в блоке texturegroup "skinfamilies"
+    pattern = r'\$texturegroup\s+"skinfamilies"\s*\{([^}]*)\}'
+    match = re.search(pattern, qc_content, re.DOTALL)
+    
+    if not match:
+        # Если блок не найден, возвращаем пустой список
+        return []
+    
+    block_content = match.group(1)
+    
+    # Ищем все строки в кавычках внутри найденного блока
+    materials = re.findall(r'"([^"]+)"', block_content)
+    
+    # Убираем дубликаты, сохраняя порядок
+    unique_materials = []
+    seen = set()
+    for mat in materials:
+        if mat not in seen:
+            seen.add(mat)
+            unique_materials.append(mat)
+    
+    return unique_materials
+
 def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     with open(qc_path, 'r', encoding='utf-8') as file:
         content = file.read()
@@ -755,11 +783,18 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     #    print_and_log(f"{line}")
     
     print_and_log(f" ")
-    print_and_log(f"content:")
+    print_and_log(f"{hammer_mdl_path}")
+    print_and_log(f"QC content:")
     print_and_log(f"{content}")
     
     print_and_log(f" ")
     print_and_log(f"qc_path: {qc_path}")
+    
+    qc_unique_materials = get_material_names(content)
+    
+    print_and_log(f" ")
+    print_and_log(f"qc_unique_materials:")
+    print_and_log(f"{qc_unique_materials}")
     
     studio_value = None
     match_smd = re.search(r'\$bodygroup\s+"[^"]+"\s*{[^}]*studio\s+"([^"]+)"', content, re.DOTALL)
@@ -786,11 +821,13 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
         
         with open(smd_path, 'r', encoding='utf-8') as smd_file:
             smd_content = smd_file.read()
+        '''
         print_and_log(f" ")
         print_and_log(f"smd_content:")
         print_and_log(f"{smd_content}")
         print_and_log(f" ")
         print_and_log(f"qc_path: {qc_path}")
+        '''
 
         triangles_section = re.search(r'triangles(.*?)(end|$)', smd_content, re.DOTALL)
         if triangles_section:
@@ -818,7 +855,9 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     print_and_log(f"first_material: {first_material}")
     print_and_log(f" ")
     print_and_log(f"first_material_ext: {first_material_ext}")
-    
+    print_and_log(f" ")
+    print_and_log(f"qc_unique_materials: {qc_unique_materials}")
+
     # тут надо получать из qc $cdmaterials "models\props\"
 
     def get_qc_cdmaterials(qc_path):
@@ -833,11 +872,16 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     print_and_log(f" ")
     print_and_log(f"cdmaterials: {cdmaterials}")
     
-    possible_materials_paths = [f"materials/{path}/{first_material_ext}" for path in cdmaterials]
-    possible_materials_paths = [path.replace("//", "/") for path in possible_materials_paths]
+    possible_materials_paths = []
+    for qc_unique_material in qc_unique_materials:
+        possible_materials_paths_um = [f"materials/{path}/{qc_unique_material}" for path in cdmaterials]
+        possible_materials_paths_um = [path.replace("//", "/") for path in possible_materials_paths_um]
+        possible_materials_paths.append(possible_materials_paths_um)
     
     print_and_log(f" ")
-    print_and_log(f"possible_materials_paths: {possible_materials_paths}")
+    print_and_log(f"possible_materials_paths:")
+    for possible_materials_path in possible_materials_paths:
+        print_and_log(f"{possible_materials_path}")
     
     # аналоги функций:
     # find_real_mdl_path - поиск материала в файлах проекта                     - find_real_vmt_path
@@ -863,39 +907,57 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     
     real_vmt_paths = []
     
-    for material_path in possible_materials_paths:
-        print_and_log(f" ")
-        print_and_log(f"material_path: {material_path}")
-        real_vmt_path = find_real_vmt_path(game_folder, material_path)
-        print_and_log(f" ")
-        print_and_log(f"real_vmt_path: {real_vmt_path}")
-        if real_vmt_path:
-            # если нашёлся материал в папке с модом
-            real_vmt_paths.append(real_vmt_path)
-            continue
-        else:
-            # если не нашёлся материал в папке с модом - ищем в путях из гейминфо
+    for material_folders in possible_materials_paths:
+        for material_path in material_folders:
             print_and_log(f" ")
-            print_and_log(f"VMT not found in mod folder, trying to find in paths from gameinfo...")
-            real_vmt_path = find_vmt_in_paths_from_gameinfo(search_paths, material_path)
+            print_and_log(f"material_path: {material_path}")
+            real_vmt_path = find_real_vmt_path(game_folder, str(material_path))
+            print_and_log(f" ")
+            print_and_log(f"real_vmt_path: {real_vmt_path}")
             if real_vmt_path:
-                print_and_log(f" ")
-                print_and_log(f"real_vmt_path: {real_vmt_path}")
+                # если нашёлся материал в папке с модом
                 real_vmt_paths.append(real_vmt_path)
                 continue
             else:
+                # если не нашёлся материал в папке с модом - ищем в путях из гейминфо
                 print_and_log(f" ")
-                print_and_log(Fore.RED + f"real_vmt_path in found in paths from gameinfo!!!")
-                print_and_log(f"Trying to find in VPKs...")
-                # вот тут остановился
-                real_vmt_path = extract_vmt(vpkeditcli_path, material_path, vpk_extract_folder, vpk_paths_from_gameinfo)
-    if real_vmt_path:
+                print_and_log(f"VMT not found in mod folder, trying to find in paths from gameinfo...")
+                real_vmt_path = find_vmt_in_paths_from_gameinfo(search_paths, material_path)
+                if real_vmt_path:
+                    #print_and_log(f" ")
+                    #print_and_log(f"real_vmt_path: {real_vmt_path}")
+                    real_vmt_paths.append(real_vmt_path)
+                    continue
+                else:
+                    #print_and_log(f" ")
+                    #print_and_log(Fore.RED + f"real_vmt_path in found in paths from gameinfo!!!")
+                    print_and_log(f"Not found.")
+                    print_and_log(f"Trying to find in VPKs...")
+                    real_vmt_path = extract_vmt(vpkeditcli_path, material_path, vpk_extract_folder, vpk_paths_from_gameinfo)
+                    if real_vmt_path:
+                        real_vmt_paths.append(real_vmt_path)
+                        continue
+                    else:
+                        # на нашли, сообщение есть в подфункции
+                        #print_and_log(Fore.RED + f"Can't find this material: {material_path}")
+                        continue
+                    
+    if len(real_vmt_paths) != 0:
         print_and_log(f" ")
         print_and_log(f"hammer_mdl_path: {hammer_mdl_path}")
-        print_and_log(f"real_vmt_path: {real_vmt_path}")
+        print_and_log(f"real_vmt_paths:")
+        for vmt_path in real_vmt_paths:
+            print_and_log(f"{vmt_path}")
+        print_and_log(f"colors:")
+        print_and_log(f"{colors}")
     else:
         print_and_log(f" ")
-        print_and_log(Fore.RED + f"real_vmt_path not found!!!!")
+        print_and_log(Fore.RED + f"Can't find any materials!")
+        return qc_path
+
+    # намного ранее надо написать парсер $texturegroup "skinfamilies"
+    
+    input("zxcv")
     
     qc_path_painted = qc_path
     return qc_path_painted
