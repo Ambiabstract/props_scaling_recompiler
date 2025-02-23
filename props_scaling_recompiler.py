@@ -404,6 +404,41 @@ def find_real_mdl_path(game_dir, hammer_mdl_path):
     
     return None
 
+def find_real_vmt_path(game_dir, material_path):
+    material_path = os.path.normpath(material_path)
+    material_path_parts = material_path.split(os.sep)
+    
+    print_and_log(f" ")
+    print_and_log(f"material_path_parts: {material_path_parts}")
+
+    if "materials" not in material_path_parts:
+        print_and_log(Fore.RED + f"[find_real_vmt_path] ERROR! Path must contain 'materials' directory")
+        return None
+    
+    materials_index = material_path_parts.index("materials")
+    hammer_dirs = material_path_parts[materials_index:]
+    
+    print_and_log(f" ")
+    print_and_log(f"materials_index: {materials_index}")
+    print_and_log(f" ")
+    print_and_log(f"hammer_dirs: {hammer_dirs}")
+    
+    vmt_filename = hammer_dirs[-1]
+    hammer_dirs = hammer_dirs[:-1]
+
+    excluded_dirs = [".git", "sound", "scripts", "modelsrc", "screenshots", "media"]
+    
+    for root, dirs, files in os.walk(game_dir):
+        dirs[:] = [d for d in dirs if d not in excluded_dirs]
+        rel_path = os.path.relpath(root, game_dir)
+        rel_parts = rel_path.split(os.sep)
+        #print_and_log(f"rel_path: {rel_path}, rel_parts: {rel_parts}")
+        if rel_parts[-len(hammer_dirs):] == hammer_dirs:
+            if vmt_filename in files:
+                return os.path.join(root, vmt_filename)
+    
+    return None
+
 def get_file_name(file_path):
     file_name_with_extension = os.path.basename(file_path)
     file_name = os.path.splitext(file_name_with_extension)[0]
@@ -809,9 +844,61 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     # find_mdl_in_paths_from_gameinfo - поиск материала по папкам из гейминфо   - find_vmt_in_paths_from_gameinfo
     # extract_mdl - поиск по впк из гейминфо                                    - extract_vmt
     
+    gameinfo_path = game_folder + f"/gameinfo.txt"
+    
+    script_path = get_script_path()
+    all_source_engine_paths = os.path.abspath(os.path.join(script_path, ".."))
+    search_paths = parse_search_paths(gameinfo_path)
+    search_paths = search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False, vmt = True)
+    search_paths = update_search_paths(search_paths, game_folder, all_source_engine_paths)
+    
+    vpk_paths_from_gameinfo = only_vpk_paths_from_gameinfo(search_paths, vmt = True)
+    #print_and_log(f" ")
+    #print_and_log(f"vpk_paths_from_gameinfo:")
+    #for path in vpk_paths_from_gameinfo:
+    #    print_and_log(f"{path}")
+
+    vpk_extract_folder = os.path.join(script_path, extracted_vpks_folder_name)
+    vpkeditcli_path = os.path.join(script_path, "vpkeditcli.exe")
+    
+    real_vmt_paths = []
+    
+    for material_path in possible_materials_paths:
+        print_and_log(f" ")
+        print_and_log(f"material_path: {material_path}")
+        real_vmt_path = find_real_vmt_path(game_folder, material_path)
+        print_and_log(f" ")
+        print_and_log(f"real_vmt_path: {real_vmt_path}")
+        if real_vmt_path:
+            # если нашёлся материал в папке с модом
+            real_vmt_paths.append(real_vmt_path)
+            continue
+        else:
+            # если не нашёлся материал в папке с модом - ищем в путях из гейминфо
+            print_and_log(f" ")
+            print_and_log(f"VMT not found in mod folder, trying to find in paths from gameinfo...")
+            real_vmt_path = find_vmt_in_paths_from_gameinfo(search_paths, material_path)
+            if real_vmt_path:
+                print_and_log(f" ")
+                print_and_log(f"real_vmt_path: {real_vmt_path}")
+                real_vmt_paths.append(real_vmt_path)
+                continue
+            else:
+                print_and_log(f" ")
+                print_and_log(Fore.RED + f"real_vmt_path in found in paths from gameinfo!!!")
+                print_and_log(f"Trying to find in VPKs...")
+                # вот тут остановился
+                real_vmt_path = extract_vmt(vpkeditcli_path, material_path, vpk_extract_folder, vpk_paths_from_gameinfo)
+    if real_vmt_path:
+        print_and_log(f" ")
+        print_and_log(f"hammer_mdl_path: {hammer_mdl_path}")
+        print_and_log(f"real_vmt_path: {real_vmt_path}")
+    else:
+        print_and_log(f" ")
+        print_and_log(Fore.RED + f"real_vmt_path not found!!!!")
+    
     qc_path_painted = qc_path
     return qc_path_painted
-
 
 def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready):    
     #print_and_log(f" ")
@@ -1107,6 +1194,163 @@ def extract_mdl(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files)
         print_and_log(Fore.RED + f"Extracted {mdl_name}.mdl file not found in: {extracted_mdl_path}")
         return None
 
+def extract_vmt(vpkeditcli_path, hammer_mdl_path, vpk_extract_folder, vpk_files):
+    mdl_folder_path_orig = os.path.dirname(hammer_mdl_path)
+    mdl_folder_path = mdl_folder_path_orig + r"/"
+    
+    '''
+    print_and_log(f" ")
+    print_and_log(f"vmt_folder_path_orig: {mdl_folder_path_orig}")
+    print_and_log(f" ")
+    print_and_log(f"vmt_folder_path: {mdl_folder_path}")
+    '''
+
+    mdl_name = os.path.splitext(os.path.basename(hammer_mdl_path))[0]
+    mdl_name_with_ext = mdl_name + ".vmt"
+    
+    '''
+    print_and_log(f" ")
+    print_and_log(f"vmt_name: {mdl_name}")
+    print_and_log(f" ")
+    print_and_log(f"vmt_name_with_ext: {mdl_name_with_ext}")
+    '''
+    
+    #mdl_parent_folder_name = os.path.basename(mdl_folder_path_orig)
+
+    mdl_folder_path_without_name = mdl_folder_path.replace(f"{mdl_name}.mdl", '').strip(os.sep)
+    
+    mdl_folder_path_without_name_and_last_folder = '/'.join(mdl_folder_path_without_name.rstrip('/').split('/')[:-1]) + '/'
+
+    if mdl_folder_path_without_name_and_last_folder == "/":
+        mdl_folder_path_without_name_and_last_folder = ''
+    
+    '''
+    print_and_log(f" ")
+    print_and_log(f"vmt_folder_path_without_name: {mdl_folder_path_without_name}")
+    print_and_log(f"vmt_folder_path_without_name_and_last_folder: {mdl_folder_path_without_name_and_last_folder}")
+    '''
+    
+    vpk_extract_folder_model = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path_without_name_and_last_folder)
+    vpk_extract_folder_model_with_last_folder = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path)
+    
+    '''
+    print_and_log(f" ")
+    print_and_log(f"vpk_extract_folder_model: {vpk_extract_folder_model}")
+    print_and_log(f" ")
+    print_and_log(f"vpk_extract_folder_model_with_last_folder: {vpk_extract_folder_model_with_last_folder}")
+    '''
+    
+    os.makedirs(vpk_extract_folder_model, exist_ok=True)
+    os.makedirs(vpk_extract_folder_model_with_last_folder, exist_ok=True)
+
+    vpk_with_mdl = None
+    
+    for vpk_file in vpk_files:
+        try:
+            vpkeditcli_tree_out, vpkeditcli_tree_err = get_vpkeditcli_tree(vpkeditcli_path, vpk_file)
+            #print_and_log(f"vpkeditcli_tree_out: {vpkeditcli_tree_out}")
+            #print_and_log(f"vpkeditcli_tree_err: {vpkeditcli_tree_err}")
+
+            #if mdl_name_with_ext in vpkeditcli_tree_out:
+            if mdl_folder_path_orig in vpkeditcli_tree_out and mdl_name_with_ext in vpkeditcli_tree_out:
+                
+                vpkeditcli_tree_out = vpkeditcli_tree_out.splitlines()
+                
+                folder_check = False
+                model_check = False
+                # дополнительная проверка чтобы не выгрузить случайно модель не из того впк
+                for line in vpkeditcli_tree_out:
+                    # Проверяем наличие mdl_folder_path_orig
+                    if mdl_folder_path_orig in line:
+                        folder_check = True
+                        #print_and_log(Fore.YELLOW + f"folder_check = True!")
+                        #print_and_log(Fore.YELLOW + f"line: {line}")
+                        continue
+                    # Проверяем наличие mdl_name_with_ext после mdl_folder_path_orig
+                    if folder_check and mdl_name_with_ext in line:
+                        model_check = True
+                        #print_and_log(Fore.YELLOW + f"model_check = True!")
+                        #print_and_log(Fore.YELLOW + f"line: {line}")
+                        continue
+                    # Проверяем, что не достигли строки, начинающейся с "models/"
+                    if line.startswith("materials/"):
+                        #print_and_log(f"line: {line}")
+                        if folder_check and model_check:
+                            vpk_with_mdl = vpk_file
+                            break
+                        else:
+                            folder_check = False
+                            model_check = False
+                
+                if folder_check and model_check:
+                    vpk_with_mdl = vpk_file
+                    break
+
+                print_and_log(f"1263 big check")
+                print_and_log(f"mdl_name_with_ext: {mdl_name_with_ext}")
+                print_and_log(f"os.path.dirname(hammer_mdl_path): {os.path.dirname(hammer_mdl_path)}")
+                print_and_log(f"hammer_mdl_path: {hammer_mdl_path}")
+                print_and_log(f"mdl_folder_path: {mdl_folder_path}")
+                print_and_log(f"vpk_extract_folder_model_with_last_folder: {vpk_extract_folder_model_with_last_folder}")
+            '''
+            else:
+                print_and_log(f" ")
+                print_and_log(Fore.RED + f"Material not found in VPK: {vpk_file}")
+                print_and_log(f"Info:")
+                print_and_log(f"vmt_folder_path_orig: {mdl_folder_path_orig}")
+                print_and_log(f"vmt_name_with_ext: {mdl_name_with_ext}")
+            '''
+
+        except subprocess.CalledProcessError as e:
+            print_and_log(Fore.RED + f"Error executing vpkeditcli: {e}")
+            return None
+
+    if vpk_with_mdl != None:
+        print_and_log(Fore.GREEN + f"vpk with {mdl_name}.vmt found:\n{vpk_with_mdl}")
+        try:
+            if debug_mode: print_and_log(Fore.YELLOW + f"Extracting {mdl_name}.vmt from vpk...")
+            
+            extract_paths = []
+            extract_paths.append(mdl_folder_path + mdl_name + ".vmt")
+            
+            if debug_mode: print_and_log(f"extract_paths: {extract_paths}")
+            if debug_mode: print_and_log(f" ")
+            
+            for extract_path in extract_paths:
+                if debug_mode: print_and_log(f"extract_path: {extract_path}")
+                if debug_mode: print_and_log(f"vpk_extract_folder_model: {vpk_extract_folder_model}")
+                
+                if ".vmt" in extract_path:
+                    vpk_extract_model_path = os.path.join(os.path.join(get_script_path(), extracted_vpks_folder_name), mdl_folder_path) + mdl_name + ".vmt"
+
+                print_and_log(Fore.YELLOW + f"vpk_extract_model_path: {vpk_extract_model_path}")
+                
+                vpkeditcli_extract_result = subprocess.run([vpkeditcli_path, '--output', vpk_extract_model_path, '--extract', extract_path, vpk_with_mdl], check=True)
+            
+            #print_and_log(f"vpkeditcli_extract_result.stdout {vpkeditcli_extract_result.stdout}")
+            #print_and_log(f"vpkeditcli_extract_result.stderr {vpkeditcli_extract_result.stderr}")
+            
+        except subprocess.CalledProcessError as e:
+            print_and_log(Fore.RED + f"Error executing vpkeditcli: {e}")
+            return None
+    else:
+        print_and_log(Fore.RED + f"VPK with {mdl_name}.vmt not found :(")
+        return None
+        
+    extracted_mdl_path = find_file_in_subfolders(vpk_extract_folder_model, f"{mdl_name}.vmt")
+    
+    if debug_mode: print_and_log(Fore.YELLOW + f"7. extracted_mdl_path: {extracted_mdl_path}")
+
+    extracted_mdl_path = extracted_mdl_path[0]
+    if debug_mode: print_and_log(Fore.YELLOW + f"8. extracted_mdl_path: {extracted_mdl_path}")
+
+    if os.path.isfile(extracted_mdl_path):
+        if debug_mode: print_and_log(f"9. extracted_mdl_path: {extracted_mdl_path}")
+        return extracted_mdl_path
+    else:
+        print_and_log(Fore.RED + f"Extracted {mdl_name}.vmt file not found in: {extracted_mdl_path}")
+        return None
+
 def parse_search_paths(gameinfo_path):
     search_paths = []
     in_search_paths_block = False
@@ -1165,7 +1409,7 @@ def parse_search_paths(gameinfo_path):
     
     return unique_search_paths
 
-def search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False):
+def search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_source_engine_paths=False, vmt = False):
     modes_to_remove = [
         "platform", 
         "game+mod+mod_write+default_write_path", 
@@ -1182,6 +1426,7 @@ def search_paths_cleanup(search_paths, remove_gameinfo_path=False, remove_all_so
             print_and_log(f'{mode}\t{path}\t{ending}')
 
     endings_to_remove = ["_textures", "_materials", "_vo_", "_lang_", "_sound", "_english"]
+    if vmt: endings_to_remove = ["_vo_", "_lang_", "_sound", "_english"]
 
     search_paths = [
         sp for sp in search_paths 
@@ -1283,25 +1528,78 @@ def find_mdl_in_paths_from_gameinfo(search_paths, hammer_mdl_path):
 
     return None
 
-def only_vpk_paths_from_gameinfo(search_paths):
+def find_vmt_in_paths_from_gameinfo(search_paths, material_path):
+    material_path = os.path.normpath(material_path)
+    hammer_parts = material_path.split(os.sep)
+    
+    if debug_mode: print_and_log(f"hammer_parts: {hammer_parts}")
+    
+    if "materials" not in hammer_parts:
+        print_and_log(Fore.RED + f"[find_vmt_in_paths_from_gameinfo] ERROR! Path must contain 'materials' directory")
+        return None
+    
+    materials_index = hammer_parts.index("materials")
+    hammer_dirs = hammer_parts[materials_index:]
+    
+    vmt_filename = hammer_dirs[-1]
+    hammer_dirs = hammer_dirs[:-1]
+
+    def search_for_vmt(base_path, hammer_dirs, vmt_filename):
+        for root, dirs, files in os.walk(base_path):
+            rel_path = os.path.relpath(root, base_path)
+            rel_parts = rel_path.split(os.sep)
+
+            if rel_parts[-len(hammer_dirs):] == hammer_dirs:
+                if vmt_filename in files:
+                    founded_vmt = os.path.join(root, vmt_filename)
+                    print_and_log(f"!!!!! founded_vmt: {founded_vmt}")
+                    return founded_vmt
+        return None
+
+    search_paths = [(path, ending) for parts in search_paths if len(parts) == 3 for mode, path, ending in [parts]]
+
+    for path, ending in search_paths:
+        if ending == '*':
+            vmt_path = search_for_vmt(path, hammer_dirs, vmt_filename)
+            if vmt_path:
+                return vmt_path
+        elif ending == '.':
+            materials_path = os.path.join(path, "materials")
+            vmt_path = search_for_vmt(materials_path, hammer_dirs, vmt_filename)
+            if vmt_path:
+                return vmt_path
+        elif not ending or ending.isalpha():
+            vmt_path = search_for_vmt(path, hammer_dirs, vmt_filename)
+            if vmt_path:
+                return vmt_path
+        elif ending.endswith('.vpk') or ending == '*.vpk':
+            continue
+
+    return None
+
+def only_vpk_paths_from_gameinfo(search_paths, vmt = False):
     vpk_files = []
     search_paths = [(path, ending) for parts in search_paths if len(parts) == 3 for mode, path, ending in [parts]]
+    
+    exclude_list = ["_textures", "_materials", "_lang_", "_vo_", "_sound"]
+    if vmt: exclude_list = ["_lang_", "_vo_", "_sound"]
+    
     def search_for_vpk(base_path, vpk_files):
         for root, dirs, files in os.walk(base_path):
             for file in files:
-                if file.endswith("_dir.vpk") and all(sub not in file for sub in ["_textures", "_materials", "_lang_", "_vo_", "_sound"]):
+                if file.endswith("_dir.vpk") and all(sub not in file for sub in exclude_list):
                     vpk_files.append(os.path.join(root, file))
     for path, ending in search_paths:
         if ending == '*':
             search_for_vpk(path, vpk_files)
         elif ending == '.':
             for file in os.listdir(path):
-                if file.endswith("_dir.vpk") and all(sub not in file for sub in ["_textures", "_materials", "_lang_", "_vo_", "_sound"]):
+                if file.endswith("_dir.vpk") and all(sub not in file for sub in exclude_list):
                     vpk_files.append(os.path.join(path, file))
         elif not ending or ending.isalpha():
             search_for_vpk(path, vpk_files)
         elif ending.endswith('.vpk'):
-            if ending.endswith(".vpk") and all(sub not in ending for sub in ["_textures", "_materials", "_lang_", "_vo_", "_sound"]):
+            if ending.endswith(".vpk") and all(sub not in ending for sub in exclude_list):
                 if not "_dir.vpk" in ending:
                     vpk_files.append(os.path.join(path, ending.replace(".vpk", "_dir.vpk")))
                 else:
