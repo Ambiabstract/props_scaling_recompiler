@@ -8,6 +8,7 @@ import io
 import time
 from colorama import init, Fore
 import pickle
+from collections import defaultdict
 
 debug_mode = False
 
@@ -773,6 +774,87 @@ def get_material_names(qc_content: str) -> list:
     
     return unique_materials
 
+def extract_skinfamilies_block(qc_content: str) -> str:
+    start_marker = '$texturegroup "skinfamilies"'
+    start_index = qc_content.find(start_marker)
+    if start_index == -1:
+        return ""  # не нашли вообще
+
+    # Ищем '{' после "$texturegroup "skinfamilies"
+    brace_open = qc_content.find('{', start_index)
+    if brace_open == -1:
+        return ""
+
+    # Считаем баланс фигурных скобок
+    brace_count = 1
+    i = brace_open + 1
+    while i < len(qc_content) and brace_count > 0:
+        if qc_content[i] == '{':
+            brace_count += 1
+        elif qc_content[i] == '}':
+            brace_count -= 1
+        i += 1
+
+    # i указывает на символ после закрывающей скобки
+    # Содержимое блока (без внешних { })
+    block_content = qc_content[brace_open + 1 : i - 1]
+    return block_content
+
+def parse_skinfamilies(qc_content: str):
+    block = extract_skinfamilies_block(qc_content)
+    if not block.strip():
+        return []
+
+    import re
+    # Внутри block ищем все под-блоки вида
+    # { "book_small_face_01" ... }
+    lines = re.findall(r'\{\s*([^}]*)\}', block)
+    # Теперь в каждой строке вытаскиваем материалы
+    skinfamilies = []
+    for line in lines:
+        materials = re.findall(r'"([^"]+)"', line)
+        skinfamilies.append(materials)
+
+    return skinfamilies
+
+def generate_colors_mats(qc_content, colors):
+    skins = parse_skinfamilies(qc_content)
+    if not skins:
+        raise ValueError('Не найден или пуст блок $texturegroup "skinfamilies" в qc_content.')
+
+    colors_mats = []
+    for entry in colors:
+        # entry имеет вид [[rgb], [индекс]]
+        rgb_str = entry[0][0]
+        index_str = entry[1][0]
+        index_int = int(index_str)
+
+        if not (0 <= index_int < len(skins)):
+            raise IndexError(f"Индекс {index_int} выходит за границы skinfamilies.")
+
+        selected_materials = skins[index_int]
+        colors_mats.append([[rgb_str], selected_materials])
+
+    return colors_mats
+
+def transform_colors_mats(colors_mats_raw):
+    mats_to_colors = defaultdict(set)
+
+    for entry in colors_mats_raw:
+        # entry[0] – список вида ['190 48 148'], entry[1] – список материалов
+        color_str = entry[0][0]
+        materials = entry[1]
+
+        for mat in materials:
+            mats_to_colors[mat].add(color_str)
+
+    # Сортируем словарь по ключам (book_small_face_01, book_small_face_02, ...)
+    sorted_dict = {}
+    for mat in sorted(mats_to_colors.keys()):
+        sorted_dict[mat] = list(mats_to_colors[mat])
+
+    return sorted_dict
+
 def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     with open(qc_path, 'r', encoding='utf-8') as file:
         content = file.read()
@@ -791,10 +873,23 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     print_and_log(f"qc_path: {qc_path}")
     
     qc_unique_materials = get_material_names(content)
-    
+
     print_and_log(f" ")
     print_and_log(f"qc_unique_materials:")
     print_and_log(f"{qc_unique_materials}")
+    
+    # тут нужно получать colors_mats
+    colors_mats_raw = generate_colors_mats(content, colors)
+    
+    colors_mats = transform_colors_mats(colors_mats_raw)
+    
+    print_and_log(f" ")
+    print_and_log(f"colors:")
+    print_and_log(f"{colors}")
+    #print_and_log(f"colors_mats_raw:")
+    #print_and_log(f"{colors_mats_raw}")
+    print_and_log(f"colors_mats:")
+    print_and_log(f"{colors_mats}")
     
     studio_value = None
     match_smd = re.search(r'\$bodygroup\s+"[^"]+"\s*{[^}]*studio\s+"([^"]+)"', content, re.DOTALL)
@@ -948,8 +1043,16 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
         print_and_log(f"real_vmt_paths:")
         for vmt_path in real_vmt_paths:
             print_and_log(f"{vmt_path}")
-        print_and_log(f"colors:")
-        print_and_log(f"{colors}")
+        print_and_log(f"colors_mats:")
+        print_and_log(f"{colors_mats}")
+        
+        # вот тут у нас есть набор найденных материалов и набор цветов под каждый материал
+        # надо сделать colors_real_mats - для тех материалов что нашлись генерируем словарь: под каждый реальный материал набор цветов
+        # генерируем новые вмт с особым именем, кладём в папку мода, рядом с обычными материалами
+        # затем берём QC из qc_path, копируем его, добавляем в скинфемилис строчки с новыми скинами (смотрим по colors: тупо дублируем строчки и затем заменяем имена на нужные)
+        # ещё в парсер скинфемилис надо будет добавить игнор тех строчек где мы что-то красили нашей хуйнёй
+        
+        
     else:
         print_and_log(f" ")
         print_and_log(Fore.RED + f"Can't find any materials!")
