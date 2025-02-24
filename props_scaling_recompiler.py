@@ -1046,11 +1046,20 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
         print_and_log(f"colors_mats:")
         print_and_log(f"{colors_mats}")
         
+        colors_mats_real_paths = build_colors_mats_real_paths(real_vmt_paths, colors_mats)
+        print_and_log(f"colors_mats_real_paths:")
+        print_and_log(f"{colors_mats_real_paths}")
+        '''
+        for colors_mats_real_path in colors_mats_real_paths:
+            print_and_log(f"{colors_mats_real_path}")
+        '''
+        
         # вот тут у нас есть набор найденных материалов и набор цветов под каждый материал
         # надо сделать colors_real_mats - для тех материалов что нашлись генерируем словарь: под каждый реальный материал набор цветов
         # генерируем новые вмт с особым именем, кладём в папку мода, рядом с обычными материалами
         # затем берём QC из qc_path, копируем его, добавляем в скинфемилис строчки с новыми скинами (смотрим по colors: тупо дублируем строчки и затем заменяем имена на нужные)
         # ещё в парсер скинфемилис надо будет добавить игнор тех строчек где мы что-то красили нашей хуйнёй
+        
         
         
     else:
@@ -1064,6 +1073,15 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     
     qc_path_painted = qc_path
     return qc_path_painted
+
+def build_colors_mats_real_paths(real_vmt_paths, colors_mats):
+    colors_mats_real_paths = {}
+    for raw_path in real_vmt_paths:
+        norm_path = os.path.normpath(raw_path)
+        filename = os.path.splitext(os.path.basename(norm_path))[0]
+        if filename in colors_mats:
+            colors_mats_real_paths[norm_path] = colors_mats[filename]
+    return colors_mats_real_paths
 
 def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready):    
     #print_and_log(f" ")
