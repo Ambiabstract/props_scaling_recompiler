@@ -186,9 +186,10 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
     if entities_matches_len < entities_matches_old_fgd_len:
         print_and_log(f" ")
         print_and_log(Fore.RED + f"ERROR: old entities KeyValues detected!")
-        print_and_log(Fore.YELLOW + f"Please update the FGD file to new version, restart the Hammer++ and save your map (that save will update entities KeyValues).")
-        print_and_log(Fore.YELLOW + f"It is required for a work of the new version of the tool.")
-        print_and_log(Fore.YELLOW + f"Props will not be scaled!")
+        print_and_log(Fore.MAGENTA + f"Please update the props_scaling_recompiler.fgd file to new version, restart the Hammer++ and re-save your map and instances.")
+        print_and_log(Fore.MAGENTA + f"That saves will update entities KeyValues.")
+        print_and_log(Fore.MAGENTA + f"It is required for a work of the new version of the tool.")
+        print_and_log(Fore.MAGENTA + f"Props will not be scaled!")
         print_and_log(f" ")
         input("Press any key to continue.")
         return entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo
@@ -309,6 +310,7 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
             mdl_name = get_file_name(model)
             mdl_name_scaled = process_mdl_name(mdl_name, modelscale)
             mdl_scaled_path = find_mdl_file(game_dir, mdl_name_scaled)
+
             if mdl_scaled_path is None:
                 entities_todo.append(entity_dict)
                 psr_cache_data_todo = add_to_cache(psr_cache_data_todo, model, modelscale, rendercolor, skin)
@@ -865,9 +867,10 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     #    print_and_log(f"{line}")
     
     print_and_log(f" ")
+    print_and_log(f"hammer_mdl_path:")
     print_and_log(f"{hammer_mdl_path}")
-    print_and_log(f"QC content:")
-    print_and_log(f"{content}")
+    #print_and_log(f"QC content:")
+    #print_and_log(f"{content}")
     
     print_and_log(f" ")
     print_and_log(f"qc_path: {qc_path}")
@@ -1059,7 +1062,51 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
         # генерируем новые вмт с особым именем, кладём в папку мода, рядом с обычными материалами
         # затем берём QC из qc_path, копируем его, добавляем в скинфемилис строчки с новыми скинами (смотрим по colors: тупо дублируем строчки и затем заменяем имена на нужные)
         # ещё в парсер скинфемилис надо будет добавить игнор тех строчек где мы что-то красили нашей хуйнёй
+
+
+        # UPD: colors_mats_real_paths это и есть нужный словарь, ключи - реальные пути материалов (в том числе из временной папки), значения ключей - требуемые варианты цветов для данного материала
+
+
+        def transform_path(temp_path: str, game_folder: str, extracted_vpks_folder_name: str) -> str:
+            # Разделяем temp_path по имени папки extracted_vpks_folder_name
+            
+            # и где?
+            
+            # Если папка найдена в пути
+            if len(parts) > 1:
+                # Убираем начальный слеш или обратный слеш, если он есть
+                relative_path = parts[1].lstrip(r"\/" )
+                # Собираем новый путь
+                return os.path.join(game_folder, relative_path)
+            
+            # Если extracted_vpks_folder_name не найдено в пути, возвращаем оригинальный путь
+            return temp_path
         
+        # проходимся по каждому реальному VMT из словаря:
+        # - копируем key (старый путь) в rel_path (новый путь);
+        # - копируем rel_path в rel_path_color (новый путь с именем под материал);
+        # - меняем содержание для каждого rel_path_color;
+        
+        for key in colors_mats_real_paths:
+            rel_path = None
+            rel_path_second = key.split(extracted_vpks_folder_name, 1)
+            if len(rel_path_second) > 1:
+                rel_path_second = rel_path_second[1].lstrip(r"\/" )
+                rel_path = os.path.join(game_folder, rel_path_second)
+            
+            print_and_log(f" ")
+            print_and_log(f"key: {key}")
+            print_and_log(f"rel_path: {rel_path}")
+            print_and_log(f"rel_path_second: {rel_path_second}") # это нахуя было сделано?
+            
+            # вот тут копируем key в rel_path
+            
+            
+            input("zxcv")
+            
+        # где-то к этому моменту у нас в папке materials мода лежат готовые VMT, по идее остаётся только поменять блок skinfamilies в оригинальном QC и дальше передавать скейлеру
+        
+        # ещё надо не забыть добавлять эти цвета в кэш
         
         
     else:
@@ -1092,11 +1139,13 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
     scales = list(set(map(float, scales.split())))
     scales.sort()
 
-    print_and_log(f"psr_cache_data_todo: {psr_cache_data_todo}")
+    print_and_log(f" ")
+    print_and_log(f" ")
+    print_and_log(f"psr_cache_data_todo before model_painter: {psr_cache_data_todo}")
     print_and_log(f" ")
     colors = psr_cache_data_todo.get(hammer_mdl_path, {}).get("colors", None)
-    print_and_log(f" ")
-    print_and_log(f"colors: {colors}")
+    #print_and_log(f" ")
+    print_and_log(f"colors before model_painter: {colors}")
 
     qc_path_painted = model_painter(game_folder, qc_path, hammer_mdl_path, colors)
     
