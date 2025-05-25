@@ -47,7 +47,7 @@ def add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin, real_mdl_
     if model not in psr_cache_data:
         psr_cache_data[model] = {
             "scales": [],
-            "colors": [],
+            "colors": {},
             "real_mdl_path": real_mdl_path,
             "is_static": is_static
         }
@@ -63,12 +63,17 @@ def add_to_cache(psr_cache_data, model, modelscale, rendercolor, skin, real_mdl_
 
     if modelscale not in psr_cache_data[model]["scales"]:
         psr_cache_data[model]["scales"].append(modelscale)
-    
+
+    color_key = (rendercolor, skin)
+    skin_colored_unknown = -1 # default new colored skin index
     if len(psr_cache_data[model]["colors"]) < 31:
-        if [[rendercolor], [skin]] not in psr_cache_data[model]["colors"]:
-            psr_cache_data[model]["colors"].append([[rendercolor], [skin]])
+        if color_key not in psr_cache_data[model]["colors"]:
+            psr_cache_data[model]["colors"][color_key] = skin_colored_unknown
     else:
         print_and_log(Fore.RED + f"ERROR! {get_file_name(model)}.mdl has too many skins, can't add another color!")
+    
+    #print_and_log(f"psr_cache_data:")
+    #print_and_log(f"{psr_cache_data}")
     
     return psr_cache_data
 
@@ -824,28 +829,101 @@ def generate_colors_mats(qc_content, colors):
     if not skins:
         raise ValueError('Не найден или пуст блок $texturegroup "skinfamilies" в qc_content.')
 
-    colors_mats = []
-    for entry in colors:
-        # entry имеет вид [[rgb], [индекс]]
-        rgb_str = entry[0][0]
-        index_str = entry[1][0]
+    colors_mats = {}
+    for entry, skin_colored in colors.items():
+        # entry имеет вид ('rendercolor', 'skin') - это ключ без skin_colored в значении
+        
+        '''
+        print_and_log(f"")
+        print_and_log(f"generate_colors_mats entry:")
+        print_and_log(f"{entry}")
+        '''
+
+        rgb_str = entry[0]
+        index_str = entry[1]
         index_int = int(index_str)
+        
+        '''
+        print_and_log(f"")
+        print_and_log(f"entry:")
+        print_and_log(f"{entry}")
+        
+        print_and_log(f"")
+        print_and_log(f"skin_colored:")
+        print_and_log(f"{skin_colored}")
+        
+        print_and_log(f"")
+        print_and_log(f"rgb_str:")
+        print_and_log(f"{rgb_str}")
+        
+        print_and_log(f"")
+        print_and_log(f"index_str:")
+        print_and_log(f"{index_str}")
+        
+        print_and_log(f"")
+        print_and_log(f"index_int:")
+        print_and_log(f"{index_int}")
+        #'''
 
         if not (0 <= index_int < len(skins)):
             raise IndexError(f"Индекс {index_int} выходит за границы skinfamilies.")
 
-        selected_materials = skins[index_int]
-        colors_mats.append([[rgb_str], selected_materials])
-
+        selected_materials = tuple(skins[index_int])
+        
+        '''
+        print_and_log(f"")
+        print_and_log(f"selected_materials:")
+        print_and_log(f"{selected_materials}")
+        '''
+        
+        new_entry = (rgb_str, selected_materials)
+        
+        '''
+        print_and_log(f"")
+        print_and_log(f"new_entry:")
+        print_and_log(f"{new_entry}")
+        '''
+        
+        colors_mats[new_entry] = skin_colored
+        
+        ####
+        #colors_mats.append([[rgb_str], selected_materials])
+    
+    '''
+    print_and_log(f"")
+    print_and_log(f"colors_mats:")
+    print_and_log(f"{colors_mats}")
+    '''
+    
     return colors_mats
 
 def transform_colors_mats(colors_mats_raw):
     mats_to_colors = defaultdict(set)
 
-    for entry in colors_mats_raw:
+    for entry, value in colors_mats_raw.items():
+        '''
+        print_and_log(f" ")
+        print_and_log(f"entry:")
+        print_and_log(f"{entry}")
+        
+        print_and_log(f" ")
+        print_and_log(f"values:")
+        print_and_log(f"{values}")
+        '''
+
         # entry[0] – список вида ['190 48 148'], entry[1] – список материалов
-        color_str = entry[0][0]
+        color_str = entry[0]
         materials = entry[1]
+        
+        '''
+        print_and_log(f" ")
+        print_and_log(f"color_str:")
+        print_and_log(f"{color_str}")
+        
+        print_and_log(f" ")
+        print_and_log(f"materials:")
+        print_and_log(f"{materials}")
+        '''
 
         for mat in materials:
             mats_to_colors[mat].add(color_str)
@@ -855,11 +933,17 @@ def transform_colors_mats(colors_mats_raw):
     for mat in sorted(mats_to_colors.keys()):
         sorted_dict[mat] = list(mats_to_colors[mat])
 
+    '''
+    print_and_log(f" ")
+    print_and_log(f"sorted_dict:")
+    print_and_log(f"{sorted_dict}")
+    '''
+    
     return sorted_dict
 
 def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     with open(qc_path, 'r', encoding='utf-8') as file:
-        content = file.read()
+        qc_content = file.read()
     
     #print_and_log(f" ")
     #print_and_log(f"lines:")
@@ -869,33 +953,35 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     print_and_log(f" ")
     print_and_log(f"hammer_mdl_path:")
     print_and_log(f"{hammer_mdl_path}")
-    #print_and_log(f"QC content:")
-    #print_and_log(f"{content}")
+    #print_and_log(f"qc_content:")
+    #print_and_log(f"{qc_content}")
     
     print_and_log(f" ")
     print_and_log(f"qc_path: {qc_path}")
     
-    qc_unique_materials = get_material_names(content)
+    qc_unique_materials = get_material_names(qc_content)
 
     print_and_log(f" ")
     print_and_log(f"qc_unique_materials:")
     print_and_log(f"{qc_unique_materials}")
-    
+
     # тут нужно получать colors_mats
-    colors_mats_raw = generate_colors_mats(content, colors)
+    colors_mats_raw = generate_colors_mats(qc_content, colors)
     
+    print_and_log(f"")
+    print_and_log(f"colors_mats_raw:")
+    print_and_log(f"{colors_mats_raw}")
+
     colors_mats = transform_colors_mats(colors_mats_raw)
-    
+
     print_and_log(f" ")
     print_and_log(f"colors:")
     print_and_log(f"{colors}")
-    #print_and_log(f"colors_mats_raw:")
-    #print_and_log(f"{colors_mats_raw}")
     print_and_log(f"colors_mats:")
     print_and_log(f"{colors_mats}")
     
     studio_value = None
-    match_smd = re.search(r'\$bodygroup\s+"[^"]+"\s*{[^}]*studio\s+"([^"]+)"', content, re.DOTALL)
+    match_smd = re.search(r'\$bodygroup\s+"[^"]+"\s*{[^}]*studio\s+"([^"]+)"', qc_content, re.DOTALL)
     if match_smd:
         studio_value = match_smd.group(1)
      
@@ -1048,7 +1134,7 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
             print_and_log(f"{vmt_path}")
         print_and_log(f"colors_mats:")
         print_and_log(f"{colors_mats}")
-        
+
         colors_mats_real_paths = build_colors_mats_real_paths(real_vmt_paths, colors_mats)
         print_and_log(f"colors_mats_real_paths:")
         print_and_log(f"{colors_mats_real_paths}")
@@ -1056,7 +1142,7 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
         for colors_mats_real_path in colors_mats_real_paths:
             print_and_log(f"{colors_mats_real_path}")
         '''
-        
+
         # вот тут у нас есть набор найденных материалов и набор цветов под каждый материал
         # надо сделать colors_real_mats - для тех материалов что нашлись генерируем словарь: под каждый реальный материал набор цветов
         # генерируем новые вмт с особым именем, кладём в папку мода, рядом с обычными материалами
@@ -1067,6 +1153,7 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
         # UPD: colors_mats_real_paths это и есть нужный словарь, ключи - реальные пути материалов (в том числе из временной папки), значения ключей - требуемые варианты цветов для данного материала
 
 
+        '''
         def transform_path(temp_path: str, game_folder: str, extracted_vpks_folder_name: str) -> str:
             # Разделяем temp_path по имени папки extracted_vpks_folder_name
             
@@ -1081,34 +1168,58 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
             
             # Если extracted_vpks_folder_name не найдено в пути, возвращаем оригинальный путь
             return temp_path
-        
+        '''
+
         # проходимся по каждому реальному VMT из словаря:
         # - копируем key (старый путь) в rel_path (новый путь);
         # - копируем rel_path в rel_path_color (новый путь с именем под материал);
         # - меняем содержание для каждого rel_path_color;
         
         for key in colors_mats_real_paths:
+            colors_2 = colors_mats_real_paths.get(key)
+            #print_and_log(f"colors_2:")
+            #print_and_log(f"{colors_2}")
             rel_path = None
             rel_path_second = key.split(extracted_vpks_folder_name, 1)
             if len(rel_path_second) > 1:
                 rel_path_second = rel_path_second[1].lstrip(r"\/" )
                 rel_path = os.path.join(game_folder, rel_path_second)
-            
-            print_and_log(f" ")
-            print_and_log(f"key: {key}")
-            print_and_log(f"rel_path: {rel_path}")
-            print_and_log(f"rel_path_second: {rel_path_second}") # это нахуя было сделано?
-            
-            # вот тут копируем key в rel_path
-            
-            
-            input("zxcv")
+                #rel_path = rel_path.replace("\\", "/")
+            if not rel_path:
+                print_and_log(Fore.RED + "ERROR! rel_path is None!")
+            else:
+                #print_and_log(f" ")
+                #print_and_log(f"key: {key}")
+                #print_and_log(f"rel_path_second: {rel_path_second}")
+                #print_and_log(f"rel_path: {rel_path}")
+                
+                # вот тут копируем key в rel_path
+                #rel_path_folder = rel_path.rsplit('\\', 1)[0]
+                rel_path_folder = os.path.dirname(rel_path)
+                #print_and_log(f"rel_path_folder: {rel_path_folder}")
+                os.makedirs(rel_path_folder, exist_ok=True)
+                shutil.copy(key, rel_path)
+                
+                # вот тут наверное сразу надо делать копии ВТМ с соответствующими цветами
+                main_vmt_path = rel_path
+                for color_2 in colors_2:
+                    if color_2 != "255 255 255":
+                        colored_vmt_path = make_colored_vmt(main_vmt_path, color_2)
             
         # где-то к этому моменту у нас в папке materials мода лежат готовые VMT, по идее остаётся только поменять блок skinfamilies в оригинальном QC и дальше передавать скейлеру
         
+        # жопа
+        print_and_log(f" ")
+        print_and_log(f"colors:")
+        print_and_log(f"{colors}")
+        
         # ещё надо не забыть добавлять эти цвета в кэш
         
+        # ВОТ ТУТ Я ОСТАНОВИЛСЯ, ПИСАЛ ФУНКЦИЮ КОТОРАЯ АПДЕЙТИТ СКИНЫ В ОРИГ QC
         
+        #qc_path
+        #qc_content
+
     else:
         print_and_log(f" ")
         print_and_log(Fore.RED + f"Can't find any materials!")
@@ -1121,13 +1232,73 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     qc_path_painted = qc_path
     return qc_path_painted
 
+def make_colored_vmt(main_vmt_path, color):
+    print_and_log(f"main_vmt_path:")
+    print_and_log(f"{main_vmt_path}")
+    print_and_log(f"color:")
+    print_and_log(f"{color}")
+    
+    if color == "255 255 255":
+        return main_vmt_path
+    
+    color_suff = color.replace(" ", "_")
+    print_and_log(f"color_suff: {color_suff}")
+    colored_vmt_path = main_vmt_path.replace(f".vmt", f"_col_{color_suff}.vmt")
+    print_and_log(f"colored_vmt_path: {colored_vmt_path}")
+    
+    shutil.copy(main_vmt_path, colored_vmt_path)
+    
+    # тут надо открывать свежесозданный colored_vmt_path и добавлять "$color2 {255 255 255}"
+    # возможно добавлять надо после baseTexture
+    with open(colored_vmt_path, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+
+    new_lines = []
+    color2_inserted = False
+
+    if "color2" in lines:
+        print_and_log(Fore.RED + f"ERROR! There is color2 param in main VMT of model.")
+        print_and_log(Fore.RED + f"It's not supported right now.")
+        return main_vmt_path
+    
+    for line in lines:
+        new_lines.append(line)
+        if not color2_inserted and "$baseTexture" in line:
+            indent = line[:len(line) - len(line.lstrip())]  # сохраняем отступ
+            new_lines.append(f'{indent}$color2 {{{color}}}\n')
+            color2_inserted = True
+
+    with open(colored_vmt_path, 'w', encoding='utf-8') as file:
+        file.writelines(new_lines)
+
+    return colored_vmt_path
+
 def build_colors_mats_real_paths(real_vmt_paths, colors_mats):
+    '''
+    print_and_log(f" ")
+    print_and_log(f"real_vmt_paths:")
+    print_and_log(f"{real_vmt_paths}")
+    
+    print_and_log(f" ")
+    print_and_log(f"colors_mats:")
+    print_and_log(f"{colors_mats}")
+    '''
+    
     colors_mats_real_paths = {}
     for raw_path in real_vmt_paths:
         norm_path = os.path.normpath(raw_path)
         filename = os.path.splitext(os.path.basename(norm_path))[0]
         if filename in colors_mats:
+            #print_and_log(f"filename in colors_mats")
             colors_mats_real_paths[norm_path] = colors_mats[filename]
+        #else:
+            #print_and_log(f"filename NOT in colors_mats!111")
+    '''
+    print_and_log(f" ")
+    print_and_log(f"colors_mats_real_paths:")
+    print_and_log(f"{colors_mats_real_paths}")
+    '''
+
     return colors_mats_real_paths
 
 def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, convert_to_static, subfolders, hammer_mdl_path, psr_cache_data_todo, psr_cache_data_ready):    
@@ -2240,17 +2411,18 @@ def main():
 
     psr_cache_data_ready = {}
     psr_cache_data_ready_load = load_global_cache()
-    print_and_log(f" ")
-    #print_and_log(f"psr_cache_data_ready_load: {psr_cache_data_ready_load}")
+    #print_and_log(f" ")
+    #print_and_log(f"psr_cache_data_ready_load:")
+    #print_and_log(f"{psr_cache_data_ready_load}")
     if psr_cache_data_ready_load != None: 
         psr_cache_data_ready = psr_cache_data_ready_load
         print_and_log(f"Cache loaded: props_scaling_recompiler_cache.pkl")
     else:
         print_and_log(f"Cache not found.")
     
-    #print_and_log(f" ")
-    #print_and_log(f"GLOBAL CACHE ON THE START:")
-    #print_and_log(f"{psr_cache_data_ready}")
+    print_and_log(f" ")
+    print_and_log(f"GLOBAL CACHE ON THE START:")
+    print_and_log(f"{psr_cache_data_ready}")
 
     entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo = process_vmf(game_dir, vmf_in_path, psr_cache_data_ready, force_recompile, classnames = ["prop_static_scalable"])
 
