@@ -1390,7 +1390,7 @@ def make_colored_vmt(main_vmt_path, color):
         new_lines.append(line)
         if not color2_inserted and "$baseTexture" in line:
             indent = line[:len(line) - len(line.lstrip())]  # сохраняем отступ
-            new_lines.append(f'{indent}$color2 {{{color}}}\n')
+            new_lines.append(f'{indent}"$color2" "{{{color}}}"\n')
             color2_inserted = True
 
     with open(colored_vmt_path, 'w', encoding='utf-8') as file:
@@ -2328,10 +2328,14 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready,
         entity_id = entity['id']
         new_model = entity['model']
         modelscale = entity['modelscale']
-        skin = entity['skin']
+        rendercolor = entity['rendercolor']
+        new_skin = entity['skin']
         
         if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
         if debug_mode: print_and_log(Fore.YELLOW + f"modelscale: {modelscale}")
+        
+        print_and_log(Fore.YELLOW + f"rendercolor: {rendercolor}")
+        print_and_log(Fore.YELLOW + f"new_skin: {new_skin}")
         
         if float(modelscale) == 1.0:
             #psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", is_static=True)
@@ -2363,23 +2367,51 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready,
         # жопа 3
         
         pattern = re.compile(
-            r'entity\s*\{\s*"id"\s*"' + re.escape(entity_id) + r'"\s*("classname"\s*"prop_static_scalable"\s*)(".*?"\s*)*?("model"\s*".*?"\s*)(".*?"\s*)*\}', re.DOTALL
+            r'(entity\s*\{\s*'
+            r'"id"\s*"' + re.escape(entity_id) + r'"\s*'
+            r'(?:".*?"\s*)*?'                  # любые другие строки
+            r'"classname"\s*"prop_static_scalable"\s*'
+            r'(?:".*?"\s*)*?'
+            r'"model"\s*".*?"\s*'
+            r'(?:".*?"\s*)*?'
+            r'"skin"\s*"\d+"\s*'              # строка skin
+            r'(?:".*?"\s*)*?'
+            r'\})',
+            re.DOTALL
         )
 
         def replacer(match):
-            updated_block = match.group(0)
-            updated_block = re.sub(r'"classname"\s*"prop_static_scalable"', '"classname" "prop_static"', updated_block)
-            updated_block = re.sub(r'"model"\s*".*?"', f'"model" "{new_model}"', updated_block)
-            return updated_block
+            block = match.group(1)
+            # заменяем classname
+            block = re.sub(
+                r'"classname"\s*"prop_static_scalable"',
+                '"classname" "prop_static"',
+                block
+            )
+            # заменяем модель
+            block = re.sub(
+                r'"model"\s*".*?"',
+                f'"model" "{new_model}"',
+                block
+            )
+            # заменяем skin
+            block = re.sub(
+                r'"skin"\s*"\d+"',
+                f'"skin" "{new_skin}"',
+                block
+            )
+            return block
 
         content = pattern.sub(replacer, content)
-        
+
         entities_progress += 1
         
         if entities_progress >= entities_ready_scaled_len:
             print_and_log(f"Progress: Done!")
         else:
             print(f"Progress: {int(entities_progress*100/entities_ready_scaled_len)}%", end="\r")
+    
+    print_and_log(Fore.YELLOW + f"vmf_out_path: {vmf_out_path}")
     
     with open(vmf_out_path, 'w') as file:
         if debug_mode: print_and_log(Fore.YELLOW + f"writing vmf...")
