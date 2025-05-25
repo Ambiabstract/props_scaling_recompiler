@@ -9,6 +9,7 @@ import time
 from colorama import init, Fore
 import pickle
 from collections import defaultdict
+from typing import Dict, Tuple
 
 debug_mode = False
 
@@ -1205,32 +1206,156 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
                 for color_2 in colors_2:
                     if color_2 != "255 255 255":
                         colored_vmt_path = make_colored_vmt(main_vmt_path, color_2)
-            
-        # где-то к этому моменту у нас в папке materials мода лежат готовые VMT, по идее остаётся только поменять блок skinfamilies в оригинальном QC и дальше передавать скейлеру
-        
-        # жопа
+
         print_and_log(f" ")
         print_and_log(f"colors:")
         print_and_log(f"{colors}")
+
+        colors_updated = update_skinfamilies(qc_path, colors)
+        print_and_log(f" ")
+        print_and_log(f"colors_updated:")
+        print_and_log(f"{colors_updated}")
         
-        # ещё надо не забыть добавлять эти цвета в кэш
+        '''
+        psr_cache_data = load_global_cache()
         
-        # ВОТ ТУТ Я ОСТАНОВИЛСЯ, ПИСАЛ ФУНКЦИЮ КОТОРАЯ АПДЕЙТИТ СКИНЫ В ОРИГ QC
+        print_and_log(f" ")
+        print_and_log(f"psr_cache_data:")
+        print_and_log(f"{psr_cache_data}")
         
-        #qc_path
-        #qc_content
+        input("psr_cache_dataffff")
+        
+        psr_cache_data[model]["colors"] = colors_updated
+        save_global_cache(psr_cache_data)
+        '''
+        
+        global g_colors
+        g_colors = colors_updated
 
     else:
         print_and_log(f" ")
         print_and_log(Fore.RED + f"Can't find any materials!")
         return qc_path
 
-    # намного ранее надо написать парсер $texturegroup "skinfamilies"
-    
-    input("zxcv")
-    
     qc_path_painted = qc_path
     return qc_path_painted
+
+def update_skinfamilies(qc_path: str, colors: Dict[Tuple[str, str], int]) -> Dict[Tuple[str, str], int]:
+    """
+    Обновляет блок $texturegroup "skinfamilies" в QC-файле:
+    - Добавляет новые цветные варианты материалов из словаря colors.
+    - Логирует "Too many colored skins!", если количество записей внутри блока >= 31.
+    - Сохраняет файл и возвращает обновлённый словарь colors_updated,
+      где ключи — (RGB, индекс_базового_скина), а значения — номер строки с "_col_".
+    """
+    # 1. Считаем файл
+    with open(qc_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    # 2. Находим границы блока
+    open_idx = None
+    brace_balance = 0
+    for i, line in enumerate(lines):
+        if line.strip().startswith('$texturegroup') and '"skinfamilies"' in line:
+            # ищем первую "{"
+            if '{' in line:
+                brace_balance = line.count('{') - line.count('}')
+                open_idx = i
+            else:
+                # ищем на следующих строках
+                for j in range(i+1, len(lines)):
+                    if '{' in lines[j]:
+                        brace_balance = lines[j].count('{') - lines[j].count('}')
+                        open_idx = j
+                        break
+            break
+
+    if open_idx is None:
+        raise RuntimeError('Блок $texturegroup "skinfamilies" не найден')
+
+    # ищем соответствующую "}"
+    close_idx = open_idx
+    while close_idx + 1 < len(lines) and brace_balance > 0:
+        close_idx += 1
+        brace_balance += lines[close_idx].count('{') - lines[close_idx].count('}')
+
+    # 3. Парсим существующие строки внутри блока
+    block_lines = lines[open_idx+1:close_idx]
+    block_names: list[list[str]] = []
+    indent = ''
+    for ln in block_lines:
+        m = re.match(r'^(\s*)\{', ln)
+        if not m:
+            continue
+        indent = m.group(1)
+        names = re.findall(r'"([^"]+)"', ln)
+        if names:
+            block_names.append(names)
+
+    # список «базовых» (не цветных) скинов
+    original_skins = [
+        names for names in block_names
+        if all('_col_' not in nm for nm in names)
+    ]
+
+    # 4. Генерируем и вставляем новые цветные строки
+    new_lines: list[str] = []
+    count = len(block_names)
+    too_many_reported = False
+
+    for (rgb, base_idx_str), _ in colors.items():
+        # пропускаем белый
+        if rgb == '255 255 255':
+            continue
+
+        base_idx = int(base_idx_str)
+        if not (0 <= base_idx < len(original_skins)):
+            continue
+
+        base_names = original_skins[base_idx]
+        suffix = rgb.replace(' ', '_')
+        colored = [f'{nm}_col_{suffix}' for nm in base_names]
+
+        if colored not in block_names:
+            # формируем строку и помечаем для вставки
+            names_part = ' '.join(f'"{nm}"' for nm in colored)
+            new_lines.append(f'{indent}{{ {names_part} }}\n')
+            block_names.append(colored)
+            count += 1
+            if count >= 31 and not too_many_reported:
+                print("Too many colored skins!")
+                too_many_reported = True
+
+    # вставляем всё перед закрывающей скобкой
+    if new_lines:
+        lines = (
+            lines[:close_idx]
+            + new_lines
+            + lines[close_idx:]
+        )
+
+    # 5. Сохраняем обновлённый файл
+    with open(qc_path, 'w', encoding='utf-8') as f:
+        f.writelines(lines)
+    
+    '''
+    print_and_log(f" ")
+    print_and_log(f"qc_path:")
+    print_and_log(f"{qc_path}")
+    '''
+
+    # 6. Собираем colors_updated
+    colors_updated: Dict[Tuple[str, str], int] = {}
+    for idx, names in enumerate(block_names):
+        if any('_col_' in nm for nm in names):
+            # определяем базовый индекс
+            base_names = [nm.split('_col_')[0] for nm in names]
+            base_idx = original_skins.index(base_names)
+            # извлекаем RGB
+            rgb_str = names[0].split('_col_')[1].replace('_', ' ')
+            colors_updated[(rgb_str, str(base_idx))] = idx
+
+    return colors_updated
 
 def make_colored_vmt(main_vmt_path, color):
     print_and_log(f"main_vmt_path:")
@@ -1319,6 +1444,7 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
     print_and_log(f"colors before model_painter: {colors}")
 
     qc_path_painted = model_painter(game_folder, qc_path, hammer_mdl_path, colors)
+    qc_path = qc_path_painted
     
     # вот тут должен работать покрасчик
     # порядок действий:
@@ -1349,9 +1475,12 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
     #print_and_log(f"g_rendercolor: {g_rendercolor}")
     #print_and_log(f"g_skin: {g_skin}")
 
+    '''
     print_and_log(f" ")
     input("cheeeeeeeck")
+    '''
     
+    # похуй, пусть пока что так будет
     rendercolor = "255 255 255"
     skin = "0"
 
@@ -2071,9 +2200,7 @@ def entities_todo_processor(entities_raw, entities_ready, entities_todo, psr_cac
             print_and_log(f"real_mdl_path: {real_mdl_path}")
             print_and_log(f"rendercolor: {rendercolor}")
             print_and_log(f"skin: {skin}")
-            
-            input("zcvbbbbe")
-            
+
             if real_mdl_path is not None:
                 print_and_log(Fore.GREEN + f"{mdl_name}.mdl found in cache!")
                 
@@ -2143,12 +2270,24 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready,
     with open(vmf_out_path, 'r') as file:
         content = file.read()
 
+    global g_colors
+    
+    print_and_log(f" ")
+    print_and_log(f"entities_ready:")
+    print_and_log(f"{entities_ready}")
+    
+    print_and_log(f" ")
+    print_and_log(f"g_colors:")
+    print_and_log(f"{g_colors}")
+
     entities_ready_scaled = []
     #entities_ready_scaled_len = len(entities_ready)
     #entities_ready_scaled_progress = 0
     for entity in entities_ready:
         model = entity['model']
         modelscale = entity['modelscale']
+        rendercolor = entity['rendercolor']
+        skin = entity['skin']
         base_name, ext = os.path.splitext(model)
         
         if float(modelscale) == 1.0:
@@ -2160,6 +2299,22 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready,
             new_model = os.path.join(os.path.dirname(new_model), 'scaled', os.path.basename(new_model)).replace('\\', '/')
 
         entity['model'] = new_model
+        
+        # вот тут вычисляем новое значение skin для entity читая entities_ready и g_colors
+        print_and_log(f" ")
+        print_and_log(f"rendercolor:")
+        print_and_log(f"{rendercolor}")
+        new_skin = skin
+        for key, value in g_colors.items():
+            if rendercolor in key:
+                #print_and_log(f"rendercolor in key found!:")
+                new_skin = value
+            #else:
+                #print_and_log(f"rendercolor in key found!:")
+        print_and_log(f" ")
+        print_and_log(f"new_skin:")
+        print_and_log(f"{new_skin}")
+        entity['skin'] = new_skin
 
         entities_ready_scaled.append(entity)
 
@@ -2173,6 +2328,7 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready,
         entity_id = entity['id']
         new_model = entity['model']
         modelscale = entity['modelscale']
+        skin = entity['skin']
         
         if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
         if debug_mode: print_and_log(Fore.YELLOW + f"modelscale: {modelscale}")
@@ -2204,6 +2360,8 @@ def convert_vmf(game_dir, vmf_in_path, vmf_out_path, subfolders, entities_ready,
         
         if debug_mode: print_and_log(Fore.YELLOW + f"new_model: {new_model}")
 
+        # жопа 3
+        
         pattern = re.compile(
             r'entity\s*\{\s*"id"\s*"' + re.escape(entity_id) + r'"\s*("classname"\s*"prop_static_scalable"\s*)(".*?"\s*)*?("model"\s*".*?"\s*)(".*?"\s*)*\}', re.DOTALL
         )
@@ -2423,6 +2581,9 @@ def main():
     print_and_log(f" ")
     print_and_log(f"GLOBAL CACHE ON THE START:")
     print_and_log(f"{psr_cache_data_ready}")
+    
+    global g_colors
+    g_colors = None
 
     entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo = process_vmf(game_dir, vmf_in_path, psr_cache_data_ready, force_recompile, classnames = ["prop_static_scalable"])
 
