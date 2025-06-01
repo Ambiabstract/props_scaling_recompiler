@@ -843,16 +843,14 @@ def generate_colors_mats(qc_content, colors):
     colors_mats = {}
     for entry, skin_colored in colors.items():
         # entry имеет вид ('rendercolor', 'skin') - это ключ без skin_colored в значении
-        
-        '''
+
         print_and_log(f"")
         print_and_log(f"generate_colors_mats entry:")
         print_and_log(f"{entry}")
-        '''
 
-        rgb_str = entry[0]
-        index_str = entry[1]
-        index_int = int(index_str)
+        rgb_str = entry[0] # цвет ргб, например 255 255 255
+        index_str = entry[1] # номер оригинального непокрашенного скина, например 0
+        index_int = int(index_str) # то же самое, только int
         
         '''
         print_and_log(f"")
@@ -866,6 +864,12 @@ def generate_colors_mats(qc_content, colors):
         print_and_log(f"")
         print_and_log(f"rgb_str:")
         print_and_log(f"{rgb_str}")
+
+        #'''
+
+        print_and_log(f"")
+        print_and_log(f"skins:")
+        print_and_log(f"{skins}")
         
         print_and_log(f"")
         print_and_log(f"index_str:")
@@ -874,10 +878,16 @@ def generate_colors_mats(qc_content, colors):
         print_and_log(f"")
         print_and_log(f"index_int:")
         print_and_log(f"{index_int}")
-        #'''
-
+        
+        print_and_log(f"")
+        print_and_log(f"len(skins):")
+        print_and_log(f"{len(skins)}")
+        
+        #input("gsfgsfgff3333")
+        
         if not (0 <= index_int < len(skins)):
-            raise IndexError(f"Индекс {index_int} выходит за границы skinfamilies.")
+            index_int = 0 # если в хаммере указан скин больше, чем есть количество скинов в скинфэмилис блоке
+            #raise IndexError(f"Индекс {index_int} выходит за границы skinfamilies.")
 
         selected_materials = tuple(skins[index_int])
         
@@ -1069,7 +1079,7 @@ def model_painter(game_folder, qc_path, hammer_mdl_path, colors):
     
     possible_materials_paths = []
     for qc_unique_material in qc_unique_materials:
-        possible_materials_paths_um = [f"materials/{path}/{qc_unique_material}" for path in cdmaterials]
+        possible_materials_paths_um = [f"materials/{path}/{qc_unique_material.lower()}" for path in cdmaterials]
         possible_materials_paths_um = [path.replace("//", "/") for path in possible_materials_paths_um]
         possible_materials_paths.append(possible_materials_paths_um)
     
@@ -1325,6 +1335,12 @@ def update_skinfamilies(qc_path: str, colors: Dict[Tuple[str, str], int]) -> Dic
         base_names = original_skins[base_idx]
         suffix = rgb.replace(' ', '_')
         colored = [f'{nm}_col_{suffix}' for nm in base_names]
+        
+        '''
+        print_and_log(f" ")
+        print_and_log(f"suffix:")
+        print_and_log(f"{suffix}")
+        '''
 
         if colored not in block_names:
             # формируем строку и помечаем для вставки
