@@ -701,15 +701,25 @@ def rescale_qc_file(qc_path, scale, hammer_mdl_path, psr_cache_data_todo, psr_ca
             if float(scale) == 1.0 and staticprop_found == False:
                 if debug_mode: print_and_log(Fore.YELLOW + f"!!! float(scale) != 1.0 and staticprop_found == False")
                 new_model_name = f"{model_name}_static.mdl"
-            elif float(scale) == 1.0:
+            elif float(scale) == 1.0: # тут надо добавить проверку на цвет когда-нибудь
                 if debug_mode: print_and_log(Fore.YELLOW + f"!!! float(scale) != 1.0")
-                new_model_name = f"_do_not_compile_me!"
-                print_and_log(Fore.GREEN + f"{model_name}.mdl is already a static prop. Updating cache.")
+                
+                # временно отключаю
+                #new_model_name = f"_do_not_compile_me!"
+                #print_and_log(Fore.GREEN + f"{model_name}.mdl is already a static prop. Updating cache.")
+                
+                new_model_name = f"{model_name}_static.mdl" # временно
+                
                 #real_mdl_path = psr_cache_data_ready.get(hammer_mdl_path, {}).get("real_mdl_path")
-                psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", is_static=True)
-                save_global_cache(psr_cache_data_ready)
+                
+                # временно отключаю
+                #psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", is_static=True)
+                #save_global_cache(psr_cache_data_ready)
+                
                 #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
-                return f"static_prop"
+                
+                # временно отключаю
+                #return f"static_prop"
             else:
                 if debug_mode: print_and_log(Fore.YELLOW + f"!!! blyat")
                 new_model_name = f"{model_name}_scaled_{int(scale * 100)}.mdl"
@@ -1477,7 +1487,7 @@ def rescale_and_compile_models(qc_path, compiler_path, game_folder, scales, conv
 
     '''
     print_and_log(f" ")
-    input("cheeeeeeeck")
+    input("Вот тут проверяем чтобы был набор цветов")
     '''
     
     # похуй, пусть пока что так будет
