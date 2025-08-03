@@ -1476,7 +1476,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    psr_description_name = f"props_scaling_recompiler 1.1.1"
+    psr_description_name = f"props_scaling_recompiler 1.1.2"
     psr_description_author = f"Shitcoded by Ambiabstract (Sergey Shavin)"
     psr_description_github = f"https://github.com/Ambiabstract"
     psr_description_discord = f"Discord: @Ambiabstract"
