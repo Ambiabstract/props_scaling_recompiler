@@ -1,0 +1,11 @@
+// 
+// scalable props classes for "props_scaling_recompiler" tool
+// https://github.com/Ambiabstract/props_scaling_recompiler
+// 
+
+@include "base.fgd"
+
+@PointClass base(prop_static, Studiomodel, RenderFields, GMODModelScale) studioprop() = prop_static_scalable : "Scalable Static Prop and also prop_static_override"
+[
+	//nothing here and its okay
+]
