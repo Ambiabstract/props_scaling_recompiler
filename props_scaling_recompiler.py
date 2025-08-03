@@ -419,70 +419,32 @@ def find_mdl_file(game_dir, mdl_name):
                     return mdl_path_custom
     return None
 
-def find_real_mdl_path(game_dir, hammer_mdl_path):
-    hammer_mdl_path = os.path.normpath(hammer_mdl_path)
-    hammer_parts = hammer_mdl_path.split(os.sep)
-    
-    if debug_mode: print_and_log(f"hammer_parts: {hammer_parts}")
+def find_real_mdl_path(game_dir: str, hammer_mdl_path: str) -> str | None:
+    hammer_rel = Path(os.path.normpath(hammer_mdl_path))
+    hammer_parts = [p.lower() for p in hammer_rel.parts]
+    mdl_name = hammer_parts[-1]
 
-    if "models" not in hammer_parts:
-        print_and_log(Fore.RED + f"[find_real_mdl_path] ERROR! Path must contain 'models' directory")
-        return None
-    
-    models_index = hammer_parts.index("models")
-    hammer_dirs = hammer_parts[models_index:]
-    
-    if debug_mode: print_and_log(f"models_index: {models_index}")
-    if debug_mode: print_and_log(f"hammer_dirs: {hammer_dirs}")
-    
-    mdl_filename = hammer_dirs[-1]
-    hammer_dirs = hammer_dirs[:-1]
+    excluded_dirs = {
+        ".git", "bin", "cfg", "sound", "scripts", "modelsrc", "screenshots", "media",
+        "materials", "mapsrc", "expressions", "maps", "particles", "scenes", "materialsrc",
+        "resource", "sceneassets", "shadereditorui", "shaders", "vpks",
+        "vscript_io", "vscript", "vscripts"
+    }
 
-    excluded_dirs = [".git", "sound", "scripts", "modelsrc", "screenshots", "media", "materials"]
-    
-    for root, dirs, files in os.walk(game_dir):
-        dirs[:] = [d for d in dirs if d not in excluded_dirs]
-        rel_path = os.path.relpath(root, game_dir)
-        rel_parts = rel_path.split(os.sep)
-        if debug_mode: print_and_log(f"rel_path: {rel_path}, rel_parts: {rel_parts}")
-        if rel_parts[-len(hammer_dirs):] == hammer_dirs:
-            if mdl_filename in files:
-                return os.path.join(root, mdl_filename)
-    
-    return None
+    game_dir_path = Path(game_dir)
 
-def find_real_vmt_path(game_dir, material_path):
-    material_path = os.path.normpath(material_path)
-    material_path_parts = material_path.split(os.sep)
-    
-    print_and_log(f" ")
-    print_and_log(f"material_path_parts: {material_path_parts}")
+    for candidate in game_dir_path.rglob(mdl_name):
+        try:
+            rel = candidate.relative_to(game_dir_path)
+        except ValueError:
+            continue
+        rel_parts = [p.lower() for p in rel.parts]
 
-    if "materials" not in material_path_parts:
-        print_and_log(Fore.RED + f"[find_real_vmt_path] ERROR! Path must contain 'materials' directory")
-        return None
-    
-    materials_index = material_path_parts.index("materials")
-    hammer_dirs = material_path_parts[materials_index:]
-    
-    print_and_log(f" ")
-    print_and_log(f"materials_index: {materials_index}")
-    print_and_log(f" ")
-    print_and_log(f"hammer_dirs: {hammer_dirs}")
-    
-    vmt_filename = hammer_dirs[-1]
-    hammer_dirs = hammer_dirs[:-1]
+        if rel_parts and rel_parts[0] in excluded_dirs:
+            continue
 
-    excluded_dirs = [".git", "sound", "scripts", "modelsrc", "screenshots", "media"]
-    
-    for root, dirs, files in os.walk(game_dir):
-        dirs[:] = [d for d in dirs if d not in excluded_dirs]
-        rel_path = os.path.relpath(root, game_dir)
-        rel_parts = rel_path.split(os.sep)
-        #print_and_log(f"rel_path: {rel_path}, rel_parts: {rel_parts}")
-        if rel_parts[-len(hammer_dirs):] == hammer_dirs:
-            if vmt_filename in files:
-                return os.path.join(root, vmt_filename)
+        if rel_parts[-len(hammer_parts):] == hammer_parts:
+            return str(candidate)
     
     return None
 
