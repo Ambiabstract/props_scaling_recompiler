@@ -57,7 +57,7 @@ Video tutorial (English subtitles available):
 
    `C:\Program Files (x86)\Steam\steamapps\common\Source SDK Base 2013 Singleplayer\bin\`
 
-3. Open Hammer++. Go to `Tools -> Options -> Game Configuration`, add `props_scaling_recompiler.fgd` to the `Game Data files` list and click "OK".
+3. Open Hammer++. Go to `Tools -> Options -> Game Configuration`, add `props_scaling_recompiler.fgd` or `props_scaling_recompiler_gmod.fgd` to the `Game Data files` list and click "OK".
 
    Pay attention to the selected project in the Configuration drop-down list: your project should be there! Add this fgd for all projects where you plan to use the tool!
 
