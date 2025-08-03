@@ -144,7 +144,7 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
     psr_cache_data_raw = {}
     psr_cache_data_todo = {}
     
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         content = file.read()
 
     classnames_pattern = '|'.join(classnames)
@@ -154,7 +154,8 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
         rf'[^\{{}}]*"id"\s*"(?P<id>\d+)"\s*'
         rf'[^\{{}}]*"classname"\s*\"(?P<classname>{classnames_pattern})\"\s*'
         rf'[^\{{}}]*"model"\s*"(?P<model>[^"]+)"\s*'
-        rf'[^\{{}}]*"modelscale"\s*"(?P<modelscale>[^"]+)"\s*',
+        rf'[^\{{}}]*"modelscale"\s*"(?P<modelscale>[^"]+)"\s*'
+        rf'[^\{{}}]*"origin"\s*"(?P<origin>[^"]+)"\s*',
         re.DOTALL | re.MULTILINE
     )
     matches_old_fgd = list(pattern_old_fgd.finditer(content))
@@ -181,17 +182,55 @@ def process_vmf(game_dir, file_path, psr_cache_data_ready, force_recompile=False
     if entities_matches_old_fgd_len == 0:
             print_and_log(f"No prop_static_scalable entities found.")
             return entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo
-    
-    if entities_matches_len < entities_matches_old_fgd_len:
-        print_and_log(f" ")
-        print_and_log(Fore.RED + f"ERROR: old entities KeyValues detected!")
-        print_and_log(Fore.YELLOW + f"Please update the FGD file to new version, restart the Hammer++ and save your map (that save will update entities KeyValues).")
-        print_and_log(Fore.YELLOW + f"It is required for a work of the new version of the tool.")
-        print_and_log(Fore.YELLOW + f"Props will not be scaled!")
-        print_and_log(f" ")
-        input("Press any key to continue.")
-        return entities_raw, entities_ready, entities_todo, psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo
 
+    '''
+    print_and_log(f" ")
+    print_and_log(f"matches groupdict before transformation:")
+    print_and_log(f"{[m.groupdict() for m in matches]}")
+    '''
+
+    if entities_matches_len < entities_matches_old_fgd_len:
+        # 1. Which IDs already matched the new pattern?
+        ids_new = {m.group('id') for m in matches}
+
+        # 2. For each old-style entity that didn't make it in:
+        for old in matches_old_fgd:
+            old_id = old.group('id')
+            if old_id not in ids_new:
+                gd = old.groupdict()
+
+                # supply defaults if missing
+                rendercolor = gd.get('rendercolor', '255 255 255')
+                skin        = gd.get('skin',        '0')
+                origin      = gd.get('origin',      '0 0 0') # а точно так стоит делать?
+
+                # build a minimal entity block that definitely matches `pattern`
+                entity_str = (
+                    f'entity {{ '
+                    f'"id" "{gd["id"]}" '
+                    f'"classname" "{gd["classname"]}" '
+                    f'"model" "{gd["model"]}" '
+                    f'"modelscale" "{gd["modelscale"]}" '
+                    f'"rendercolor" "{rendercolor}" '
+                    f'"skin" "{skin}" '
+                    f'"origin" "{origin}" '
+                    f'}}'
+                )
+
+                # re-run the new‐pattern regex on our synthetic block
+                new_m = pattern.search(entity_str)
+                if new_m:
+                    matches.append(new_m)
+
+        # 3. verify we now have the same count
+        entities_matches_len = len(matches)
+        if entities_matches_len != entities_matches_old_fgd_len:
+            print_and_log("\n" + Fore.RED + "ERROR: Old keyvalues transformation failed!")
+            print_and_log(Fore.RED + "Props will not be scaled!\n")
+            input("Press any key to continue.")
+            return entities_raw, entities_ready, entities_todo, \
+                   psr_cache_data_raw, psr_cache_data_ready, psr_cache_data_todo
+    
     '''
     if os.path.exists('props_scaling_recompiler_cache.pkl'):
         with open('props_scaling_recompiler_cache.pkl', 'rb') as f:
@@ -1143,6 +1182,8 @@ def only_vpk_paths_from_gameinfo(search_paths):
                 if file.endswith("_dir.vpk") and all(sub not in file for sub in ["_textures", "_materials", "_lang_", "_vo_", "_sound"]):
                     vpk_files.append(os.path.join(root, file))
     for path, ending in search_paths:
+        if not os.path.exists(path):
+            continue
         if ending == '*':
             search_for_vpk(path, vpk_files)
         elif ending == '.':
@@ -1454,7 +1495,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    psr_description_name = f"props_scaling_recompiler 1.1.0"
+    psr_description_name = f"props_scaling_recompiler 1.1.1"
     psr_description_author = f"Shitcoded by Ambiabstract (Sergey Shavin)"
     psr_description_github = f"https://github.com/Ambiabstract"
     psr_description_discord = f"Discord: @Ambiabstract"
