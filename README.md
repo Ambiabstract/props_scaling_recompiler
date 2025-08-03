@@ -3,7 +3,7 @@
 ## Description:
 props_scaling_recompiler is an automatic assets recompiler that allows you to scale props and/or convert them to prop_static without leaving [Hammer++](https://ficool2.github.io/HammerPlusPlus-Website/).
 
-If you work with Source SDK 2013 and often use prop_scalable, this tool can be particularly useful. prop_scalable is a dynamic entity, which means it consumes entdata, does not cast lightmap shadows, lacks baked vertex lighting, and its collision does not scale with its visual geometry.
+If you work with Source SDK 2013 or Gmod SDK and often use prop_scalable, this tool can be particularly useful. prop_scalable is a dynamic entity, which means it consumes entdata, does not cast lightmap shadows, lacks baked vertex lighting, and its collision does not scale with its visual geometry.
 
 ![aa_models_test_01a0010](https://github.com/user-attachments/assets/1ae07220-df59-400a-8475-413da770286a)
 ![изображение](https://github.com/user-attachments/assets/c3459319-84e6-4f55-b88a-2a706f1a0338)
@@ -57,7 +57,7 @@ Video tutorial (English subtitles available):
 
    `C:\Program Files (x86)\Steam\steamapps\common\Source SDK Base 2013 Singleplayer\bin\`
 
-3. Open Hammer++. Go to `Tools -> Options -> Game Configuration`, add `props_scaling_recompiler.fgd` to the `Game Data files` list and click "OK".
+3. Open Hammer++. Go to `Tools -> Options -> Game Configuration`, add `props_scaling_recompiler.fgd` or `props_scaling_recompiler_gmod.fgd` to the `Game Data files` list and click "OK".
 
    Pay attention to the selected project in the Configuration drop-down list: your project should be there! Add this fgd for all projects where you plan to use the tool!
 
@@ -116,7 +116,7 @@ Video tutorial (English subtitles available):
 
 2. There may be errors when compiling some dynamic props, for example “models/props_c17/door02_double.mdl”. Whether this will be fixed in the future is still unknown.
 
-3. Portal 2, Garry's Mod is not supported. Only Source SDK 2013.
+3. Portal 2 is not supported. Only Source SDK 2013 and Gmod.
 
 ## Future plans:
 - Force recompile mode for a specific model via entity parameters (KeyValues). It is necessary in case the original model has changed and all its copies need to be updated.
