@@ -8,6 +8,7 @@ import io
 import time
 from colorama import init, Fore
 import pickle
+from pathlib import Path
 
 debug_mode = False
 
@@ -384,35 +385,32 @@ def find_mdl_file(game_dir, mdl_name):
                     return mdl_path_custom
     return None
 
-def find_real_mdl_path(game_dir, hammer_mdl_path):
-    hammer_mdl_path = os.path.normpath(hammer_mdl_path)
-    hammer_parts = hammer_mdl_path.split(os.sep)
-    
-    if debug_mode: print_and_log(f"hammer_parts: {hammer_parts}")
+def find_real_mdl_path(game_dir: str, hammer_mdl_path: str) -> str | None:
+    hammer_rel = Path(os.path.normpath(hammer_mdl_path))
+    hammer_parts = [p.lower() for p in hammer_rel.parts]
+    mdl_name = hammer_parts[-1]
 
-    if "models" not in hammer_parts:
-        print_and_log(Fore.RED + f"[find_real_mdl_path] ERROR! Path must contain 'models' directory")
-        return None
-    
-    models_index = hammer_parts.index("models")
-    hammer_dirs = hammer_parts[models_index:]
-    
-    if debug_mode: print_and_log(f"models_index: {models_index}")
-    if debug_mode: print_and_log(f"hammer_dirs: {hammer_dirs}")
-    
-    mdl_filename = hammer_dirs[-1]
-    hammer_dirs = hammer_dirs[:-1]
+    excluded_dirs = {
+        ".git", "bin", "cfg", "sound", "scripts", "modelsrc", "screenshots", "media",
+        "materials", "mapsrc", "expressions", "maps", "particles", "scenes", "materialsrc",
+        "resource", "sceneassets", "shadereditorui", "shaders", "vpks",
+        "vscript_io", "vscript", "vscripts"
+    }
 
-    excluded_dirs = [".git", "sound", "scripts", "modelsrc", "screenshots", "media", "materials"]
-    
-    for root, dirs, files in os.walk(game_dir):
-        dirs[:] = [d for d in dirs if d not in excluded_dirs]
-        rel_path = os.path.relpath(root, game_dir)
-        rel_parts = rel_path.split(os.sep)
-        if debug_mode: print_and_log(f"rel_path: {rel_path}, rel_parts: {rel_parts}")
-        if rel_parts[-len(hammer_dirs):] == hammer_dirs:
-            if mdl_filename in files:
-                return os.path.join(root, mdl_filename)
+    game_dir_path = Path(game_dir)
+
+    for candidate in game_dir_path.rglob(mdl_name):
+        try:
+            rel = candidate.relative_to(game_dir_path)
+        except ValueError:
+            continue
+        rel_parts = [p.lower() for p in rel.parts]
+
+        if rel_parts and rel_parts[0] in excluded_dirs:
+            continue
+
+        if rel_parts[-len(hammer_parts):] == hammer_parts:
+            return str(candidate)
     
     return None
 
@@ -1478,7 +1476,7 @@ def main():
     #Fore.RESET
     
     # DESCRIPTION
-    psr_description_name = f"props_scaling_recompiler 1.1.1"
+    psr_description_name = f"props_scaling_recompiler 1.1.2"
     psr_description_author = f"Shitcoded by Ambiabstract (Sergey Shavin)"
     psr_description_github = f"https://github.com/Ambiabstract"
     psr_description_discord = f"Discord: @Ambiabstract"
