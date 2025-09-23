@@ -247,18 +247,18 @@ def initial_check():
     
     # Проверка что лежим в нужной папке bin
     if folder_name != "bin":
-        logger.critical(Fore.RED + f"ERROR! This .exe file should lie in the bin folder where the Source Engine tools such as hammer.exe, studiomdl.exe and so on lie.\nFor example: C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/bin")
+        logger.critical(Fore.RED + f"ERROR! This .exe file must be located in the bin folder where the Source Engine tools such as hammer.exe, studiomdl.exe, and others are located.\nFor example: C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/bin")
         return False
     if not os.path.exists(os.path.join(script_path, "studiomdl.exe")):
-        logger.critical(Fore.RED + f"ERROR! I can't find studiomdl.exe in this bin folder! This .exe should be put in the bin folder with tools, not with client.dll and server.dll.\nFor example: C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/bin")
+        logger.critical(Fore.RED + f"ERROR! Сan't find studiomdl.exe in this bin folder! This tool file must be placed in the bin folder with other tools, not with client.dll and server.dll.\nFor example: C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/bin")
         return False
     
     # Проверка на две сторонние тулзы
     if not any("CrowbarCommandLineDecomp.exe" in files for files in listdirs):
-        logger.critical(Fore.RED + f"ERROR! This tool requires CrowbarCommandLineDecomp.exe lying in the same bin folder to work!")
+        logger.critical(Fore.RED + f"ERROR! This tool requires CrowbarCommandLineDecomp.exe to be present in the same bin folder in order to work!")
         return False
     if not any("vpkeditcli.exe" in files for files in listdirs):
-        logger.critical(Fore.RED + f"ERROR! This tool requires standalone vpkeditcli.exe lying in the same bin folder!")
+        logger.critical(Fore.RED + f"ERROR! This tool requires the standalone vpkeditcli.exe to be present in the same bin folder!")
         return False
     logger.debug(f"initial_check success")
     return True
