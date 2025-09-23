@@ -14,9 +14,20 @@ from colorama import init as colorama_init
 from colorama import Fore, Style
 
 # ----------------------------------------
-#   Основные константы
+#   Константы
 # ----------------------------------------
-LOG_FILE = f"{os.path.splitext(os.path.basename(sys.argv[0]))[0]}_log.txt"
+# Константы о программе
+ABOUT_TOOL_VERSION      = "2.0.0 - dev 001"
+ABOUT_TOOL_NAME         = Fore.CYAN + f"props_scaling_recompiler {ABOUT_TOOL_VERSION}" + Fore.RESET
+ABOUT_TOOL_AUTHOR       = "Shitcoded by Ambiabstract (Sergey Shavin)."
+ABOUT_TOOL_LINK         = "Github: https://github.com/Ambiabstract/props_scaling_recompiler"
+ABOUT_TOOL_DISCORD      = "Discord: @Ambiabstract"
+
+# Константы технические
+TOOL_EXE_NAME = os.path.splitext(os.path.basename(sys.argv[0]))[0]
+LOG_FILE = f"{TOOL_EXE_NAME}_log.txt"
+CACHE_FILE = f"{TOOL_EXE_NAME}_cache.pkl"
+TEMP_FILES_FOLDER = f"{TOOL_EXE_NAME}_temp"
 
 # ----------------------------------------
 #   Классы
@@ -143,9 +154,9 @@ class RecompilerApp:
         # Надо изучить какой способ чтения и записи VMF самые быстрые, потому что на это уходит больше всего времени почему-то.
         return 0
         
-        создаём класс который управляет кэшем, загружаем кэш
-        создаём класс который управляет чтением (и записью?) вмф
-        считаем сколько в VMF поскейленных ассетов, если ноль - передаём исходный вмф на выход, если больше нуля то идём дальше
+        # создаём класс который управляет кэшем, загружаем кэш
+        # создаём класс который управляет чтением (и записью?) вмф
+        # считаем сколько в VMF поскейленных ассетов, если ноль - передаём исходный вмф на выход, если больше нуля то идём дальше
 
 # ----------------------------------------
 #   Функции
@@ -270,6 +281,10 @@ def build_argparser() -> argparse.Namespace:
 def main() -> int:
     # logger = logging.getLogger("colored_logger") скорее всего не нужно
     logger.debug(f"main() started")
+    logger.info(ABOUT_TOOL_NAME)
+    logger.info(ABOUT_TOOL_AUTHOR)
+    logger.info(ABOUT_TOOL_LINK)
+    logger.info(ABOUT_TOOL_DISCORD)
     if not initial_check(): return 1
     try:
         args = build_argparser()
