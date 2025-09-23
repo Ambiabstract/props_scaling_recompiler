@@ -121,14 +121,10 @@ class GlobalCache:
 class RecompilerApp:
     def __init__(self, args: argparse.Namespace):
         logger.debug(f"RecompilerApp __init__")
+        
         # Параметры запуска
         self.args = args
         logger.debug(f"RecompilerApp self.args:\n{self.args}")
-        # Если дебаг параметр активирован, то включаем отображение сообщений дебаг уровня в консоли
-        if self.args.debug == 1:
-            for handler in logger.handlers:
-                if isinstance(handler, logging.StreamHandler):
-                    handler.setLevel(logging.DEBUG)
         logger.debug(f"self.args.game: {self.args.game}")
         logger.debug(f"self.args.vmf_in: {self.args.vmf_in}")
         logger.debug(f"self.args.vmf_out: {self.args.vmf_out}")
@@ -137,30 +133,49 @@ class RecompilerApp:
         logger.debug(f"self.args.check_origs: {self.args.check_origs}")
         logger.debug(f"self.args.debug: {self.args.debug}")
         
-        # Получаем имя VMF без расширения
+        # Если дебаг параметр активирован, то включаем отображение сообщений дебаг уровня в консоли
+        if self.args.debug == 1:
+            for handler in logger.handlers:
+                if isinstance(handler, logging.StreamHandler):
+                    handler.setLevel(logging.DEBUG)
+        
+        # Получаем имя VMF без расширения файла
         self.vmf_file_name, _ = os.path.splitext(os.path.basename(self.args.vmf_in.replace("\\", "/")))
         logger.debug(f"self.vmf_file_name: {self.vmf_file_name}")
-        
-        # Проверяем по быстрому сколько раз в файле встречается класс prop_static_scalable
-        vmf_fast_check_count = vmf_fast_check(self.args.vmf_in)
-        logger.info(f"{vmf_fast_check_count} prop_static_scalable entities found in {self.vmf_file_name}.vmf")
         
         # Изначальное состояние, initial state
         self.cache = None
         self.project = None
-        
-        
-        # self.cache = GlobalCache(Path(CACHE_FILE))
-        # self.cache.load()
-        # logger.debug(f"self.cache:\n{self.cache}")
-    
-    # Получаем и проверяем гейминфо, записываем в self.project.gameinfo_path
-    
-    # self.project.project_assets
-    # self.project.locations_and_props
     
     def run(self) -> int:
         logger.debug(f"RecompilerApp run")
+        
+        # Проверяем по быстрому сколько раз в файле встречается класс prop_static_scalable
+        vmf_fast_check_count = vmf_fast_check(self.args.vmf_in)
+        logger.info(f"{vmf_fast_check_count} prop_static_scalable entities found in {self.vmf_file_name}.vmf")
+        if vmf_fast_check_count == 0: return 0 # если нету нужных энтитей - работа программы завершена
+        
+        # Получаем и проверяем гейминфо из game
+        self.gameinfo_path = self.args.game + r"\gameinfo.txt"
+        if not os.path.exists(self.gameinfo_path):
+            logger.critical(f'ERROR! Gameinfo.txt not found! Please check "-game $gamedir" compile/run params in hammer run map options! \nSearch path: {self.args.game}')
+            return 1
+        logger.debug(f"self.gameinfo_path: {self.gameinfo_path}")
+        
+        # Получаем кэш и проект
+        self.cache = GlobalCache(Path(CACHE_FILE))
+        self.cache.load()
+        logger.debug(f"self.cache:\n{self.cache}")
+        logger.debug(f"self.cache.path:\n{self.cache.path}")
+        logger.debug(f"self.cache.projects:\n{self.cache.projects}")
+        
+        # Получение проекта из кэша по гейминфо:
+        self.project = self.cache.get_project(str(Path(self.gameinfo_path).as_posix()).lower())
+        logger.debug(f"self.project:\n{self.project}")
+        
+        return 0
+
+        
         # 0. Быстрая проверка что в ВМФ вообще есть нужный класс из ФДГ.
         # 1. Валидация путей, кэша.
         #       получение гейминфо
@@ -271,18 +286,18 @@ def initial_check():
     
     # Проверка что лежим в нужной папке bin
     if folder_name != "bin":
-        logger.critical(Fore.RED + f"ERROR! This .exe file must be located in the bin folder where the Source Engine tools such as hammer.exe, studiomdl.exe, and others are located.\nFor example: C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/bin")
+        logger.critical(f"ERROR! This .exe file must be located in the bin folder where the Source Engine tools such as hammer.exe, studiomdl.exe, and others are located.\nFor example: C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/bin")
         return False
     if not os.path.exists(os.path.join(script_path, "studiomdl.exe")):
-        logger.critical(Fore.RED + f"ERROR! Сan't find studiomdl.exe in this bin folder! This tool file must be placed in the bin folder with other tools, not with client.dll and server.dll.\nFor example: C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/bin")
+        logger.critical(f"ERROR! Сan't find studiomdl.exe in this bin folder! This tool file must be placed in the bin folder with other tools, not with client.dll and server.dll.\nFor example: C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/bin")
         return False
     
     # Проверка на две сторонние тулзы
     if not any("CrowbarCommandLineDecomp.exe" in files for files in listdirs):
-        logger.critical(Fore.RED + f"ERROR! This tool requires CrowbarCommandLineDecomp.exe to be present in the same bin folder in order to work!")
+        logger.critical(f"ERROR! This tool requires CrowbarCommandLineDecomp.exe to be present in the same bin folder in order to work!")
         return False
     if not any("vpkeditcli.exe" in files for files in listdirs):
-        logger.critical(Fore.RED + f"ERROR! This tool requires the standalone vpkeditcli.exe to be present in the same bin folder!")
+        logger.critical(f"ERROR! This tool requires the standalone vpkeditcli.exe to be present in the same bin folder!")
         return False
     logger.debug(f"initial_check success")
     return True
