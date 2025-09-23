@@ -315,7 +315,7 @@ def main() -> int:
     logger.info(ABOUT_TOOL_NAME)
     logger.info(ABOUT_TOOL_AUTHOR)
     logger.info(ABOUT_TOOL_LINK)
-    logger.info(ABOUT_TOOL_DISCORD)
+    logger.info(ABOUT_TOOL_DISCORD+"\n")
     if not initial_check(): return 1
     try:
         args = build_argparser()
@@ -352,8 +352,8 @@ if __name__ == "__main__":
         elapsed_time = time.time() - start_time
         hours, remainder = divmod(elapsed_time, 3600)
         minutes, seconds = divmod(remainder, 60)
-        logger.info(f"Time spent: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds")
-        logger.good(f"props_scaling_recompiler has finished its work!")
+        logger.good(f"\nprops_scaling_recompiler has finished its work!")
+        logger.info(f"Time spent: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds\n")
         if exit_code in (1, 130): input("\nPress Enter to exit...")
         logging.shutdown()
     sys.exit(exit_code)
