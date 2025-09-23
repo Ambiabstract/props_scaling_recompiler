@@ -87,12 +87,12 @@ class Project:
 class GlobalCache:
     #Единый кэш: projects[project_name].assets[...] + метаданные
     def __init__(self, cache_file: Path):
-        logger.info(f"GlobalCache __init__")
+        logger.debug(f"GlobalCache __init__")
         self.path = cache_file
         self.projects: Dict[str, Project] = {}
 
     def load(self) -> None:
-        logger.info(f"GlobalCache load")
+        logger.debug(f"GlobalCache load")
         if self.path.exists():
             with self.path.open("rb") as f:
                 self.projects = pickle.load(f)
@@ -100,12 +100,12 @@ class GlobalCache:
             self.projects = {}
 
     def save(self) -> None:
-        logger.info(f"GlobalCache save")
+        logger.debug(f"GlobalCache save")
         with self.path.open("wb") as f:
             pickle.dump(self.projects, f)
 
     def get_project(self, gameinfo_path: str) -> Project: # *
-        logger.info(f"GlobalCache get_project")
+        logger.debug(f"GlobalCache get_project")
         p = self.projects.get(gameinfo_path) # есть ли у нас позиция в словаре с ключом gameinfo_path?
         if not p:
             p = Project(gameinfo_path=gameinfo_path) # если нету такого, то создаём новый экземпляр класса проект, назначаем ему путь гейминфо
@@ -121,18 +121,14 @@ class GlobalCache:
 class RecompilerApp:
     def __init__(self, args: argparse.Namespace):
         logger.debug(f"RecompilerApp __init__")
+        # Параметры запуска
         self.args = args
         logger.debug(f"RecompilerApp self.args:\n{self.args}")
-        # self.cache = GlobalCache(Path("props_scaling_recompiler_cache.pkl"))
-        # self.cache.load()
-    def run(self) -> int:
-        logger.debug(f"RecompilerApp run")
         # Если дебаг параметр активирован, то включаем отображение сообщений дебаг уровня в консоли
         if self.args.debug == 1:
-            ch = logging.StreamHandler()
-            ch.setLevel(logging.DEBUG)
-            logger.addHandler(ch)
-
+            for handler in logger.handlers:
+                if isinstance(handler, logging.StreamHandler):
+                    handler.setLevel(logging.DEBUG)
         logger.debug(f"self.args.game: {self.args.game}")
         logger.debug(f"self.args.vmf_in: {self.args.vmf_in}")
         logger.debug(f"self.args.vmf_out: {self.args.vmf_out}")
@@ -141,9 +137,36 @@ class RecompilerApp:
         logger.debug(f"self.args.check_origs: {self.args.check_origs}")
         logger.debug(f"self.args.debug: {self.args.debug}")
         
+        # Получаем имя VMF без расширения
+        self.vmf_file_name, _ = os.path.splitext(os.path.basename(self.args.vmf_in.replace("\\", "/")))
+        logger.debug(f"self.vmf_file_name: {self.vmf_file_name}")
         
+        # Проверяем по быстрому сколько раз в файле встречается класс prop_static_scalable
+        vmf_fast_check_count = vmf_fast_check(self.args.vmf_in)
+        logger.info(f"{vmf_fast_check_count} prop_static_scalable entities found in {self.vmf_file_name}.vmf")
+        
+        # Изначальное состояние, initial state
+        self.cache = None
+        self.project = None
+        
+        
+        # self.cache = GlobalCache(Path(CACHE_FILE))
+        # self.cache.load()
+        # logger.debug(f"self.cache:\n{self.cache}")
+    
+    # Получаем и проверяем гейминфо, записываем в self.project.gameinfo_path
+    
+    # self.project.project_assets
+    # self.project.locations_and_props
+    
+    def run(self) -> int:
+        logger.debug(f"RecompilerApp run")
         # 0. Быстрая проверка что в ВМФ вообще есть нужный класс из ФДГ.
         # 1. Валидация путей, кэша.
+        #       получение гейминфо
+        #       получение и валидация путей из гейминфо
+        #       получение проекта из кэша по гейминфо:
+        #       self.cache.get_project(str(Path(self.gameinfo_path).as_posix()).lower())
         # 2. Чтение VMF.
         # 3. Анализ что делать дальше (сверка с кэшем). Скорее всего покраска делается приоритетнее скейла, т.к. меняются исходные модели. Ещё возможно нужен флаг в класс оригов что был покрашен и нужно рекомпильнуть все дочерние поскейленные ассеты.
         # 4. Пайлайн:
@@ -195,11 +218,12 @@ def setup_logging(
             message = super().format(record)
             return f"{log_color}{message}{Style.RESET_ALL}"
 
+    # Создаём и настраиваем логгер
     logger = logging.getLogger(logger_name)
     # logger.setLevel(level)
     logger.setLevel(logging.DEBUG)   # принимаем всё, а фильтруют хэндлеры
     logger.handlers.clear()
-    # logger.propagate = False возможно понадобится
+    # logger.propagate = False # возможно понадобится
 
     # Консольный хэндлер
     ch = logging.StreamHandler()
@@ -275,6 +299,13 @@ def build_argparser() -> argparse.Namespace:
     parser.add_argument("-debug", type=int, required=False, default=0, help="debug mode")
     return parser.parse_args()
 
+# Функция для быстрого подсчёта количества prop_static_scalable энтитей в ВМФ
+def vmf_fast_check(vmf_in):
+    pattern = re.compile(r'"classname"\s+"prop_static_scalable"')
+    with open(vmf_in, "r", encoding="utf-8") as f:
+        text = f.read()
+    return len(pattern.findall(text))
+
 # ----------------------------------------
 #   Мейн функция
 # ----------------------------------------
@@ -305,6 +336,7 @@ if __name__ == "__main__":
     exit_code = 0
     logger.debug(f'\n\n========================================================================================\n===================================== NEW COMPILE ======================================\n=========================== Start date: {time.strftime("%d.%m.%Y %H:%M:%S", time.localtime(time.time()))} ============================\n========================================================================================')
     try:
+        start_time = time.time()
         exit_code = int(main())
     except KeyboardInterrupt:
         logger.info(f"Interrupted by user (Ctrl+C)")
@@ -317,6 +349,11 @@ if __name__ == "__main__":
         logger.exception("Unhandled exception")
         exit_code = 1
     finally:
+        elapsed_time = time.time() - start_time
+        hours, remainder = divmod(elapsed_time, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        logger.info(f"Time spent: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds")
+        logger.good(f"props_scaling_recompiler has finished its work!")
         if exit_code in (1, 130): input("\nPress Enter to exit...")
         logging.shutdown()
     sys.exit(exit_code)
