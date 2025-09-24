@@ -203,6 +203,14 @@ class RecompilerApp:
             logger.debug(f"{searchpath}")
         
         # Полноценное чтение VMF
+        raw_entities = parse_entities(self.args.vmf_in, classnames = {"prop_static_scalable"})
+        if raw_entities:
+            logger.debug(f"raw_entities:")
+            for raw_entity in raw_entities:
+                logger.debug(f"{raw_entity}")
+        else:
+            logger.critical(f"ERROR! Can't read VMF to get entities!")
+        
         
         
         return 0
@@ -349,7 +357,7 @@ def build_argparser() -> argparse.Namespace:
 # Функция для быстрого подсчёта количества prop_static_scalable энтитей в ВМФ
 def vmf_fast_check(vmf_in):
     pattern = re.compile(r'"classname"\s+"prop_static_scalable"')
-    with open(vmf_in, "r", encoding="utf-8") as f:
+    with open(vmf_in, "r", encoding="cp1252") as f:
         text = f.read()
     return len(pattern.findall(text))
 
@@ -472,6 +480,47 @@ def get_searchpaths(gameinfo_path: str):
         logger.debug(f"{searchpath}")
     '''
     return searchpaths
+
+# Парсер VMF
+def parse_entities(vmf_path, classnames = {"prop_static_scalable"}):
+    logger.info(f"Reading VMF...")
+    results = []
+    with open(vmf_path, 'r', encoding="cp1252") as f:
+        lines = iter(f)
+        for line in lines:
+            line = line.strip()
+            if line == "entity":
+                block = {}
+                depth = 0
+                for line in lines:
+                    line = line.strip()
+                    if line == "{":
+                        depth += 1
+                        continue
+                    if line == "}":
+                        depth -= 1
+                        if depth == 0:
+                            break
+                        continue
+                    if depth > 0 and line.startswith('"'):
+                        try:
+                            key, value = line.split('" "')
+                            key = key.strip('"')
+                            value = value.strip('"')
+                            block[key] = value
+                        except ValueError:
+                            continue
+                if block.get("classname") in classnames:
+                    results.append({
+                        "id": block.get("id"),
+                        "classname": block.get("classname"),
+                        "model": block.get("model"),
+                        "modelscale": block.get("modelscale"),
+                        "rendercolor": block.get("rendercolor", "255 255 255"),
+                        "skin": block.get("skin", "0"),
+                        "origin": block.get("origin"),
+                    })
+    return results
 
 # ----------------------------------------
 #   Мейн функция
