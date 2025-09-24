@@ -95,9 +95,19 @@ class Project:
     # хаммеровский путь оригинала, скейл в процентах как в имени нового мдл, скин pss и цвет pss, например:
     # "models/props/cs_militia/van.mdl_300_0_255_255_255"
     
-    # Словарь использования изменённых ассетов на уровнях. 
-    # Ключ - имя уровня. Значение - множество страшных "ключей с 4 параметрами" из словаря scaled_props
-    locations_and_props: Dict[str, Set[str]] = field(default_factory=dict)
+    # Словарь использования изменённых ассетов на уровнях.
+    locations_and_props: Dict[
+        str,                # ключ словаря - имя уровня
+        Tuple[              # значение - кортеж из двух множеств
+            Set[str],       # множество страшных "ключей с 4 параметрами" из словаря scaled_props
+            Set[            # множество кортежей "id энтити + страшный ключ"
+                Tuple[
+                    int,    # id энтити из хаммера
+                    str     # страшный ключ
+                ]
+            ]
+        ]
+    ] = field(default_factory=dict)
 
 # Класс глобального кэша
 class GlobalCache:
@@ -198,20 +208,64 @@ class RecompilerApp:
             logger.critical(f'ERROR! Cant find correct SearchPaths in Gameinfo.txt!\nPlease check the file: {self.gameinfo_path}')
             return 1
         logger.info(f"Searchpaths successfully extracted")
-        logger.debug(f"\self.searchpaths:")
+        logger.debug(f"self.searchpaths:")
         for searchpath in self.searchpaths:
             logger.debug(f"{searchpath}")
         
-        # Полноценное чтение VMF
+        # Парсим энтити нужного класса из VMF
         raw_entities = parse_entities(self.args.vmf_in, classnames = {"prop_static_scalable"})
         if raw_entities:
+            logger.info(f"Entities successfully extracted")
             logger.debug(f"raw_entities:")
-            for raw_entity in raw_entities:
-                logger.debug(f"{raw_entity}")
+            for raw_entity_id, raw_entity_keyvalues in raw_entities.items():
+                logger.debug(f"{raw_entity_id}\t{raw_entity_keyvalues}")
+                _, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, _ = raw_entity_keyvalues
+                logger.debug(f"\t{orig_hmr_rel_path}\t{pss_scale_float}\t{pss_rendercolor}\t{pss_skin}\n")
         else:
             logger.critical(f"ERROR! Can't read VMF to get entities!")
         
+        # Попробуем генерировать страшные ключи
+        # {orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor}
+        scary_keys = []
+        for raw_entity_id, raw_entity_keyvalues in raw_entities.items():
+            _, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, pss_origin = raw_entity_keyvalues
+            scale_percent = int(float(pss_scale_float) * 100)
+            scary_key = f"{orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor.replace(' ', '_')}"
+            scary_keys.append(scary_key) # Добавляется без проверки на дубли, это ок если мы хотим связывать с айди в locations_and_props
+        # Проверяем чё получилось
+        logger.debug(f"scary_keys:")
+        for scary_key in scary_keys:
+            logger.debug(f"\t{scary_key}")
         
+        
+        
+        
+        '''
+        # Заполняем self.project.locations_and_props
+        # блять нужно проверять как было и как стало
+        for raw_entity in raw_entities:
+            logger.debug(f"{raw_entity}")
+        '''
+        
+        '''
+        locations_and_props: Dict[
+            str,                # ключ словаря - имя уровня
+            Tuple[              # значение - кортеж из двух множеств
+                Set[str],       # множество страшных "ключей с 4 параметрами" из словаря scaled_props
+                Set[            # множество кортежей "id энтити + страшный ключ"
+                    Tuple[
+                        int,    # id энтити из хаммера
+                        str     # страшный ключ
+                    ]
+                ]
+            ]
+        ] = field(default_factory=dict)
+        '''
+        
+        # тут конечно надо очень мощно подумать чё дальше делать и в каком порядке
+        
+        # 
+        # {orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor}
         
         return 0
 
@@ -484,7 +538,7 @@ def get_searchpaths(gameinfo_path: str):
 # Парсер VMF
 def parse_entities(vmf_path, classnames = {"prop_static_scalable"}):
     logger.info(f"Reading VMF...")
-    results = []
+    results = {}
     with open(vmf_path, 'r', encoding="cp1252") as f:
         lines = iter(f)
         for line in lines:
@@ -511,15 +565,49 @@ def parse_entities(vmf_path, classnames = {"prop_static_scalable"}):
                         except ValueError:
                             continue
                 if block.get("classname") in classnames:
-                    results.append({
-                        "id": block.get("id"),
-                        "classname": block.get("classname"),
-                        "model": block.get("model"),
-                        "modelscale": block.get("modelscale"),
-                        "rendercolor": block.get("rendercolor", "255 255 255"),
-                        "skin": block.get("skin", "0"),
-                        "origin": block.get("origin"),
-                    })
+                    entity_id = block.get("id")
+                    if entity_id:
+                        model = block.get("model")
+                        modelscale = block.get("modelscale")
+                        origin = block.get("origin")
+                        
+                        # Сначала проверка правильности скейла
+                        try:
+                            if modelscale is not None:
+                                float(modelscale)
+                        except (ValueError, TypeError):
+                            logger.warning(f'Warning! Model scale of "{os.path.basename(model)}" is wrong! Current value: "{modelscale}". Entity ID: {entity_id}. Entity origin: "{origin}". Compiling with scale 1.')
+                            modelscale = "1"
+                        if float(modelscale) < 0.01:
+                            logger.error(f'ERROR! Model "{os.path.basename(model)}" has wrong scale: "{modelscale}". Should be more than 0.01. Entity ID: "{entity_id}". Entity origin: "{origin}". Skipping!')
+                            modelscale = "1"
+                        
+                        # Теперь обработка поскейленных моделей которые юзаются как оригиналы
+                        if model.count("_scaled_") >= 2:
+                            logger.error(f"ERROR! Multiple times scaled model unsed as non-scaled. Name: {os.path.basename(model)}. ID: {entity_id}. Origin: {origin}. Skipping!")
+                            continue
+                        if "_scaled_" in model:
+                            logger.warning(f"Warning! Scaled model unsed as non-scaled. Name: {os.path.basename(model)}. ID: {entity_id}. Origin: {origin}.")
+                            logger.debug(f"Calculating new scale...")
+                            parts = model.split("_scaled_")
+                            scale_from_name = float(parts[1].replace(".mdl", "")) / 100
+                            logger.debug(f"scale_from_name: {scale_from_name}")
+                            modelscale = round(scale_from_name * float(modelscale), 2)
+                            logger.debug(f"new modelscale: {modelscale}")
+                            base_name = parts[0]
+                            logger.debug(f"base_name: {base_name}")
+                            logger.debug(f"old model hammer path: {model}")
+                            model = base_name + "_scaled_" + str(int(modelscale * 100)) + ".mdl"
+                            logger.debug(f"new model hammer path: {model}")
+                        
+                        results[entity_id] = (
+                            block.get("classname"),
+                            block.get("model"),
+                            modelscale,
+                            block.get("rendercolor", "255 255 255"),
+                            block.get("skin", "0"),
+                            block.get("origin"),
+                        )
     return results
 
 # ----------------------------------------
