@@ -192,14 +192,17 @@ class RecompilerApp:
         
         # Читаем пути из гейминфо
         # Возможно стоит хранить хэш-сумму для гейминфо и запускать этот парс только если он изменился?
+        # В целом не сильно много времени занимает - 0.2 сек
         self.searchpaths = get_searchpaths(self.gameinfo_path)
-        logger.debug(f"self.searchpaths:")
         if not self.searchpaths:
             logger.critical(f'ERROR! Cant find correct SearchPaths in Gameinfo.txt!\nPlease check the file: {self.gameinfo_path}')
             return 1
-        for search_path in self.searchpaths:
-            logger.debug(f"{search_path}")
+        logger.info(f"Searchpaths successfully extracted")
+        logger.debug(f"\self.searchpaths:")
+        for searchpath in self.searchpaths:
+            logger.debug(f"{searchpath}")
         
+        # Полноценное чтение VMF
         
         
         return 0
@@ -451,6 +454,7 @@ def get_searchpaths(gameinfo_path: str):
                     logger.debug(f"[.] Materials folder found: {path_materials}")
                     searchpaths.append((path_type, path_materials))
                     
+            # Всё остальное
             path_models = path + "models"
             path_materials = path + "materials"
             if os.path.exists(path_models):
@@ -462,10 +466,12 @@ def get_searchpaths(gameinfo_path: str):
                 logger.debug(f"[f] Materials folder found: {path_materials}")
                 searchpaths.append((path_type, path_materials))
             
+    '''
     logger.debug(f"\nsearchpaths:")
     for searchpath in searchpaths:
         logger.debug(f"{searchpath}")
-    input("Сладкий чай")
+    '''
+    return searchpaths
 
 # ----------------------------------------
 #   Мейн функция
