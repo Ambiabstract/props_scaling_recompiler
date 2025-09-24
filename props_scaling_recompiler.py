@@ -26,6 +26,8 @@ ABOUT_TOOL_DISCORD      = "Discord: @Ambiabstract"
 # Константы технические
 TOOL_EXE_NAME = os.path.splitext(os.path.basename(sys.argv[0]))[0]
 LOG_FILE = f"{TOOL_EXE_NAME}_log.txt"
+LOG_MAXBYTES = 2_000_000
+LOG_BACKUPCOUNT = 5
 CACHE_FILE = f"{TOOL_EXE_NAME}_cache.pkl"
 TEMP_FILES_FOLDER = f"{TOOL_EXE_NAME}_temp"
 
@@ -228,17 +230,91 @@ class RecompilerApp:
         # {orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor}
         scary_keys = []
         for raw_entity_id, raw_entity_keyvalues in raw_entities.items():
+            # Собираем страшный ключ
             _, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, pss_origin = raw_entity_keyvalues
             scale_percent = int(float(pss_scale_float) * 100)
             scary_key = f"{orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor.replace(' ', '_')}"
-            scary_keys.append(scary_key) # Добавляется без проверки на дубли, это ок если мы хотим связывать с айди в locations_and_props
+            
+            # Тут надо сохранить старое содержание locations_and_props для последующего сравнения
+            
+            # Заполняем новый locations_and_props
+            if self.vmf_file_name not in self.project.locations_and_props:
+                self.project.locations_and_props[self.vmf_file_name] = (set(), set())
+            self.project.locations_and_props[self.vmf_file_name][0].add(scary_key)
+            self.project.locations_and_props[self.vmf_file_name][1].add((raw_entity_id, scary_key))
+            
+            # Тут сравнивамем старое и новое содержание locations_and_props для данной локации.
+            # Разница - набор ассетов, наличие которых надо проверить в других локациях.
+            # Если исчезнувшие ассеты не используются на других локациях - их надо удалить.
+            
+            # Заполняем project_assets
+            if orig_hmr_rel_path not in self.project.project_assets:
+                orig_asset = OrigAsset(orig_hmr_rel_path, "orig_real_path", "orig_is_static", "orig_hash")
+                pss = PropStaticScalable("scld_hmr_rel_path", "scld_skin", orig_asset, pss_scale_float, pss_skin, pss_rendercolor)
+                self.project.project_assets[orig_hmr_rel_path] = (orig_asset, {scary_key: pss})
+            
+            
+            # self.project.project_assets[orig_hmr_rel_path][0].add(scary_key)
+            # self.project.project_assets[orig_hmr_rel_path][1].add((raw_entity_id, scary_key))
+            
+            '''
+            class PropStaticScalable:
+                # Данные поскейленной модели, которые мы получаем на выходе
+                scld_hmr_rel_path: str                  # хаммеровский путь поскейленной модели
+                scld_skin: int                          # какой скин будет назначен поскейленной модели из-за покраски
+                # Данные оригинальной модели и pss сущности
+                orig_asset: OrigAsset                   # объект 
+                pss_scale: float                        # скейл
+                pss_skin: int                           # какой скин оригинальной модели используется для статик пропа
+                pss_rendercolor: str = "255 255 255"    # цвет относительно оригинальной модели
+                # scld_processed: bool = False    # скомпилено и лежит в проекте - я чёт сомневаюсь что мне этот флаг нужен
+            '''
+            
+            '''
+            project_assets: Dict[
+                str,                        # ключ - orig_hmr_rel_path
+                Tuple[                      # связка оригинального ассета и словаря со всеми его измененными версиями
+                    OrigAsset,              # экземпляр класса OrigAsset со всей нужной инфой об ориг ассете
+                    Dict[                   # словарь всех изменённых ассетов scaled_props
+                        str,                # ключ - f"{orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor}" *
+                        PropStaticScalable  # экземпляр класса PropStaticScalable со всей инфой об изменённом ассете
+                    ]
+                ]
+            ] = field(default_factory=dict)
+            '''
+            
+            '''
+            class OrigAsset:
+                orig_hmr_rel_path: str          # хаммеровский путь оригинальной модели
+                orig_real_path: str             # реальный путь к оригинальной модели (как в х++ включая пэкаджи всякие и кастом)
+                orig_is_static: bool            # является ли оригинал изначально статик пропом
+                orig_hash: str                  # хэш-сумма оригинальной модели для того чтобы отслеживать нужна ли рекомпиляция
+                orig_cdmaterials: Set[str] = field(default_factory=set) # папки в которых хранятся VMT оригинала (отн. пути)
+                orig_skinfamilies: List[List[str]] = field(default_factory=list) # список скинов с именами материалов
+                orig_materials: Set[str] = field(default_factory=set) # множество относительных путей материалов
+                orig_skin_map: Dict[Tuple[int, str], int] = field(default_factory=dict) # словарь-карта ремапа: ориг скин + цвет -> новый скин
+            '''
+            
+            
+            
+            # Добавляется в список без проверки на дубли, это ок для проверки
+            scary_keys.append(scary_key)
+        '''
         # Проверяем чё получилось
         logger.debug(f"scary_keys:")
         for scary_key in scary_keys:
             logger.debug(f"\t{scary_key}")
-        
-        
-        
+        '''
+        # logger.debug(f"self.project:\n{self.project}")
+        logger.debug(f"self.project.project_assets:")
+        for key, tuple in self.project.project_assets.items():
+            logger.debug(f"key: {key}")
+            # logger.debug(f"tuple: {tuple}")
+            orig_asset, dict = tuple
+            logger.debug(f"orig_asset: {orig_asset}")
+            for scary_key, psr_obj in dict.items():
+                logger.debug(f"\tkey: {key}")
+                logger.debug(f"\tpsr_obj: {psr_obj}\n")
         
         '''
         # Заполняем self.project.locations_and_props
@@ -341,7 +417,7 @@ def setup_logging(
     logger.addHandler(ch)
     
     # Файловый хэндлер
-    fh = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
+    fh = RotatingFileHandler(LOG_FILE, maxBytes=LOG_MAXBYTES, backupCount=LOG_BACKUPCOUNT, encoding="utf-8")
     fh.setLevel(file_level)
     fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"))
     logger.addHandler(fh)
@@ -597,12 +673,13 @@ def parse_entities(vmf_path, classnames = {"prop_static_scalable"}):
                             base_name = parts[0]
                             logger.debug(f"base_name: {base_name}")
                             logger.debug(f"old model hammer path: {model}")
-                            model = base_name + "_scaled_" + str(int(modelscale * 100)) + ".mdl"
+                            # model = base_name + "_scaled_" + str(int(modelscale * 100)) + ".mdl" # это потом, щас нам нужен хаммеровский путь оригинального непоскейленного ассета
+                            model = base_name + ".mdl"
                             logger.debug(f"new model hammer path: {model}")
                         
                         results[entity_id] = (
                             block.get("classname"),
-                            block.get("model"),
+                            model,
                             modelscale,
                             block.get("rendercolor", "255 255 255"),
                             block.get("skin", "0"),
