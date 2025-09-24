@@ -29,6 +29,22 @@ LOG_FILE = f"{TOOL_EXE_NAME}_log.txt"
 CACHE_FILE = f"{TOOL_EXE_NAME}_cache.pkl"
 TEMP_FILES_FOLDER = f"{TOOL_EXE_NAME}_temp"
 
+# Константы политические
+SKIP_SEARCHPATHS_KEYS = {
+        "platform",
+        "game+mod+mod_write+default_write_path",
+        "game_lv",
+        "game+game_write",
+        "gamebin",
+    }
+SKIP_IF_IN_NAME = {"_vo_", "_sound_", "_sounds_", "_lang_"}
+SKIP_FOLDERS = {
+        ".git", "bin", "cfg", "sound", "scripts", "modelsrc", "screenshots", "media",
+        "materials", "mapsrc", "expressions", "maps", "particles", "scenes", "materialsrc",
+        "resource", "sceneassets", "shadereditorui", "shaders",
+        "vscript_io", "vscript", "vscripts"
+    }
+
 # ----------------------------------------
 #   Классы
 # ----------------------------------------
@@ -157,6 +173,7 @@ class RecompilerApp:
         
         # Получаем и проверяем гейминфо из game
         self.gameinfo_path = self.args.game + r"\gameinfo.txt"
+        self.gameinfo_path = str(Path(self.gameinfo_path).as_posix()).lower()
         if not os.path.exists(self.gameinfo_path):
             logger.critical(f'ERROR! Gameinfo.txt not found! Please check "-game $gamedir" compile/run params in hammer run map options! \nSearch path: {self.args.game}')
             return 1
@@ -170,8 +187,20 @@ class RecompilerApp:
         logger.debug(f"self.cache.projects:\n{self.cache.projects}")
         
         # Получение проекта из кэша по гейминфо:
-        self.project = self.cache.get_project(str(Path(self.gameinfo_path).as_posix()).lower())
+        self.project = self.cache.get_project(self.gameinfo_path)
         logger.debug(f"self.project:\n{self.project}")
+        
+        # Читаем пути из гейминфо
+        # Возможно стоит хранить хэш-сумму для гейминфо и запускать этот парс только если он изменился?
+        self.searchpaths = get_searchpaths(self.gameinfo_path)
+        logger.debug(f"self.searchpaths:")
+        if not self.searchpaths:
+            logger.critical(f'ERROR! Cant find correct SearchPaths in Gameinfo.txt!\nPlease check the file: {self.gameinfo_path}')
+            return 1
+        for search_path in self.searchpaths:
+            logger.debug(f"{search_path}")
+        
+        
         
         return 0
 
@@ -197,7 +226,7 @@ class RecompilerApp:
         # считаем сколько в VMF поскейленных ассетов, если ноль - передаём исходный вмф на выход, если больше нуля то идём дальше
 
 # ----------------------------------------
-#   Функции
+#   Внешние функции
 # ----------------------------------------
 
 # Сетап логгера
@@ -320,6 +349,123 @@ def vmf_fast_check(vmf_in):
     with open(vmf_in, "r", encoding="utf-8") as f:
         text = f.read()
     return len(pattern.findall(text))
+
+def get_searchpaths(gameinfo_path: str):
+    logger.info(f"Getting paths from Gameinfo.txt")
+    logger.debug(f"get_searchpaths gameinfo_path: {gameinfo_path}")
+    
+    # |all_source_engine_paths|
+    all_source_engine_paths = os.path.abspath(os.path.join(get_script_path(), "../../half-life 2"))
+    all_source_engine_paths = str(Path(all_source_engine_paths).as_posix()).lower()+"/"
+    logger.debug(f"all_source_engine_paths: {all_source_engine_paths}")
+    
+    # |gameinfo_path|
+    gameinfo_folder_path = gameinfo_path.replace(os.path.basename(gameinfo_path), "")
+    logger.debug(f"gameinfo_folder_path: {gameinfo_folder_path}")
+    
+    # Список кортежей
+    searchpaths = [] # (path_type, path) ("folder_materials" / "folder_models" / "vpk")
+    
+    in_searchpaths_block = False
+    with open(gameinfo_path, "r", encoding="utf-8") as f:
+        logger.debug(f"get_searchpaths gameinfo opened")
+        for line in f:
+            s = line.strip()
+            if not s or s.startswith("//"): continue
+            s = s.lower()
+            if s.startswith("searchpaths"):
+                in_searchpaths_block = True
+                continue
+            if in_searchpaths_block and s.startswith("}"): break
+            if not in_searchpaths_block: continue
+            s = s.split("//", 1)[0].strip()
+            if not s: continue
+            # s = s.replace("\\", "/") # на всякий случай
+            parts = [part.strip('"') for part in s.split(maxsplit=1)]
+            # logger.debug(f"s: {s}")
+            # logger.debug(f"parts: {parts}")
+            # input("Солёный чай")
+            if len(parts) != 2:
+                continue
+            key, path = parts
+            if key in SKIP_SEARCHPATHS_KEYS: continue
+            
+            if "|all_source_engine_paths|" in path: path = path.replace("|all_source_engine_paths|", all_source_engine_paths)
+            if "|gameinfo_path|" in path: path = path.replace("|gameinfo_path|", gameinfo_folder_path)
+            
+            # Дефолтный тип
+            path_type = "folder" # ("folder_materials" / "folder_models" / "vpk")
+            
+            # Валидация VPK
+            if path.endswith(".vpk"):
+                path_type = "vpk"
+                if any(name_part in path for name_part in SKIP_IF_IN_NAME): continue
+                if os.path.exists(path):
+                    logger.debug(f"VPK found: {path}")
+                    searchpaths.append((path_type, path))
+                elif os.path.exists(path.replace(".vpk", "_dir.vpk")):
+                    logger.debug(f'VPK found: {path.replace(".vpk", "_dir.vpk")}')
+                    searchpaths.append((path_type, path.replace(".vpk", "_dir.vpk")))
+                else:
+                    logger.warning(f"VPK not found: {path}")
+            
+            # Валидация всего что под звёздочкой
+            if path.endswith("*"):
+                root_folder = path.replace("/*", "")
+                for dirpath, dirnames, filenames in os.walk(root_folder):
+                    # norm_path = os.path.normpath(dirpath) я думаю это нахуй не нужно, но на всякий случай пусть пока будет тут
+                    norm_path = dirpath
+                    # Проверяем "/models/"
+                    if norm_path.endswith(os.path.join("models")):
+                        # исключаем если внутри "/materials/models/"
+                        if "materials" + os.sep + "models" not in norm_path.replace("/", os.sep):
+                            path_type = "folder_models"
+                            star_path = norm_path.lower().replace("\\", "/")
+                            logger.debug(f"[*] Models folder found: {star_path}")
+                            searchpaths.append((path_type, star_path))
+                    # Проверяем "/materials/"
+                    if norm_path.endswith(os.path.join("materials")):
+                        path_type = "folder_materials"
+                        star_path = norm_path.lower().replace("\\", "/")
+                        logger.debug(f"[*] Materials folder found: {star_path}")
+                        searchpaths.append((path_type, star_path))
+                    # Проверяем ".vpk" файлы
+                    for f in filenames:
+                        if f.lower().endswith(".vpk"):
+                            path_type = "vpk"
+                            vpk_path = os.path.join(norm_path, f).lower().replace("\\", "/")
+                            if any(name_part in vpk_path for name_part in SKIP_IF_IN_NAME): continue
+                            logger.debug(f"[*] VPK found: {vpk_path}")
+                            searchpaths.append((path_type, vpk_path))
+            
+            # Валидация папок без подпапок
+            if path.endswith("."):
+                path_models = path.replace(".", "") + "models"
+                path_materials = path.replace(".", "") + "materials"
+                if os.path.exists(path_models):
+                    path_type = "folder_models"
+                    logger.debug(f"[.] Models folder found: {path_models}")
+                    searchpaths.append((path_type, path_models))
+                if os.path.exists(path_materials):
+                    path_type = "folder_materials"
+                    logger.debug(f"[.] Materials folder found: {path_materials}")
+                    searchpaths.append((path_type, path_materials))
+                    
+            path_models = path + "models"
+            path_materials = path + "materials"
+            if os.path.exists(path_models):
+                path_type = "folder_models"
+                logger.debug(f"[f] Models folder found: {path_models}")
+                searchpaths.append((path_type, path_models))
+            if os.path.exists(path_materials):
+                path_type = "folder_materials"
+                logger.debug(f"[f] Materials folder found: {path_materials}")
+                searchpaths.append((path_type, path_materials))
+            
+    logger.debug(f"\nsearchpaths:")
+    for searchpath in searchpaths:
+        logger.debug(f"{searchpath}")
+    input("Сладкий чай")
 
 # ----------------------------------------
 #   Мейн функция
