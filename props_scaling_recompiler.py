@@ -156,9 +156,9 @@ class RecompilerApp:
         logger.debug(f"self.args.game: {self.args.game}")
         logger.debug(f"self.args.vmf_in: {self.args.vmf_in}")
         logger.debug(f"self.args.vmf_out: {self.args.vmf_out}")
-        logger.debug(f"self.args.subfolders: {self.args.subfolders}")
-        logger.debug(f"self.args.force_recompile: {self.args.force_recompile}")
         logger.debug(f"self.args.check_origs: {self.args.check_origs}")
+        logger.debug(f"self.args.remove_unused: {self.args.remove_unused}")
+        logger.debug(f"self.args.force_recompile: {self.args.force_recompile}")
         logger.debug(f"self.args.debug: {self.args.debug}")
         
         # Если дебаг параметр активирован, то включаем отображение сообщений дебаг уровня в консоли
@@ -269,12 +269,25 @@ class RecompilerApp:
         1. Если включён режим удаления неиспользованного, удаляем все поскейленные ассеты проекта, находящиеся вне папки models/scaled (избавляемся от легаси моделей)
         2. Если включён режим удаления неиспользованного, проходимся по locations_and_props и составляем список вариаций ассетов, которые ни разу не встретились. Проходимся по файлам проекта и удаляем их.
         '''
+        if self.args.remove_unused == 1:
+            logger.warning(f'Warning! "remove_unused" mode is active!')
+            logger.info(f"Cached maps will be checked and unused scaled assets will be deleted from the project files.")
+            logger.info(f'Legacy-located scaled props (not from "models/scaled" folder) also will be deleted.')
         
         # Актуализация оригинальных ассетов и первая пачка в очередь рекомпиляции если менялся ориг не нашей программой, чем-то извне
         '''
         1. Если включён режим проверки хэшей оригиналов (check_origs = 1), то по orig_hmr_rel_path ищем реальный путь каждого ориг ассета и сверяем хэш. Если хэш отличается - сразу актуализируем данные ориг ассета и добавляем все его вариации в очередь на перекомпиляцию.
         2. Смотрим по orig_hmr_rel_path (именно так!) каких оригинальных моделек ещё нету в кэше в project_assets.
             Для каждого orig_hmr_rel_path, которого нет в project_assets, запускаем метод/функцию, которая заполняет информацию об этих ориг ассетах в project_assets (объекты OrigAsset, но словарь изменённых ассетов естественно пустой, раз ни разу не встречался оригинал).
+        '''
+        # 1
+        if self.args.check_origs == 1:
+            logger.warning(f'Warning! "check_origs" mode is active!')
+            logger.info(f'Hash-sum of all the original models of this map will be checked.')
+            logger.info(f'If its not same as before for a specific original model, all its scaled versions will be recompiled, because original asset has changed since last time we checked.')
+            logger.info(f"This increases the program's running time, so you can turn it off for fast presets of map compilation.")
+        # 2
+        '''
         '''
         
         # (До)заполняем очередь на (ре)компиляцию.
@@ -634,10 +647,10 @@ def parse_entities(vmf_path, classnames = {"prop_static_scalable"}):
                         
                         # Теперь обработка поскейленных моделей которые юзаются как оригиналы
                         if model.count("_scaled_") >= 2:
-                            logger.error(f"ERROR! Multiple times scaled model unsed as non-scaled. Name: {os.path.basename(model)}. ID: {entity_id}. Origin: {origin}. Skipping!")
+                            logger.error(f"ERROR! Multiple times scaled model unsed as non-scaled. Name: {os.path.basename(model)}. ID: {entity_id}. Origin: {origin}. Skipping!\nPlease replace it with the original model!")
                             continue
                         if "_scaled_" in model:
-                            logger.warning(f"Warning! Scaled model unsed as non-scaled. Name: {os.path.basename(model)}. ID: {entity_id}. Origin: {origin}.")
+                            logger.warning(f"Warning! Scaled model unsed as non-scaled. Name: {os.path.basename(model)}. ID: {entity_id}. Origin: {origin}.\nPlease replace it with the original model!")
                             logger.debug(f"Calculating new scale...")
                             parts = model.split("_scaled_")
                             scale_from_name = float(parts[1].replace(".mdl", "")) / 100
@@ -691,7 +704,7 @@ if __name__ == "__main__":
     setup_logging()
     logger = logging.getLogger("colored_logger")
     exit_code = 0
-    logger.debug(f'\n\n========================================================================================\n===================================== NEW COMPILE ======================================\n=========================== Start date: {time.strftime("%d.%m.%Y %H:%M:%S", time.localtime(time.time()))} ============================\n========================================================================================')
+    logger.debug(f'\n\n========================================================================================\n=================================== NEW COMPILATION ====================================\n=========================== Start date: {time.strftime("%d.%m.%Y %H:%M:%S", time.localtime(time.time()))} ============================\n========================================================================================')
     try:
         start_time = time.time()
         exit_code = int(main())
