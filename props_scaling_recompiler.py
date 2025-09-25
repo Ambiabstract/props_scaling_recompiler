@@ -344,14 +344,52 @@ class RecompilerApp:
         # {orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor}
         
         return 0
-
         
-        # 0. Быстрая проверка что в ВМФ вообще есть нужный класс из ФДГ.
-        # 1. Валидация путей, кэша.
-        #       получение гейминфо
-        #       получение и валидация путей из гейминфо
-        #       получение проекта из кэша по гейминфо:
-        #       self.cache.get_project(str(Path(self.gameinfo_path).as_posix()).lower())
+        # ВОТ ТУТ АКТУАЛОЧКА
+        
+        '''
+        # Удаление лишнего если remove_unused = 1
+        1. Если включён режим удаления неиспользованного, удаляем все поскейленные ассеты проекта, находящиеся вне папки models/scaled (избавляемся от легаси моделей)
+        2. Если включён режим удаления неиспользованного, проходимся по locations_and_props и составляем список вариаций ассетов, которые ни разу не встретились. Проходимся по файлам проекта и удаляем их.
+        
+        # Актуализация оригинальных ассетов и первая пачка в очередь рекомпиляции если менялся ориг не нашей программой, чем-то извне
+        1. Если включён режим проверки хэшей оригиналов (check_origs = 1), то по orig_hmr_rel_path ищем реальный путь каждого ориг ассета и сверяем хэш. Если хэш отличается - сразу актуализируем данные ориг ассета и добавляем все его вариации в очередь на перекомпиляцию.
+        2. Смотрим по orig_hmr_rel_path (именно так!) каких оригинальных моделек ещё нету в кэше в project_assets.
+            Для каждого orig_hmr_rel_path, которого нет в project_assets, запускаем метод/функцию, которая заполняет информацию об этих ориг ассетах в project_assets (объекты OrigAsset, но словарь изменённых ассетов естественно пустой, раз ни разу не встречался оригинал).
+        
+        # (До)заполняем очередь на (ре)компиляцию.
+        Проходимся по оригинальным ассетам проекта и сверяем по scary_keys каких вариаций ещё нет в кэше, добавляем такие вариации в очередь на компиляцию.
+        
+        # Защита от удалённых не нашей программой поскейленных ассетов.
+        Если включён режим доп проверки, то для всех ассетов проекта проходимся по версиям ассетов и проверяем что они действительно есть в проекте.
+        Если какой-то вариации нету - добавляем в очередь на компиляцию.
+        
+        # Проходимся по очереди на компиляцию.
+        Во главе угла - ориг ассет.
+        Для каждого ориг ассета:
+            - находим ориг модель, вытаскиваем и декомпилируем
+            - [покраска] вычисляем всякую хуйню по сочетаниям скинов и материалов, редактируем QC оригинала
+            - [покраска] находим ориг материалы, создаём копии VMT в соответствии с вычислениями, кладём в нужное место
+            - [скейлинг] копируем QC для каждой вариации скейла и меняем параметры (скейл для разных типов, статик проп если был динамик и тд)
+            - компилируем оригинал и все вариации
+            - проверяем что всё доехало куда надо, заполняем данные о получившихся приколах в project_assets
+            
+        # Заполняем VMF.
+        Одним проходом читаем старый вмф и при этом сразу пишем тмп нового вмф, меняя строки по правилам (это будет нмного быстрее чем было ранее).
+        По реальным путям из кэша наличие вариации ассета не проверяем, это лишнее время. Все проверки до этого должны были закрыть эти дыры, задача этого этапа - только запись нового ВМФ.
+        Передаём получившийся ВМФ на выход.
+        
+        # Единый список проблем.
+        В конце даём сводку ВСЕХ ошибок и недочётов которые были найдены на протяжении всего процесса работы программы. Один список в конце - намного удобнее, чем читать весь кэш.
+        
+        
+        Разделять на покраску и скейл не будем, всё равно и то и другое надо через трансформ QC делать, а в обоих случаях у нас будет доступ к QC оригинала.
+        Передавать в обработчик будем список в формате ?????
+        
+        '''
+        
+        
+
         # 2. Чтение VMF.
         # 3. Анализ что делать дальше (сверка с кэшем). Скорее всего покраска делается приоритетнее скейла, т.к. меняются исходные модели. Ещё возможно нужен флаг в класс оригов что был покрашен и нужно рекомпильнуть все дочерние поскейленные ассеты.
         # 4. Пайлайн:
@@ -472,17 +510,18 @@ def initial_check():
     logger.debug(f"initial_check success")
     return True
 
-# Функция которая собирает параметры запуска
-def build_argparser() -> argparse.Namespace:
+# Функция которая создаёт парсер параметров запуска
+def build_argparser():
     parser = argparse.ArgumentParser(description=f"props_scaling_recompiler usage:")
-    parser.add_argument("-game", type=str, required=True, help="Path to the game directory")
-    parser.add_argument("-vmf_in", type=str, required=True, help="Path to the input .vmf file")
-    parser.add_argument("-vmf_out", type=str, required=True, help="Path to the output .vmf file")
-    parser.add_argument("-subfolders", type=int, required=False, default=1, help="Using subfolders (0 or 1)")
-    parser.add_argument("-force_recompile", type=int, required=False, default=0, help="Recompile all props for this map (0 or 1)")
-    parser.add_argument("-check_origs", type=int, required=False, default=0, help="Check hash-sum of original models (0 or 1)")
-    parser.add_argument("-debug", type=int, required=False, default=0, help="debug mode")
-    return parser.parse_args()
+    parser.add_argument("-game", type=str, required=True, help="Path to the game directory ($gamedir).")
+    parser.add_argument("-vmf_in", type=str, required=True, help="Path to the input .vmf file ($path\$file.vmf)")
+    parser.add_argument("-vmf_out", type=str, required=True, help="Path to the output .vmf file ($path\psr_temp\$file.vmf)")
+    parser.add_argument("-subfolders", type=int, required=False, default=1, help="LEGACY - DO NOT USE!")
+    parser.add_argument("-check_origs", type=int, required=False, default=1, help="(Optional) Check hash-sum of original models. If its not same as before - all scaled versions will be recompiled, because original asset has changed since last time we checked. 1 - turn on, 0 - turn off. Default - 1.")
+    parser.add_argument("-remove_unused", type=int, required=False, default=0, help="(Optional) Checks cached maps and deletes unused scaled assets. Also deletes legacy-located scaled props (not from models/scaled folder). 1 - turn on, 0 - turn off. Default - 0.")
+    parser.add_argument("-force_recompile", type=int, required=False, default=0, help="(Optional) Recompile all props for this map. 1 - turn on, 0 - turn off. Default - 0.")
+    parser.add_argument("-debug", type=int, required=False, default=0, help="(Optional) Debug mode. Shows all debug messages in console. 1 - turn on, 0 - turn off. Default - 0.")
+    return parser
 
 # Функция для быстрого подсчёта количества prop_static_scalable энтитей в ВМФ
 def vmf_fast_check(vmf_in):
@@ -698,11 +737,13 @@ def main() -> int:
     logger.info(ABOUT_TOOL_LINK)
     logger.info(ABOUT_TOOL_DISCORD+"\n")
     if not initial_check(): return 1
+    parser = build_argparser()
     try:
-        args = build_argparser()
+        args = parser.parse_args()
     except:
         os.system('cls' if os.name == 'nt' else 'clear')
-        logger.critical(f"ERROR! Input args not found!")
+        logger.critical(f"ERROR! The input arguments are invalid!")
+        parser.print_help()
         return 1
     return RecompilerApp(args).run()
     return 0
