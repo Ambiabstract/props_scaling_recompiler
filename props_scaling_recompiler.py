@@ -181,7 +181,7 @@ class RecompilerApp:
         # Проверяем по быстрому сколько раз в файле встречается класс prop_static_scalable
         vmf_fast_check_count = vmf_fast_check(self.args.vmf_in)
         logger.info(f"{vmf_fast_check_count} prop_static_scalable entities found in {self.vmf_file_name}.vmf")
-        if vmf_fast_check_count == 0: return 0 # если нету нужных энтитей - работа программы завершена
+        if vmf_fast_check_count == 0: return 0 # если нету нужных энтитей - работа программы завершена успешно
         
         # Получаем и проверяем гейминфо из game
         self.gameinfo_path = self.args.game + r"\gameinfo.txt"
@@ -191,43 +191,50 @@ class RecompilerApp:
             return 1
         logger.debug(f"self.gameinfo_path: {self.gameinfo_path}")
         
-        # Получаем кэш и проект
+        # Получаем кэш
         self.cache = GlobalCache(Path(CACHE_FILE))
         self.cache.load()
-        logger.debug(f"self.cache:\n{self.cache}")
-        logger.debug(f"self.cache.path:\n{self.cache.path}")
-        logger.debug(f"self.cache.projects:\n{self.cache.projects}")
+        '''
+        # logger.debug(f"self.cache:\n{self.cache}")
+        # logger.debug(f"self.cache.path:\n{self.cache.path}")
+        # logger.debug(f"self.cache.projects:\n{self.cache.projects}")
+        '''
         
         # Получение проекта из кэша по гейминфо:
         self.project = self.cache.get_project(self.gameinfo_path)
-        logger.debug(f"self.project:\n{self.project}")
+        '''
+        # logger.debug(f"self.project:\n{self.project}")
+        '''
         
         # Читаем пути из гейминфо
-        # Возможно стоит хранить хэш-сумму для гейминфо и запускать этот парс только если он изменился?
-        # В целом не сильно много времени занимает - 0.2 сек
         self.searchpaths = get_searchpaths(self.gameinfo_path)
         if not self.searchpaths:
             logger.critical(f'ERROR! Cant find correct SearchPaths in Gameinfo.txt!\nPlease check the file: {self.gameinfo_path}')
             return 1
         logger.info(f"Searchpaths successfully extracted")
-        logger.debug(f"self.searchpaths:")
-        for searchpath in self.searchpaths:
-            logger.debug(f"{searchpath}")
+        '''
+        # logger.debug(f"self.searchpaths:")
+        # for searchpath in self.searchpaths:
+            # logger.debug(f"{searchpath}")
+        '''
         
         # Парсим энтити нужного класса из VMF
         raw_entities = parse_entities(self.args.vmf_in, classnames = {"prop_static_scalable"})
         if raw_entities:
             logger.info(f"Entities successfully extracted")
-            logger.debug(f"raw_entities:")
-            for raw_entity_id, raw_entity_keyvalues in raw_entities.items():
-                logger.debug(f"{raw_entity_id}\t{raw_entity_keyvalues}")
-                _, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, _ = raw_entity_keyvalues
-                logger.debug(f"\t{orig_hmr_rel_path}\t{pss_scale_float}\t{pss_rendercolor}\t{pss_skin}\n")
+            '''
+            # logger.debug(f"raw_entities:")
+            # for raw_entity_id, raw_entity_keyvalues in raw_entities.items():
+                # logger.debug(f"{raw_entity_id}\t{raw_entity_keyvalues}")
+                # _, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, _ = raw_entity_keyvalues
+                # logger.debug(f"\t{orig_hmr_rel_path}\t{pss_scale_float}\t{pss_rendercolor}\t{pss_skin}\n")
+            '''
         else:
-            logger.critical(f"ERROR! Can't read VMF to get entities!")
+            logger.critical(f"ERROR! Can't read {self.vmf_file_name}.vmf} to get entities!")
         
         # Попробуем генерировать страшные ключи
         # {orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor}
+        '''
         scary_keys = []
         for raw_entity_id, raw_entity_keyvalues in raw_entities.items():
             # Собираем страшный ключ
@@ -263,6 +270,7 @@ class RecompilerApp:
             for scary_key, psr_obj in dict.items():
                 logger.debug(f"\tkey: {key}")
                 logger.debug(f"\tpsr_obj: {psr_obj}\n")
+        '''
         
         # Удаление лишнего если remove_unused = 1
         '''
@@ -273,32 +281,42 @@ class RecompilerApp:
             logger.warning(f'Warning! "remove_unused" mode is active!')
             logger.info(f"Cached maps will be checked and unused scaled assets will be deleted from the project files.")
             logger.info(f'Legacy-located scaled props (not from "models/scaled" folder) also will be deleted.')
+            logger.error(f'Дописать эту ветку')
         
-        # Актуализация оригинальных ассетов и первая пачка в очередь рекомпиляции если менялся ориг не нашей программой, чем-то извне
+        # Проходимся по orig_hmr_rel_path ????????
+        # ???????
+
+        
+        # [Проходимся по orig_hmr_rel_path]
         '''
-        1. Если включён режим проверки хэшей оригиналов (check_origs = 1), то по orig_hmr_rel_path ищем реальный путь каждого ориг ассета и сверяем хэш. Если хэш отличается - сразу актуализируем данные ориг ассета и добавляем все его вариации в очередь на перекомпиляцию.
-        2. Смотрим по orig_hmr_rel_path (именно так!) каких оригинальных моделек ещё нету в кэше в project_assets.
-            Для каждого orig_hmr_rel_path, которого нет в project_assets, запускаем метод/функцию, которая заполняет информацию об этих ориг ассетах в project_assets (объекты OrigAsset, но словарь изменённых ассетов естественно пустой, раз ни разу не встречался оригинал).
+        Если включён режим форс рекомпайла - добавляем все ассеты локации в очередь рекомпиляции и сразу переходим к ней.
         '''
-        # 1
+        # [Проходимся по orig_hmr_rel_path]
+        # Первая пачка в очередь рекомпиляции если менялся ориг не нашей программой, чем-то извне
+        '''
+        Если включён режим проверки хэшей оригиналов (check_origs = 1), то по orig_hmr_rel_path ищем реальный путь каждого ориг ассета локации и сверяем хэш. Если хэш отличается - сразу актуализируем данные ориг ассета и добавляем все его вариации в очередь на перекомпиляцию.
+        '''
         if self.args.check_origs == 1:
             logger.warning(f'Warning! "check_origs" mode is active!')
             logger.info(f'Hash-sum of all the original models of this map will be checked.')
             logger.info(f'If its not same as before for a specific original model, all its scaled versions will be recompiled, because original asset has changed since last time we checked.')
             logger.info(f"This increases the program's running time, so you can turn it off for fast presets of map compilation.")
-        # 2
+        # [Проходимся по orig_hmr_rel_path]
+        # Защита от удалённых не нашей программой поскейленных ассетов.
         '''
+        Если включён режим доп проверки потерянных ассетов, то для всех ориг ассетов уровня проходимся по версиям ассетов и проверяем что они действительно есть в проекте.
+        Если какой-то вариации нету - добавляем в очередь на компиляцию.
         '''
-        
+        # [Проходимся по orig_hmr_rel_path]
+        # Актуализация оригинальных ассетов
+        '''
+        Смотрим по orig_hmr_rel_path из VMF, каких оригинальных моделек ещё нету в кэше в project_assets.
+        Для каждого orig_hmr_rel_path, которого нет в project_assets, запускаем метод/функцию, которая заполняет информацию об этих ориг ассетах в project_assets (объекты OrigAsset, но словарь изменённых ассетов естественно оставляем пустым, раз ни разу не встречался оригинал).
+        '''
+        # [Проходимся по orig_hmr_rel_path]
         # (До)заполняем очередь на (ре)компиляцию.
         '''
         Проходимся по оригинальным ассетам проекта и сверяем по scary_keys каких вариаций ещё нет в кэше, добавляем такие вариации в очередь на компиляцию.
-        '''
-        
-        # Защита от удалённых не нашей программой поскейленных ассетов.
-        '''
-        Если включён режим доп проверки, то для всех ассетов проекта проходимся по версиям ассетов и проверяем что они действительно есть в проекте.
-        Если какой-то вариации нету - добавляем в очередь на компиляцию.
         '''
         
         # Проходимся по очереди на компиляцию.
