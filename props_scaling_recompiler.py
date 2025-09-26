@@ -290,7 +290,7 @@ class RecompilerApp:
             logger.info(f'Legacy-located scaled props (not from "models/scaled" folder) also will be deleted.')
             logger.error(f'Дописать эту ветку')
         
-        # Проба по 3 положняку
+        # Собираем словарь того, что отсутствует в кэше и что нам надо рекомпилировать
         d_orig_setvalues_todo = {}
         for eid_pss, t_pss_keyvalues in d_eid_pss_data.items():
             pss_class, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, pss_origin = t_pss_keyvalues
