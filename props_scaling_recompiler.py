@@ -219,26 +219,26 @@ class RecompilerApp:
         '''
         
         # Парсим энтити нужного класса из VMF
-        raw_entities = parse_entities(self.args.vmf_in, classnames = {"prop_static_scalable"})
-        if raw_entities:
+        d_eid_pss_data = parse_entities(self.args.vmf_in, classnames = {"prop_static_scalable"})
+        if d_eid_pss_data:
             logger.info(f"Entities successfully extracted")
             '''
-            # logger.debug(f"raw_entities:")
-            # for raw_entity_id, raw_entity_keyvalues in raw_entities.items():
-                # logger.debug(f"{raw_entity_id}\t{raw_entity_keyvalues}")
-                # _, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, _ = raw_entity_keyvalues
+            # logger.debug(f"d_eid_pss_data:")
+            # for eid_pss, pss_keyvalues in d_eid_pss_data.items():
+                # logger.debug(f"{eid_pss}\t{pss_keyvalues}")
+                # _, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, _ = pss_keyvalues
                 # logger.debug(f"\t{orig_hmr_rel_path}\t{pss_scale_float}\t{pss_rendercolor}\t{pss_skin}\n")
             '''
         else:
-            logger.critical(f"ERROR! Can't read {self.vmf_file_name}.vmf} to get entities!")
+            logger.critical(f"ERROR! Can't read {self.vmf_file_name}.vmf to get entities!")
         
         # Попробуем генерировать страшные ключи
         # {orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor}
         '''
         scary_keys = []
-        for raw_entity_id, raw_entity_keyvalues in raw_entities.items():
+        for eid_pss, pss_keyvalues in d_eid_pss_data.items():
             # Собираем страшный ключ
-            _, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, pss_origin = raw_entity_keyvalues
+            _, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, pss_origin = pss_keyvalues
             scale_percent = int(float(pss_scale_float) * 100)
             scary_key = f"{orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor.replace(' ', '_')}"
             
@@ -248,7 +248,7 @@ class RecompilerApp:
             if self.vmf_file_name not in self.project.locations_and_props:
                 self.project.locations_and_props[self.vmf_file_name] = (set(), set())
             self.project.locations_and_props[self.vmf_file_name][0].add(scary_key)
-            self.project.locations_and_props[self.vmf_file_name][1].add((raw_entity_id, scary_key))
+            self.project.locations_and_props[self.vmf_file_name][1].add((eid_pss, scary_key))
             
             # Тут сравнивамем старое и новое содержание locations_and_props для данной локации.
             # Разница - набор ассетов, наличие которых надо проверить в других локациях.
@@ -270,6 +270,13 @@ class RecompilerApp:
             for scary_key, psr_obj in dict.items():
                 logger.debug(f"\tkey: {key}")
                 logger.debug(f"\tpsr_obj: {psr_obj}\n")
+        # лучше нейминг
+        for key_orig_hmr_rel_path, t_orig_pss in self.project.project_assets.items():
+                orig_asset_obj, d_scary_pss = t_orig_pss
+                logger.debug(f"orig_asset: {orig_asset}")
+                for scary_key, psr_obj in dict.items():
+                    logger.debug(f"\tkey: {key}")
+                    logger.debug(f"\tpsr_obj: {psr_obj}\n")        
         '''
         
         # Удаление лишнего если remove_unused = 1
@@ -283,8 +290,133 @@ class RecompilerApp:
             logger.info(f'Legacy-located scaled props (not from "models/scaled" folder) also will be deleted.')
             logger.error(f'Дописать эту ветку')
         
+        # Проба по 3 положняку
+        d_orig_setvalues_todo = {}
+        for eid_pss, t_pss_keyvalues in d_eid_pss_data.items():
+            pss_class, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, pss_origin = t_pss_keyvalues
+            t_pss_keyvalues_noloc = (pss_class, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin)
+            if orig_hmr_rel_path not in self.project.project_assets:
+                d_orig_setvalues_todo.setdefault(orig_hmr_rel_path, set()).add(t_pss_keyvalues_noloc)
+                continue
+            logger.debug(f"дабстеп круто")
+            t_orig_pss = self.project.project_assets[orig_hmr_rel_path]
+            orig_asset_obj, d_scary_pss = t_orig_pss
+            scale_percent = int(float(pss_scale_float) * 100)
+            scary_key = f"{orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor.replace(' ', '_')}"
+            if scary_key not in d_scary_pss:
+                d_orig_setvalues_todo.setdefault(orig_hmr_rel_path, set()).add(t_pss_keyvalues_noloc)
+                continue
+        logger.info(f"{len(d_orig_setvalues_todo)} original assets need to be found and decompiled")
+        variations_count = 0
+        logger.debug(f"d_orig_setvalues_todo:")
+        for orig_hmr_rel_path, s_pss_keyvalues in d_orig_setvalues_todo.items():
+            logger.debug(f"\t{orig_hmr_rel_path}")
+            for i, t_pss_keyvalues_noloc in enumerate(s_pss_keyvalues):
+                variations_count += 1
+                logger.debug(f"\t\t{t_pss_keyvalues_noloc}")
+        logger.info(f"{variations_count} variations of the original assets need to be created")
+        
+        # Положняк 3
+        '''
+        Анонсируем словарь d_orig_setvalues_todo, где ключ - оригинальный ассет, а значение - множество pss_keyvalues (по аналогии как в функции которая парсит ВМФ, просто ключ у нас не id а orig_hmr_rel_path и значения не могут повторяться вообще).
+        Проходимся циклом по d_eid_pss_data.
+            Если orig_hmr_rel_path в project_assets встречается впервые - добавляем в d_orig_setvalues_todo по ключу, идём дальше.
+            Если orig_hmr_rel_path нашёлся в project_assets - получаем доступ к словарю в кортеже.
+            Генерируем страшный ключ, зная данные из pss_keyvalues.
+            Смотрим, есть ли в словаре в кортеже позиция с таким ключом.
+                Если есть - ничего не делаем, идём дальше.
+                Если нету - добавляем в d_orig_setvalues_todo по ключу со значениями из d_eid_pss_data.
+        Когда d_orig_setvalues_todo будет полностью закончен - можно приступать к главному алгоритму.
+        '''
+        
+        return 0
+        
+        
+        # Положняк 2
+        '''
+        Проходимся циклом по d_eid_pss_data.
+        Если orig_hmr_rel_path встречается впервые - нам полюбому всё равно надо генерировать OrigAsset, т.к. он нам понадобится для декомпила и прочего (а точно??????).
+        Если orig_hmr_rel_path уже есть в project_assets - значит мы можем получить OrigAsset. Есть ли у него при этом словарь с псс и прочим - нас пока что не интересует, это следующий этап.
+        Т.е. сначала мы всё таки парсим энтити из ВМФ и собираем данные об оригиналах.
+        И только когда все данные об оригиналах будет собраны и сформулированы в виде объектов OrigAsset - мы переходим к следующему этапу.
+        
+        Вот допустим у меня все оригассеты собраны. Часть псс-словарей внутри кортежа пустые, а часть не пустые.
+        Мы опять проходимся циклом по тому же самому набору d_eid_pss_data!
+        Но в этот раз у нас для каждого orig_hmr_rel_path имеется кортеж из OrigAsset и словаря.
+        Генерируем страшный ключ.
+        Смотрим, есть ли в этом словаре такой страшный ключ. 
+        Если есть - по идее ничего делать не надо.
+        Если нету - значит нам нужна такая вариация. 
+        Добавляем в словарь entities_todo, где ключ - оригинальный ассет, а значение - множество pss_keyvalues??
+        '''
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        # !!!!!!!!!!!!!!!!!!!!
+        '''
+        Для чего что нужно:
+        - Главный цикл мы должны привязать к оригинальным ассетам. Мы не можем идти по вариациям, в момент компила нужно иметь в доступе информацию сразу обо всём семействе ассетов во главе оригинальной модельки.
+        - Страшный ключ нужен только для двух целей:
+            а) Быстренько проверять, компилировали ли мы такую вариацию раньше или нет. 
+            б) Знать, какие вариации на какой карте используются.
+        
+        Соответственно главный цикл это перебор словаря, где:
+            - ключами являются оригинальные ассеты (hammerpath удобнее был бы я думаю чем OrigAsset)
+            - значениями являются кто? pss_keyvalues? я думаю что да, так было бы удобнее, ведь для новых ассетов-вариаций мы не сможем заполнить экземпляры класса псс, оно скорее для кэша
+        Соответственно перед главным циклом мы должны сгенерировать старшные ключи и по ним определить кого нам надо компилить, а кого не надо. Если форс рекомпайл - всех надо.
+        '''
+        
+        self.d_orig_pss_tuple = {}
+        for eid_pss, pss_keyvalues in d_eid_pss_data.items():
+            # Собираем страшный ключ
+            _, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, pss_origin = pss_keyvalues
+            scale_percent = int(float(pss_scale_float) * 100)
+            scary_key = f"{orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor.replace(' ', '_')}"
+            
+            # Заполняем новый locations_and_props
+            if self.vmf_file_name not in self.project.locations_and_props:
+                self.project.locations_and_props[self.vmf_file_name] = (set(), set())
+            self.project.locations_and_props[self.vmf_file_name][0].add(scary_key)
+            self.project.locations_and_props[self.vmf_file_name][1].add((eid_pss, scary_key))
+        
+        
+        return 0
+        
         # Проходимся по orig_hmr_rel_path ????????
         # ???????
+        
+        '''
+        проходиться мы видимо должны не совсем по orig_hmr_rel_path, а по оригиналам
+        а для этого нужно их сначала заполнить
+        но заполнять pss мы не сможем, ибо они должны заполняться когда моделька полностью скомпилена
+        '''
+        d_orig_pss_tuple = {}
+        for eid_pss, pss_keyvalues in d_eid_pss_data.items():
+            d_orig_pss_tuple = d_orig_pss_tuple.setdefault(orig_hmr_rel_path, []).append(pss_keyvalues)
+            
+            # Заполняем новый locations_and_props
+            if self.vmf_file_name not in self.project.locations_and_props:
+                self.project.locations_and_props[self.vmf_file_name] = (set(), set())
+            self.project.locations_and_props[self.vmf_file_name][0].add(scary_key)
+            self.project.locations_and_props[self.vmf_file_name][1].add((eid_pss, scary_key))
+            
+            # Актуализирум оригинальные ассеты для последующих проходов, но не pss
+            if orig_hmr_rel_path not in self.project.project_assets:
+                orig_asset = OrigAsset(orig_hmr_rel_path, "orig_real_path", "orig_is_static", "orig_hash")
+                pss = PropStaticScalable("scld_hmr_rel_path", "scld_skin", orig_asset, pss_scale_float, pss_skin, pss_rendercolor)
+                self.project.project_assets[orig_hmr_rel_path] = (orig_asset, {scary_key: pss})
+
+
+
+
+
 
         
         # [Проходимся по orig_hmr_rel_path]
@@ -497,7 +629,7 @@ def vmf_fast_check(vmf_in):
     return len(pattern.findall(text))
 
 def get_searchpaths(gameinfo_path: str):
-    logger.info(f"Getting paths from Gameinfo.txt")
+    logger.info(f"Extracting searchpaths from Gameinfo.txt")
     logger.debug(f"get_searchpaths gameinfo_path: {gameinfo_path}")
     
     # |all_source_engine_paths|
@@ -618,7 +750,7 @@ def get_searchpaths(gameinfo_path: str):
 
 # Парсер VMF
 def parse_entities(vmf_path, classnames = {"prop_static_scalable"}):
-    logger.info(f"Reading VMF...")
+    logger.info(f"Extracting entities data from VMF...")
     results = {}
     with open(vmf_path, 'r', encoding="cp1252") as f:
         lines = iter(f)
