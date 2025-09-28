@@ -174,6 +174,7 @@ class RecompilerApp:
         # Изначальное состояние, initial state
         self.cache = None
         self.project = None
+        self.project_files_index = {}
     
     def run(self) -> int:
         logger.debug(f"RecompilerApp run")
@@ -294,102 +295,126 @@ class RecompilerApp:
         if self.vmf_file_name not in self.project.locations_and_props:
             self.project.locations_and_props[self.vmf_file_name] = (set(), set())
         
-        # Собираем словарь того, что отсутствует в кэше и что нам надо рекомпилировать.
-        # Также заполняем locations_and_props.
-        d_orig_setvalues_todo = {}
-        for eid_pss, t_pss_keyvalues in d_eid_pss_data.items():
-            pss_class, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, pss_origin = t_pss_keyvalues
-            
-            scale_percent = int(float(pss_scale_float) * 100)
-            scary_key = f"{orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor.replace(' ', '_')}"
-            self.project.locations_and_props[self.vmf_file_name][0].add(scary_key)
-            self.project.locations_and_props[self.vmf_file_name][1].add((eid_pss, scary_key))
-            
-            t_pss_keyvalues_noloc = (pss_class, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin)
-            if orig_hmr_rel_path not in self.project.project_assets:
-                d_orig_setvalues_todo.setdefault(orig_hmr_rel_path, set()).add(t_pss_keyvalues_noloc)
-                continue
-            
-            logger.debug(f"дабстеп круто")
-            t_orig_pss = self.project.project_assets[orig_hmr_rel_path]
-            orig_asset_obj, d_scary_pss = t_orig_pss
-            if scary_key not in d_scary_pss:
-                d_orig_setvalues_todo.setdefault(orig_hmr_rel_path, set()).add(t_pss_keyvalues_noloc)
-                continue
-        logger.info(f"{len(d_orig_setvalues_todo)} original assets need to be found and decompiled")
-        variations_count = 0
-        logger.debug(f"d_orig_setvalues_todo:")
-        for orig_hmr_rel_path, s_pss_keyvalues in d_orig_setvalues_todo.items():
-            logger.debug(f"\t{orig_hmr_rel_path}")
-            for i, t_pss_keyvalues_noloc in enumerate(s_pss_keyvalues):
-                variations_count += 1
-                logger.debug(f"\t\t{t_pss_keyvalues_noloc}")
-        logger.info(f"{variations_count} variations of the original assets need to be created")
-        
-        # Положняк 3
-        '''
-        Анонсируем словарь d_orig_setvalues_todo, где ключ - оригинальный ассет, а значение - множество pss_keyvalues (по аналогии как в функции которая парсит ВМФ, просто ключ у нас не id а orig_hmr_rel_path и значения не могут повторяться вообще).
-        Проходимся циклом по d_eid_pss_data.
-            Если orig_hmr_rel_path в project_assets встречается впервые - добавляем в d_orig_setvalues_todo по ключу, идём дальше.
-            Если orig_hmr_rel_path нашёлся в project_assets - получаем доступ к словарю в кортеже.
-            Генерируем страшный ключ, зная данные из pss_keyvalues.
-            Смотрим, есть ли в словаре в кортеже позиция с таким ключом.
-                Если есть - ничего не делаем, идём дальше.
-                Если нету - добавляем в d_orig_setvalues_todo по ключу со значениями из d_eid_pss_data.
-        Когда d_orig_setvalues_todo будет полностью закончен - можно приступать к главному алгоритму.
-        '''
-        
-        return 0
-
-
-
-
-
-
-        
-        # [Проходимся по orig_hmr_rel_path]
-        '''
-        Если включён режим форс рекомпайла - добавляем все ассеты локации в очередь рекомпиляции и сразу переходим к ней.
-        '''
-        # [Проходимся по orig_hmr_rel_path]
-        # Первая пачка в очередь рекомпиляции если менялся ориг не нашей программой, чем-то извне
-        '''
-        Если включён режим проверки хэшей оригиналов (check_origs = 1), то по orig_hmr_rel_path ищем реальный путь каждого ориг ассета локации и сверяем хэш. Если хэш отличается - сразу актуализируем данные ориг ассета и добавляем все его вариации в очередь на перекомпиляцию.
-        '''
+        # Предупреждающее сообщение для режима с проверкой хэш суммы оригинальных моделей
         if self.args.check_origs == 1:
             logger.warning(f'Warning! "check_origs" mode is active!')
             logger.info(f'Hash-sum of all the original models of this map will be checked.')
             logger.info(f'If its not same as before for a specific original model, all its scaled versions will be recompiled, because original asset has changed since last time we checked.')
             logger.info(f"This increases the program's running time, so you can turn it off for fast presets of map compilation.")
-        # [Проходимся по orig_hmr_rel_path]
+            # тут продолжить логику
+            # внутри следующего блока нельзя, там оригиналы повторяются
+        
+        # Собираем словарь того, что отсутствует в кэше и что нам надо рекомпилировать.
+        # Также заполняем locations_and_props.
+        d_orig_setvalues_todo = {}
+        for eid_pss, t_pss_keyvalues in d_eid_pss_data.items():
+            # Извлекаем инфу каждой энтити по айдишникам (могут быть повторяющиеся)
+            pss_class, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin, pss_origin = t_pss_keyvalues
+            
+            # Вычисляем скейл в процентах и страшный ключ для каждого сочетания важных для нас параметров,
+            # добавляем страшный ключ в locations_and_props
+            scale_percent = int(float(pss_scale_float) * 100)
+            scary_key = f"{orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor.replace(' ', '_')}"
+            self.project.locations_and_props[self.vmf_file_name][0].add(scary_key)
+            self.project.locations_and_props[self.vmf_file_name][1].add((eid_pss, scary_key))
+            
+            # Генерируем кортеж из той инфы, которая нужна для перекомпила (без origin), т.е. для d_orig_setvalues_todo
+            t_pss_keyvalues_noloc = (pss_class, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin)
+            
+            # Если режим форс рекомпайла - все вариации всех ориг ассетов добавляются в d_orig_setvalues_todo
+            if self.args.force_recompile == 1:
+                d_orig_setvalues_todo.setdefault(orig_hmr_rel_path, set()).add(t_pss_keyvalues_noloc)
+                continue
+            
+            # Если оригинальной модели нет в project_assets - добавляем в d_orig_setvalues_todo
+            if orig_hmr_rel_path not in self.project.project_assets:
+                d_orig_setvalues_todo.setdefault(orig_hmr_rel_path, set()).add(t_pss_keyvalues_noloc)
+                continue
+            
+            # Если оригинальная модель есть - срабатывает эта ветка
+            logger.warning(f'Если оригинальная модель есть - срабатывает эта ветка. Модель: "{orig_hmr_rel_path}"')
+            # Получаем кортеж из keyvalues энтити по ключу (хаммер пути ориг модели)
+            t_orig_pss = self.project.project_assets[orig_hmr_rel_path]
+            # Получаем из кортежа объект ориг модели и словарь вариаций этой модели
+            orig_asset_obj, d_scary_pss = t_orig_pss
+            
+            # Если страшного ключа нету среди ключей в словаре с вариациями - значит именно такой вариации мы ещё не делали, добавляем t_pss_keyvalues_noloc в d_orig_setvalues_todo
+            if scary_key not in d_scary_pss:
+                d_orig_setvalues_todo.setdefault(orig_hmr_rel_path, set()).add(t_pss_keyvalues_noloc)
+                continue
+        logger.info(f"{len(d_orig_setvalues_todo)} original assets need to be found and decompiled")
+        variations_count = 0
+        # logger.debug(f"d_orig_setvalues_todo:")
+        for orig_hmr_rel_path, s_pss_keyvalues in d_orig_setvalues_todo.items():
+            # logger.debug(f"\t{orig_hmr_rel_path}")
+            for i, t_pss_keyvalues_noloc in enumerate(s_pss_keyvalues):
+                variations_count += 1
+                # logger.debug(f"\t\t{t_pss_keyvalues_noloc}")
+        logger.info(f"{variations_count} variations of the original assets need to be created")
+        
         # Защита от удалённых не нашей программой поскейленных ассетов.
         '''
         Если включён режим доп проверки потерянных ассетов, то для всех ориг ассетов уровня проходимся по версиям ассетов и проверяем что они действительно есть в проекте.
         Если какой-то вариации нету - добавляем в очередь на компиляцию.
         '''
-        # [Проходимся по orig_hmr_rel_path]
-        # Актуализация оригинальных ассетов
-        '''
-        Смотрим по orig_hmr_rel_path из VMF, каких оригинальных моделек ещё нету в кэше в project_assets.
-        Для каждого orig_hmr_rel_path, которого нет в project_assets, запускаем метод/функцию, которая заполняет информацию об этих ориг ассетах в project_assets (объекты OrigAsset, но словарь изменённых ассетов естественно оставляем пустым, раз ни разу не встречался оригинал).
-        '''
-        # [Проходимся по orig_hmr_rel_path]
-        # (До)заполняем очередь на (ре)компиляцию.
-        '''
-        Проходимся по оригинальным ассетам проекта и сверяем по scary_keys каких вариаций ещё нет в кэше, добавляем такие вариации в очередь на компиляцию.
+        
+        # Создаём папку для временного контента если её нет
+        if not os.path.exists(TEMP_FILES_FOLDER):
+            os.makedirs(TEMP_FILES_FOLDER)
+        
+        # Главный цикл
+        found_count = 0
+        not_found_count = 0
+        logger.info(f'Main cycle start')
+        self.scan_project_files()
+        if not self.project_files_index:
+            logger.critical(f'Unable to get project files!')
+            return 1
+        for orig_hmr_rel_path, s_pss_keyvalues in d_orig_setvalues_todo.items():
+            logger.debug(f"Searching orig model: {orig_hmr_rel_path}")
+            
+            # - находим ориг модель, вытаскиваем и декомпилируем
+            logger.debug(f"[searching for orig model real path] searchpaths")
+            
+            for t_searchpath in self.searchpaths:
+                path_type, searchpath = t_searchpath
+                
+                if path_type != "folder_models": continue
+                
+                real_path = None
+                real_path = self.find_file_in_project(orig_hmr_rel_path, searchpath)
+                if real_path:
+                    logger.debug(f"real_path: {real_path}")
+                    found_count += 1
+                    break
+            if not real_path: not_found_count += 1
+            
+            # временно
+            pass
+            
+            for i, t_pss_keyvalues_noloc in enumerate(s_pss_keyvalues):                
+                pss_class, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin = t_pss_keyvalues_noloc
+            
+        logger.debug(f"found_count: {found_count}")
+        logger.debug(f"not_found_count: {not_found_count}")
+        elapsed_time = time.time() - start_time
+        hours, remainder = divmod(elapsed_time, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        logger.info(f"Time spent: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds\n")
+        input(f"edik_krutoi")
+        
+        '''        
+                # - [покраска] вычисляем всякую хуйню по сочетаниям скинов и материалов, редактируем QC оригинала
+                
+                # - [покраска] находим ориг материалы, создаём копии VMT в соответствии с вычислениями, кладём в нужное место
+                
+                # - [скейлинг] копируем QC для каждой вариации скейла и меняем параметры (скейл для разных типов, статик проп если был динамик и тд)
+                
+                # - компилируем оригинал и все вариации
+                
+                # - проверяем что всё доехало куда надо, заполняем данные о получившихся приколах в project_assets
         '''
         
-        # Проходимся по очереди на компиляцию.
-        '''
-        Во главе угла - ориг ассет.
-        Для каждого ориг ассета:
-            - находим ориг модель, вытаскиваем и декомпилируем
-            - [покраска] вычисляем всякую хуйню по сочетаниям скинов и материалов, редактируем QC оригинала
-            - [покраска] находим ориг материалы, создаём копии VMT в соответствии с вычислениями, кладём в нужное место
-            - [скейлинг] копируем QC для каждой вариации скейла и меняем параметры (скейл для разных типов, статик проп если был динамик и тд)
-            - компилируем оригинал и все вариации
-            - проверяем что всё доехало куда надо, заполняем данные о получившихся приколах в project_assets
-        '''
         # Сохраняем кэш.
         '''
         '''
@@ -406,16 +431,13 @@ class RecompilerApp:
         В конце даём сводку ВСЕХ ошибок и недочётов которые были найдены на протяжении всего процесса работы программы. Один список в конце - намного удобнее, чем читать весь кэш.
         '''
         
-        
         # старая заметка
         '''
         Разделять на покраску и скейл не будем, всё равно и то и другое надо через трансформ QC делать, а в обоих случаях у нас будет доступ к QC оригинала.
         Передавать в обработчик будем список в формате ?????
         '''
-
         
         return 0
-        
 
         # 2. Чтение VMF.
         # 3. Анализ что делать дальше (сверка с кэшем). Скорее всего покраска делается приоритетнее скейла, т.к. меняются исходные модели. Ещё возможно нужен флаг в класс оригов что был покрашен и нужно рекомпильнуть все дочерние поскейленные ассеты.
@@ -429,6 +451,28 @@ class RecompilerApp:
         # создаём класс который управляет кэшем, загружаем кэш
         # создаём класс который управляет чтением (и записью?) вмф
         # считаем сколько в VMF поскейленных ассетов, если ноль - передаём исходный вмф на выход, если больше нуля то идём дальше
+
+    def scan_project_files(self):
+        self.project_files_index.clear()
+        base_path = self.args.game
+        for root, dirs, files in os.walk(base_path, topdown=True):
+            dirs[:] = [d for d in dirs if d not in SKIP_FOLDERS]
+            rel_dir = os.path.relpath(root, base_path).lower().replace('\\', '/')
+            self.project_files_index[rel_dir] = files
+
+    def find_file_in_project(self, orig_hmr_rel_path, searchpath):
+        base_path = self.args.game.lower()
+        for rel_dir, files in self.project_files_index.items():
+            # Формируем полный путь папки
+            abs_dir = os.path.join(base_path, rel_dir).replace('\\', '/') if rel_dir != "." else base_path
+            # Проверяем условие начала пути
+            if not abs_dir.startswith(searchpath):
+                continue
+            # Проверяем все файлы по концовке
+            for f in files:
+                abs_path = os.path.join(abs_dir, f).replace('\\', '/')
+                if abs_path.endswith(orig_hmr_rel_path):
+                    return abs_path
 
 # ----------------------------------------
 #   Внешние функции
@@ -711,6 +755,10 @@ def parse_entities(vmf_path, classnames = {"prop_static_scalable"}):
                         model = block.get("model")
                         modelscale = block.get("modelscale")
                         origin = block.get("origin")
+                        
+                        if not model:
+                            logger.error(f'ERROR! Cant get model of this entity: ID {entity_id}. Origin: {origin}')
+                            continue
                         
                         # Сначала проверка правильности скейла
                         try:
