@@ -40,12 +40,7 @@ SKIP_SEARCHPATHS_KEYS = {
         "gamebin",
     }
 SKIP_IF_IN_NAME = {"_vo_", "_sound_", "_sounds_", "_lang_"}
-SKIP_FOLDERS = {
-        ".git", "bin", "cfg", "sound", "scripts", "modelsrc", "screenshots", "media",
-        "materials", "mapsrc", "expressions", "maps", "particles", "scenes", "materialsrc",
-        "resource", "sceneassets", "shadereditorui", "shaders",
-        "vscript_io", "vscript", "vscripts"
-    }
+SKIP_FOLDERS = {".git", "bin", "cfg", "sound", "scripts", "modelsrc", "screenshots", "media", "mapsrc", "expressions", "maps", "particles", "scenes", "materialsrc", "resource", "sceneassets", "shadereditorui", "shaders", "vscript_io", "vscript", "vscripts"}
 
 # ----------------------------------------
 #   Классы
@@ -55,7 +50,7 @@ SKIP_FOLDERS = {
 @dataclass
 class OrigAsset:
     orig_hmr_rel_path: str          # хаммеровский путь оригинальной модели
-    orig_real_path: str             # реальный путь к оригинальной модели (как в х++ включая пэкаджи всякие и кастом)
+    orig_full_path: str             # реальный путь к оригинальной модели (как в х++ включая пэкаджи всякие и кастом)
     orig_is_static: bool            # является ли оригинал изначально статик пропом
     orig_hash: str                  # хэш-сумма оригинальной модели для того чтобы отслеживать нужна ли рекомпиляция
     orig_cdmaterials: Set[str] = field(default_factory=set) # папки в которых хранятся VMT оригинала (отн. пути)
@@ -233,6 +228,12 @@ class RecompilerApp:
         else:
             logger.critical(f"ERROR! Can't read {self.vmf_file_name}.vmf to get entities!")
         
+        # Сканирование файлов проекта
+        self.scan_project_files()
+        if not self.project_files_index:
+            logger.critical(f'Unable to get project files!')
+            return 1
+        
         # Попробуем генерировать страшные ключи
         # {orig_hmr_rel_path}_{scale_percent}_{pss_skin}_{pss_rendercolor}
         '''
@@ -257,7 +258,7 @@ class RecompilerApp:
             
             # Заполняем project_assets
             if orig_hmr_rel_path not in self.project.project_assets:
-                orig_asset = OrigAsset(orig_hmr_rel_path, "orig_real_path", "orig_is_static", "orig_hash")
+                orig_asset = OrigAsset(orig_hmr_rel_path, "orig_full_path", "orig_is_static", "orig_hash")
                 pss = PropStaticScalable("scld_hmr_rel_path", "scld_skin", orig_asset, pss_scale_float, pss_skin, pss_rendercolor)
                 self.project.project_assets[orig_hmr_rel_path] = (orig_asset, {scary_key: pss})
         
@@ -362,41 +363,60 @@ class RecompilerApp:
         if not os.path.exists(TEMP_FILES_FOLDER):
             os.makedirs(TEMP_FILES_FOLDER)
         
-        # Главный цикл
-        found_count = 0
+        # Заполнение информации об ориг ассетах
+        logger.info(f'Searching for original assets...')
+        found_project_count = 0
+        found_vpk_count = 0
+        found_cache_count = 0
         not_found_count = 0
-        logger.info(f'Main cycle start')
-        self.scan_project_files()
-        if not self.project_files_index:
-            logger.critical(f'Unable to get project files!')
-            return 1
+        progress = 0
         for orig_hmr_rel_path, s_pss_keyvalues in d_orig_setvalues_todo.items():
             logger.debug(f"Searching orig model: {orig_hmr_rel_path}")
             
-            # - находим ориг модель, вытаскиваем и декомпилируем
-            logger.debug(f"[searching for orig model real path] searchpaths")
+            orig_full_path = None
             
+            # Если оригинальная моделька есть в ассетах проекта - мы можем узнать фулл путь из кэша
+            if orig_hmr_rel_path in self.project.project_assets:
+                t_orig_pss = self.project.project_assets[orig_hmr_rel_path]
+                # Получаем из кортежа объект ориг модели и словарь вариаций этой модели
+                orig_asset_obj, d_scary_pss = t_orig_pss
+                orig_full_path = orig_asset_obj.orig_full_path
+                if orig_full_path:
+                    logger.debug(f"orig_full_path: {orig_full_path}")
+                    found_cache_count += 1
+                    continue
+                else:
+                    logger.warning(f'Warning! "{orig_hmr_rel_path}" found in cache, but full path for it does not found.')
+            
+            # Проходимся по searchpaths из гейминфо
             for t_searchpath in self.searchpaths:
                 path_type, searchpath = t_searchpath
                 
+                orig_full_path = None
+                
                 if path_type != "folder_models": continue
                 
-                real_path = None
-                real_path = self.find_file_in_project(orig_hmr_rel_path, searchpath)
-                if real_path:
-                    logger.debug(f"real_path: {real_path}")
-                    found_count += 1
+                orig_full_path = self.find_file_in_project(orig_hmr_rel_path, searchpath)
+                    
+                if orig_full_path:
+                    logger.debug(f"orig_full_path: {orig_full_path}")
+                    found_project_count += 1
                     break
-            if not real_path: not_found_count += 1
             
-            # временно
-            pass
+            if not orig_full_path: not_found_count += 1
             
-            for i, t_pss_keyvalues_noloc in enumerate(s_pss_keyvalues):                
-                pss_class, orig_hmr_rel_path, pss_scale_float, pss_rendercolor, pss_skin = t_pss_keyvalues_noloc
+            progress += 1
+            if progress >= len(d_orig_setvalues_todo):
+                print(f"Progress: Done!")
+            else:
+                print(f"Progress: {int(progress*100/len(d_orig_setvalues_todo))}%", end="\r")
             
-        logger.debug(f"found_count: {found_count}")
-        logger.debug(f"not_found_count: {not_found_count}")
+        logger.info(f"From {len(d_orig_setvalues_todo)} original assets:")
+        logger.info(f"{found_cache_count} found in cache")
+        logger.info(f"{found_project_count} found in project files")
+        logger.info(f"{found_vpk_count} found in VPK files")
+        if not_found_count != 0: logger.error(f"{not_found_count} original assets not found!")
+        # logger.info(f"{len(need_to_find_in_vpks)} original assets need to be searched for in VPKs")
         elapsed_time = time.time() - start_time
         hours, remainder = divmod(elapsed_time, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -453,10 +473,13 @@ class RecompilerApp:
         # считаем сколько в VMF поскейленных ассетов, если ноль - передаём исходный вмф на выход, если больше нуля то идём дальше
 
     def scan_project_files(self):
+        logger.info(f'Scanning project files...')
         self.project_files_index.clear()
         base_path = self.args.game
         for root, dirs, files in os.walk(base_path, topdown=True):
-            dirs[:] = [d for d in dirs if d not in SKIP_FOLDERS]
+            if os.path.abspath(root) == os.path.abspath(base_path): # 2532
+                dirs[:] = [d for d in dirs if d not in SKIP_FOLDERS]
+            # dirs[:] = [d for d in dirs if d not in SKIP_FOLDERS] # 2439
             rel_dir = os.path.relpath(root, base_path).lower().replace('\\', '/')
             self.project_files_index[rel_dir] = files
 
