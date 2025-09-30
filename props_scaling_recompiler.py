@@ -173,14 +173,14 @@ class RecompilerApp:
             else os.path.join(get_script_path(), "vpkeditcli.exe")
         )
         if not os.path.exists(self.vpkeditcli_path):
-            logger.critical(f'Something wrong with vpkeditcli.exe path!')
+            logger.critical(f'Something wrong with vpkeditcli.exe path! Please report about this bug!')
         self.ccld_path = (
             os.path.join(get_script_path(), "third-party", "CrowbarCommandLineDecomp.exe")
             if os.path.exists(os.path.join(get_script_path(), "third-party", "CrowbarCommandLineDecomp.exe"))
             else os.path.join(get_script_path(), "CrowbarCommandLineDecomp.exe")
         )
         if not os.path.exists(self.ccld_path):
-            logger.critical(f'Something wrong with CrowbarCommandLineDecomp.exe path!')
+            logger.critical(f'Something wrong with CrowbarCommandLineDecomp.exe path! Please report about this bug!')
         
         # Изначальное состояние, initial state
         self.cache = None
@@ -229,6 +229,9 @@ class RecompilerApp:
         # for searchpath in self.searchpaths:
             # logger.debug(f"{searchpath}")
         '''
+        
+        # Сразу читаем содержимое всех доступных ВПК, чтобы не делать это для каждой модели
+        self.build_vpk_trees()
         
         # Парсим энтити нужного класса из VMF
         d_eid_pss_data = parse_entities(self.args.vmf_in, classnames = {"prop_static_scalable"})
@@ -385,6 +388,7 @@ class RecompilerApp:
         found_vpk_count = 0
         found_cache_count = 0
         not_found_count = 0
+        d_not_found_items = {}
         progress = 0
         for orig_hmr_rel_path, s_pss_keyvalues in d_orig_setvalues_todo.items():
             logger.debug(f"Searching orig model: {orig_hmr_rel_path}")
@@ -420,15 +424,16 @@ class RecompilerApp:
                         break
                 
                 if path_type == "vpk":
-                    self.find_file_in_vpk(orig_hmr_rel_path, searchpath)
-                    # orig_full_path = self.find_file_in_project(orig_hmr_rel_path, searchpath)
+                    if "_materials_" in searchpath: continue
+                    orig_full_path = self.find_file_in_vpk(orig_hmr_rel_path, searchpath)
                     if orig_full_path:
                         logger.debug(f"orig_full_path: {orig_full_path}")
                         found_vpk_count += 1
                         break
                 
-                
-            if not orig_full_path: not_found_count += 1
+            if not orig_full_path:
+                not_found_count += 1
+                d_not_found_items[orig_hmr_rel_path] = s_pss_keyvalues
             
             progress += 1
             if progress >= len(d_orig_setvalues_todo):
@@ -440,7 +445,10 @@ class RecompilerApp:
         logger.info(f"{found_cache_count} found in cache")
         logger.info(f"{found_project_count} found in project files")
         logger.info(f"{found_vpk_count} found in VPK files")
-        if not_found_count != 0: logger.error(f"{not_found_count} original assets not found!")
+        if not_found_count != 0:
+            logger.error(f"{not_found_count} original assets not found:")
+            for orig_hmr_rel_path, s_pss_keyvalues in d_not_found_items.items():
+                logger.error(f'"{orig_hmr_rel_path}"')
         # logger.info(f"{len(need_to_find_in_vpks)} original assets need to be searched for in VPKs")
         elapsed_time = time.time() - start_time
         hours, remainder = divmod(elapsed_time, 3600)
@@ -522,25 +530,28 @@ class RecompilerApp:
                 if abs_path.endswith(rel_path):
                     return abs_path
 
+    def build_vpk_trees(self):
+        self.d_vpk_trees = {}
+        for t_searchpath in self.searchpaths:
+            path_type, vpk_path = t_searchpath
+            if path_type != "vpk": continue
+            vpk_tree = subprocess.run(
+                [self.vpkeditcli_path, '--file-tree', vpk_path],
+                check=True,
+                text=True,
+                capture_output=True
+            )
+            vpk_tree_out = vpk_tree.stdout.lower()
+            self.d_vpk_trees[vpk_path] = vpk_tree_out
+
     def find_file_in_vpk(self, rel_path, vpk_path):
-        logger.debug(f'find_file_in_vpk start')
-        logger.debug(f'rel_path: {rel_path}')
-        logger.debug(f'vpk_path: {vpk_path}')
-        logger.debug(f'self.vpkeditcli_path: {self.vpkeditcli_path}')
-        
-        input('find_file_in_vpk_01')
-        base_path = self.args.game.lower()
-        for rel_dir, files in self.project_files_index.items():
-            # Формируем полный путь папки
-            abs_dir = os.path.join(base_path, rel_dir).replace('\\', '/') if rel_dir != "." else base_path
-            # Проверяем условие начала пути
-            if not abs_dir.startswith(searchpath):
-                continue
-            # Проверяем все файлы по концовке
-            for f in files:
-                abs_path = os.path.join(abs_dir, f).replace('\\', '/')
-                if abs_path.endswith(rel_path):
-                    return abs_path
+        if not self.d_vpk_trees:
+            self.logger.error(f'ERROR! Something wrong with VPK reading logic! Please report about this bug!')
+            return None
+        orig_basename = os.path.basename(rel_path)
+        vpk_tree_out = self.d_vpk_trees[vpk_path]
+        if orig_basename in vpk_tree_out: return vpk_path + '/' + rel_path
+        return None
 
 # ----------------------------------------
 #   Внешние функции
@@ -676,6 +687,7 @@ def get_searchpaths(gameinfo_path: str):
     all_source_engine_paths = os.path.abspath(os.path.join(get_script_path(), "../../half-life 2"))
     all_source_engine_paths = str(Path(all_source_engine_paths).as_posix()).lower()+"/"
     logger.debug(f"all_source_engine_paths: {all_source_engine_paths}")
+    ssdkb13sp_path = os.path.join(all_source_engine_paths, "../source sdk base 2013 singleplayer")
     
     # |gameinfo_path|
     gameinfo_folder_path = gameinfo_path.replace(os.path.basename(gameinfo_path), "")
@@ -724,6 +736,12 @@ def get_searchpaths(gameinfo_path: str):
                 elif os.path.exists(path.replace(".vpk", "_dir.vpk")):
                     logger.debug(f'VPK found: {path.replace(".vpk", "_dir.vpk")}')
                     searchpaths.append((path_type, path.replace(".vpk", "_dir.vpk")))
+                elif os.path.exists(ssdkb13sp_path + "/" + path):
+                    logger.debug(f'VPK found: {ssdkb13sp_path + "/" + path}')
+                    searchpaths.append((path_type, ssdkb13sp_path + "/" + path))
+                elif os.path.exists(ssdkb13sp_path + "/" + path.replace(".vpk", "_dir.vpk")):
+                    logger.debug(f'VPK found: {ssdkb13sp_path + "/" + path.replace(".vpk", "_dir.vpk")}')
+                    searchpaths.append((path_type, ssdkb13sp_path + "/" + path.replace(".vpk", "_dir.vpk")))
                 else:
                     logger.warning(f"VPK not found: {path}")
             
