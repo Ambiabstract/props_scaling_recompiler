@@ -166,6 +166,22 @@ class RecompilerApp:
         self.vmf_file_name, _ = os.path.splitext(os.path.basename(self.args.vmf_in.replace("\\", "/")))
         logger.debug(f"self.vmf_file_name: {self.vmf_file_name}")
         
+        # Назначаем пути вспомогательных программ
+        self.vpkeditcli_path = (
+            os.path.join(get_script_path(), "third-party", "vpkeditcli.exe")
+            if os.path.exists(os.path.join(get_script_path(), "third-party", "vpkeditcli.exe"))
+            else os.path.join(get_script_path(), "vpkeditcli.exe")
+        )
+        if not os.path.exists(self.vpkeditcli_path):
+            logger.critical(f'Something wrong with vpkeditcli.exe path!')
+        self.ccld_path = (
+            os.path.join(get_script_path(), "third-party", "CrowbarCommandLineDecomp.exe")
+            if os.path.exists(os.path.join(get_script_path(), "third-party", "CrowbarCommandLineDecomp.exe"))
+            else os.path.join(get_script_path(), "CrowbarCommandLineDecomp.exe")
+        )
+        if not os.path.exists(self.ccld_path):
+            logger.critical(f'Something wrong with CrowbarCommandLineDecomp.exe path!')
+        
         # Изначальное состояние, initial state
         self.cache = None
         self.project = None
@@ -394,15 +410,24 @@ class RecompilerApp:
                 
                 orig_full_path = None
                 
-                if path_type != "folder_models": continue
+                if path_type == "folder_materials": continue
                 
-                orig_full_path = self.find_file_in_project(orig_hmr_rel_path, searchpath)
-                    
-                if orig_full_path:
-                    logger.debug(f"orig_full_path: {orig_full_path}")
-                    found_project_count += 1
-                    break
-            
+                if path_type == "folder_models":
+                    orig_full_path = self.find_file_in_project(orig_hmr_rel_path, searchpath)
+                    if orig_full_path:
+                        logger.debug(f"orig_full_path: {orig_full_path}")
+                        found_project_count += 1
+                        break
+                
+                if path_type == "vpk":
+                    self.find_file_in_vpk(orig_hmr_rel_path, searchpath)
+                    # orig_full_path = self.find_file_in_project(orig_hmr_rel_path, searchpath)
+                    if orig_full_path:
+                        logger.debug(f"orig_full_path: {orig_full_path}")
+                        found_vpk_count += 1
+                        break
+                
+                
             if not orig_full_path: not_found_count += 1
             
             progress += 1
@@ -483,7 +508,7 @@ class RecompilerApp:
             rel_dir = os.path.relpath(root, base_path).lower().replace('\\', '/')
             self.project_files_index[rel_dir] = files
 
-    def find_file_in_project(self, orig_hmr_rel_path, searchpath):
+    def find_file_in_project(self, rel_path, searchpath):
         base_path = self.args.game.lower()
         for rel_dir, files in self.project_files_index.items():
             # Формируем полный путь папки
@@ -494,7 +519,27 @@ class RecompilerApp:
             # Проверяем все файлы по концовке
             for f in files:
                 abs_path = os.path.join(abs_dir, f).replace('\\', '/')
-                if abs_path.endswith(orig_hmr_rel_path):
+                if abs_path.endswith(rel_path):
+                    return abs_path
+
+    def find_file_in_vpk(self, rel_path, vpk_path):
+        logger.debug(f'find_file_in_vpk start')
+        logger.debug(f'rel_path: {rel_path}')
+        logger.debug(f'vpk_path: {vpk_path}')
+        logger.debug(f'self.vpkeditcli_path: {self.vpkeditcli_path}')
+        
+        input('find_file_in_vpk_01')
+        base_path = self.args.game.lower()
+        for rel_dir, files in self.project_files_index.items():
+            # Формируем полный путь папки
+            abs_dir = os.path.join(base_path, rel_dir).replace('\\', '/') if rel_dir != "." else base_path
+            # Проверяем условие начала пути
+            if not abs_dir.startswith(searchpath):
+                continue
+            # Проверяем все файлы по концовке
+            for f in files:
+                abs_path = os.path.join(abs_dir, f).replace('\\', '/')
+                if abs_path.endswith(rel_path):
                     return abs_path
 
 # ----------------------------------------
