@@ -7,6 +7,7 @@ import json, pickle, hashlib
 import shutil
 import subprocess
 import time
+import struct, hashlib
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -30,6 +31,24 @@ LOG_MAXBYTES = 2_000_000
 LOG_BACKUPCOUNT = 5
 CACHE_FILE = f"{TOOL_EXE_NAME}_cache.pkl"
 TEMP_FILES_FOLDER = f"{TOOL_EXE_NAME}_temp"
+
+# Константы для чтения флага статик пропа из мдл
+MDL_IDST_LE = 0x54534449  # mdl little-endian
+MDL_STATIC_PROP_FLAG = 1 << 4
+MDL_FLAGS_OFFSET = 0x98  # смещение поля studiohdr_t::flags для мдл
+MDL_IDST = b'IDST'
+
+# Оффсеты studiohdr_t (Source MDL v44/46/48) для чтения инфы о материалах из мдл
+MDL_OFF_TEXTURE_COUNT   = 0xCC  # int numtextures
+MDL_OFF_TEXTURE_INDEX   = 0xD0  # int textureindex (file offset from start of studiohdr)
+MDL_OFF_TXDIR_COUNT     = 0xD4  # int numcdtextures
+MDL_OFF_TXDIR_INDEX     = 0xD8  # int cdtextureindex (file offset to array of int offsets-to-strings)
+MDL_OFF_SKINREF_COUNT   = 0xDC  # int numskinref
+MDL_OFF_SKINFAM_COUNT   = 0xE0  # int numskinfamilies
+MDL_OFF_SKIN_INDEX      = 0xE4  # int skinindex (file offset to USHORT table)
+MDL_STUDIOHDR_SIZE_MIN  = 0x1A0 # safe lower bound for header
+MDL_MSTEXTURE_SIZE      = 64    # sizeof(mstudiotexture_t) in file
+MDL_OFF_MSTEX_NAMEOFF   = 0x00  # int name_offset (relative to start of this struct)
 
 # Константы политические
 SKIP_SEARCHPATHS_KEYS = {
@@ -420,6 +439,24 @@ class RecompilerApp:
                     orig_full_path = self.find_file_in_project(orig_hmr_rel_path, searchpath)
                     if orig_full_path:
                         logger.debug(f"orig_full_path: {orig_full_path}")
+                        
+                        orig_asset = self.build_orig_asset(orig_hmr_rel_path, orig_full_path)
+                        
+                        input('OLOLO')
+                        
+                        # временно
+                        continue
+                        
+                        
+                        
+                        orig_asset = OrigAsset(orig_hmr_rel_path, orig_full_path, orig_is_static, orig_hash, orig_cdmaterials, orig_skinfamilies, orig_materials, orig_skin_map)
+                        
+                        
+                        
+                        pss = PropStaticScalable("scld_hmr_rel_path", "scld_skin", orig_asset, pss_scale_float, pss_skin, pss_rendercolor)
+                        self.project.project_assets[orig_hmr_rel_path] = (orig_asset, {scary_key: pss})
+                        
+                        
                         found_project_count += 1
                         break
                 
@@ -546,12 +583,242 @@ class RecompilerApp:
 
     def find_file_in_vpk(self, rel_path, vpk_path):
         if not self.d_vpk_trees:
-            self.logger.error(f'ERROR! Something wrong with VPK reading logic! Please report about this bug!')
+            logger.error(f'ERROR! Something wrong with VPK reading logic! Please report about this bug!')
             return None
         orig_basename = os.path.basename(rel_path)
         vpk_tree_out = self.d_vpk_trees[vpk_path]
         if orig_basename in vpk_tree_out: return vpk_path + '/' + rel_path
         return None
+
+    def build_orig_asset(self, orig_hmr_rel_path, orig_full_path):
+        # logger.debug(f'build_orig_asset start')
+        # logger.debug(f'orig_hmr_rel_path: {orig_hmr_rel_path}')
+        # logger.debug(f'orig_full_path: {orig_full_path}')
+        
+        # Проверочка на вшивость пути
+        if ".vpk/" in orig_full_path:
+            logger.debug(f'".vpk/" in orig_full_path')
+            # тут нужна логика чтобы открывать впк и читать мдл 
+            # ЛИБО
+            # ошибка если мы всегда ожидаем здесь подготовленный путь с вытащенным оригиналом из впк
+            # я думаю что второй вариант будет лучше
+            return None
+        
+        # Проверяем является ли оригинал статик пропом
+        with open(orig_full_path, 'rb') as f:
+            # Проверяем сигнатуру и версию мдл файла
+            hdr = f.read(8)  # int id; int version;
+            if len(hdr) < 8:
+                logger.error(f"Error! The file is too short for the MDL header: {orig_full_path}")
+                return None
+            mdl_id, version = struct.unpack('<II', hdr)
+            if mdl_id != MDL_IDST_LE:
+                logger.error(f"Error! Doesn't look like Source MDL (IDST was expected): {orig_full_path}")
+                return None
+            # В исходниках studio.h поле flags идёт после 6 векторов (смещение 0x98)
+            f.seek(MDL_FLAGS_OFFSET)
+            data = f.read(4)
+            if len(data) < 4:
+                logger.error(f"Error! Failed to read the flags field: {orig_full_path}")
+                return None
+            (flags,) = struct.unpack('<I', data)
+        orig_is_static = (flags & MDL_STATIC_PROP_FLAG) != 0
+        logger.debug(f'orig_is_static: {orig_is_static}')
+        
+        # Читаем хэш оригинала
+        orig_hash = get_hash_of_file(orig_full_path)
+        logger.debug(f'orig_hash: {orig_hash}')
+        
+        # Функции для чтения orig_cdmaterials
+        def read_u32(f) -> int:
+            d = f.read(4)
+            if len(d) < 4:
+                logger.error(f"Error! Unexpected EOF while reading <I>. MDL: {orig_full_path}")
+                return None
+            return struct.unpack('<I', d)[0]
+        def read_i32_at(f, off: int) -> int:
+            f.seek(off); return read_u32(f)
+        def read_cstring_at(f, off: int, limit: int = 1024) -> str:
+            f.seek(off)
+            out = bytearray()
+            for _ in range(limit):
+                b = f.read(1)
+                if not b or b == b'\x00': break
+                out += b
+            return out.decode('ascii', errors='ignore')
+        
+        # Читаем orig_cdmaterials
+        with open(orig_full_path, 'rb') as f:
+            f.seek(0)
+            if f.read(4) != MDL_IDST:
+                logger.error(f"Error! Doesn't look like Source MDL (IDST was expected): {orig_full_path}")
+                return None
+            version = read_u32(f)
+            if not version: return None
+
+            f.seek(0, os.SEEK_END)
+            file_size = f.tell()
+            if file_size < MDL_STUDIOHDR_SIZE_MIN:
+                logger.error(f"Error! MDL too short (broken header): {orig_full_path}")
+                return None
+
+            # Читаем приколы
+            texture_count = read_i32_at(f, MDL_OFF_TEXTURE_COUNT)
+            texture_index = read_i32_at(f, MDL_OFF_TEXTURE_INDEX)
+            txdir_count   = read_i32_at(f, MDL_OFF_TXDIR_COUNT)
+            txdir_index   = read_i32_at(f, MDL_OFF_TXDIR_INDEX)
+            skinref_count = read_i32_at(f, MDL_OFF_SKINREF_COUNT)
+            skinfam_count = read_i32_at(f, MDL_OFF_SKINFAM_COUNT)
+            skin_index    = read_i32_at(f, MDL_OFF_SKIN_INDEX)
+            
+            # Проверка наличия на всякий случай
+            if any(v is None for v in (
+                texture_count, texture_index,
+                txdir_count, txdir_index,
+                skinref_count, skinfam_count,
+                skin_index
+            )):
+                logger.error(f"Error reading materials info from MDL: {orig_full_path}")
+                return None
+
+            # Доп проверка значения на всякий случай
+            for name, val in (("textureindex", texture_index), ("cdtextureindex", txdir_index), ("skinindex", skin_index)):
+                if not (0 <= val < file_size):
+                    logger.error(f'Error! Incorrect "{name}" ({val})" in MDL: {orig_full_path}')
+                    return None
+
+            # И ещё одна проверочка
+            if texture_count <= 0 or skinref_count <= 0 or skinfam_count <= 0:
+                # У моделей без "вариантов" skinfam_count обычно 1
+                logger.error(f'Error! Incorrect table sizes (values > 0 were expected). MDL: {orig_full_path}')
+                return None
+
+            # return (version, texture_count, texture_index, txdir_count, txdir_index, skinref_count, skinfam_count, skin_index)
+            
+            # перемычка
+            # (version, tcnt, toff, txdcnt, txdoff, refcnt, famcnt, skoff) = (version, texture_count, texture_index, txdir_count, txdir_index, skinref_count, skinfam_count, skin_index)
+        
+            # Получаем список имён материалов
+            materials_names: List[str] = []
+            for i in range(texture_count):
+                entry_off = texture_index + i * MDL_MSTEXTURE_SIZE
+                f.seek(entry_off + MDL_OFF_MSTEX_NAMEOFF)
+                (name_rel,) = struct.unpack('<i', f.read(4))
+                name_abs = entry_off + name_rel
+                materials_names.append(read_cstring_at(f, name_abs))
+            
+            logger.debug(f'materials_names: {materials_names}')
+            
+            # Читаем индексы для orig_skinfamilies (сырая таблица большого размера)
+            f.seek(skin_index)
+            total = skinfam_count * skinref_count
+            raw = f.read(total * 2)
+            if len(raw) < total * 2:
+                logger.error(f'Error reading skin-table! MDL: {orig_full_path}')
+                return None
+            idxs = struct.unpack('<' + 'H'*total, raw)
+            
+            # Преобразуем индексы в имена (полная матрица numskinfamilies x numskinref), собираем orig_skinfamilies
+            orig_skinfamilies: List[List[str]] = []
+            for r in range(skinfam_count):
+                row: List[str] = []
+                base = r * skinref_count
+                for c in range(skinref_count):
+                    t = idxs[base + c]
+                    name = materials_names[t] if 0 <= t < len(materials_names) else ''
+                    row.append(name)
+                orig_skinfamilies.append(row)
+            
+            logger.debug(f'orig_skinfamilies: {orig_skinfamilies}')
+            
+            # Ищем изменяемые колонки, где значения различаются между скинами
+            varying_cols: List[int] = []
+            if orig_skinfamilies:
+                cols = len(orig_skinfamilies[0])
+                for c in range(cols):
+                    values = {row[c] for row in orig_skinfamilies}
+                    if len(values) > 1:
+                        varying_cols.append(c)
+
+            # Если изменяемых колонок нет, возвращаем пустые списки на каждую строку, чтобы было корректно по типу
+            if not varying_cols:
+                return [[] for _ in range(skinfam_count)]
+
+            # Собираем QC формат таблицы (только изменяемые колонки, имена материалов)
+            qc_fams: List[List[str]] = []
+            for row in orig_skinfamilies:
+                qc_row: List[str] = []
+                for c in varying_cols:
+                    name = row[c] or ''
+                    # Добавим .vmt, если его нет в имени
+                    if name and not name.lower().endswith('.vmt'):
+                        name = f"{name}.vmt"
+                    qc_row.append(name)
+                qc_fams.append(qc_row)
+            # return qc_fams
+            orig_skinfamilies = qc_fams
+            
+            logger.debug(f' ')
+            logger.debug(f'orig_skinfamilies: {orig_skinfamilies}')            
+            
+            # (version, texture_count, texture_index, txdir_count, txdir_index, skinref_count, skinfam_count, skin_index)
+            
+            # Читаем cdmaterials
+            f.seek(txdir_index)
+            offs = struct.unpack('<' + 'i'*txdir_count, f.read(4*txdir_count))
+            paths: List[str] = []
+            for off in offs:
+                s = read_cstring_at(f, off) if off != 0 else ""
+                # нормализуем: без ведущего/замыкающего слэша, без префикса materials/
+                s = s.replace('\\', '/').removeprefix('materials/').strip('/')
+                paths.append(s)  # пустая строка допустима (корень materials)
+            # уберём дубликаты с сохранением порядка
+            seen = set(); orig_cdmaterials = []
+            for p in paths:
+                if p not in seen:
+                    seen.add(p); orig_cdmaterials.append(p)
+            # return orig_cdmaterials
+            
+            logger.debug(f' ')
+            logger.debug(f'orig_cdmaterials: {orig_cdmaterials}')  
+            
+            
+            
+            input(f'woooow2')
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        # Читаем orig_skinfamilies
+        
+        # Конструируем orig_materials
+        
+        # Конструируем orig_skin_map
+        
+        
+        input('hahahhahaa')
+        
+        return None
+        
+        orig_asset = OrigAsset(orig_hmr_rel_path, orig_full_path, orig_is_static, orig_hash, orig_cdmaterials, orig_skinfamilies, orig_materials, orig_skin_map)
+        
+        return orig_asset
 
 # ----------------------------------------
 #   Внешние функции
@@ -885,6 +1152,14 @@ def parse_entities(vmf_path, classnames = {"prop_static_scalable"}):
                             block.get("origin"),
                         )
     return results
+
+# Чтение хэша файла
+def get_hash_of_file(filepath: str) -> str:
+    hash_md5 = hashlib.md5()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
 
 # ----------------------------------------
 #   Мейн функция
