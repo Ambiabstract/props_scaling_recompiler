@@ -1077,10 +1077,38 @@ def get_searchpaths(gameinfo_path: str):
 def parse_entities(vmf_path, classnames = {"prop_static_scalable"}):
     logger.info(f"Extracting entities data from VMF...")
     results = {}
+    
+    def skip_block(lines_iter):
+        '''
+        Пропускает блок вида:
+        name
+        {
+            ...
+        }
+        Вызывается уже после чтения строки с именем блока (например, 'hidden').
+        '''
+        depth = 0
+        for line in lines_iter:
+            s = line.strip()
+            if s == "{":
+                depth += 1
+                continue
+            if s == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+                continue
+            # всё остальное игнорируем, пока не закроем блок
+    
     with open(vmf_path, 'r', encoding="cp1252") as f:
         lines = iter(f)
         for line in lines:
             line = line.strip()
+            
+            if line == "hidden":
+                skip_block(lines)
+                continue
+            
             if line == "entity":
                 block = {}
                 depth = 0
