@@ -414,7 +414,7 @@ class RecompilerApp:
             
             orig_full_path = None
             
-            # Если оригинальная моделька есть в ассетах проекта - мы можем узнать фулл путь из кэша
+            # Если оригинальная моделька есть в project_assets - мы можем узнать фулл путь из кэша
             if orig_hmr_rel_path in self.project.project_assets:
                 t_orig_pss = self.project.project_assets[orig_hmr_rel_path]
                 # Получаем из кортежа объект ориг модели и словарь вариаций этой модели
@@ -437,6 +437,7 @@ class RecompilerApp:
                 
                 if path_type == "folder_models":
                     orig_full_path = self.find_file_in_project(orig_hmr_rel_path, searchpath)
+                    # logger.debug(f"searchpath: {searchpath}")
                     if orig_full_path:
                         logger.debug(f"orig_full_path: {orig_full_path}")
                         
@@ -554,13 +555,34 @@ class RecompilerApp:
             self.project_files_index[rel_dir] = files
 
     def find_file_in_project(self, rel_path, searchpath):
-        base_path = self.args.game.lower()
+        base_path = self.args.game.lower().replace('\\', '/')
+        rel_path = rel_path.lower().replace('\\', '/')
+        
+        # Быстрая проверка по ключу
+        ending = "/".join(os.path.dirname(rel_path).split("/")[1:]) if len(os.path.dirname(rel_path).split("/")) >1 else ''
+        key_path = searchpath.replace(base_path, '')[1:] + '/' + ending
+        if not key_path in self.project_files_index: return None
+        files = self.project_files_index[key_path]
+        if not files: return None
+        # logger.debug(f'files: {files}')
+        if os.path.basename(rel_path) in files:
+            abs_path = base_path + '/' + key_path + '/' + os.path.basename(rel_path)
+            # logger.debug(f'abs_path" {abs_path}')
+            # logger.debug(f'os.path.exists(abs_path)" {os.path.exists(abs_path)}')
+            if os.path.exists(abs_path): return abs_path
+        
+        return None
+        
+        # Старый способ
+        logger.warning(f'find_file_in_project old logic! rel_path: {rel_path}')
         for rel_dir, files in self.project_files_index.items():
+            # logger.debug(f'rel_dir: "{rel_dir}"')
             # Формируем полный путь папки
             abs_dir = os.path.join(base_path, rel_dir).replace('\\', '/') if rel_dir != "." else base_path
+            
             # Проверяем условие начала пути
-            if not abs_dir.startswith(searchpath):
-                continue
+            if not abs_dir.startswith(searchpath): continue
+            
             # Проверяем все файлы по концовке
             for f in files:
                 abs_path = os.path.join(abs_dir, f).replace('\\', '/')
@@ -785,6 +807,8 @@ class RecompilerApp:
             
             
             input(f'woooow2')
+            
+            return None
         
         
         
