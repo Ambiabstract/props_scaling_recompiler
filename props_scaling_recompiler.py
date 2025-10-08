@@ -222,6 +222,10 @@ class RecompilerApp:
             return 1
         logger.debug(f"self.gameinfo_path: {self.gameinfo_path}")
         
+        # Сразу вычисляем путь к проекту где лежит гейминфо
+        self.gameinfo_folder_path = self.gameinfo_path.replace(os.path.basename(self.gameinfo_path), "")
+        logger.debug(f"self.gameinfo_folder_path: {self.gameinfo_folder_path}")
+        
         # Получаем кэш
         self.cache = GlobalCache(Path(CACHE_FILE))
         self.cache.load()
@@ -751,7 +755,7 @@ class RecompilerApp:
                     row.append(name)
                 orig_skinfamilies.append(row)
             
-            logger.debug(f'orig_skinfamilies: {orig_skinfamilies}')
+            # logger.debug(f'orig_skinfamilies raw: {orig_skinfamilies}')
             
             # Ищем изменяемые колонки, где значения различаются между скинами
             varying_cols: List[int] = []
@@ -802,13 +806,30 @@ class RecompilerApp:
             # return orig_cdmaterials
             
             logger.debug(f' ')
-            logger.debug(f'orig_cdmaterials: {orig_cdmaterials}')  
+            logger.debug(f'orig_cdmaterials: {orig_cdmaterials}')
+            logger.debug(f' ')
             
+        # Конструируем множество orig_materials, зная orig_cdmaterials и materials_names
+        orig_materials = set()
+        for cdmat_rel_folder in orig_cdmaterials:
+            logger.debug(f'self.gameinfo_folder_path: {self.gameinfo_folder_path}')
+            logger.debug(f'cdmat_rel_folder: {cdmat_rel_folder}')
+            logger.debug(f'orig_full_path: {orig_full_path}')
             
+            cdmat_abs_folder = self.gameinfo_folder_path + 'materials/' + cdmat_rel_folder
+            logger.debug(f'cdmat_abs_folder: {cdmat_abs_folder}')
             
-            input(f'woooow2')
+            for mat_name in materials_names:
+                logger.debug(f'mat_name: {mat_name}')
+                
+                check_mat_path = cdmat_abs_folder + '/' + mat_name + '.vmt'
+                if os.path.exists(check_mat_path):
+                    logger.debug(f'KRUTO')
             
-            return None
+        
+        input(f'woooow2')
+        
+        return None
         
         
         
