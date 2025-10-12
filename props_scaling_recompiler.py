@@ -456,13 +456,6 @@ class RecompilerApp:
                     orig_full_path = finder(orig_hmr_rel_path, searchpath)
                     if orig_full_path:
                         logger.debug(f"orig_full_path: {orig_full_path}")
-                        
-                        '''
-                        # Если моделька найдена в ВПК - надо вытащить её во временную папку вместе с материалами
-                        if path_type == "vpk":
-                            orig_extracted_path = !!!!!!!
-                            orig_full_path = orig_extracted_path
-                        '''
 
                         # Пытаемся создать объект ориг ассета
                         orig_asset = self.build_orig_asset(orig_hmr_rel_path, orig_full_path)
@@ -637,6 +630,21 @@ class RecompilerApp:
         if orig_basename in vpk_tree_out: return vpk_path + '/' + rel_path
         return None
 
+    def extract_from_vpk(self, full_path):
+        if full_path.endswith('.mdl'):
+            logger.debug(f'Логика если мы хотим вытащить из ВПК все файлы модельки, зная путь только до MDL')
+            return None
+        if full_path.endswith('.vmt'):
+            logger.debug(f'Логика если мы хотим вытащить из ВПК конкретный VMT файл')
+            return None
+        if ".vpk/materials/models/" in full_path:
+            logger.debug(f'Логика если мы хотим вытащить из ВПК папку с VMT файлами')
+            return None
+        if ".vpk/models" in full_path:
+            logger.debug(f'Логика если мы хотим вытащить из ВПК папку с моделями')
+            return None
+        return None
+
     def build_orig_asset(self, orig_hmr_rel_path, orig_full_path):
         logger.debug(f'build_orig_asset start')
         # logger.debug(f'orig_hmr_rel_path: {orig_hmr_rel_path}')
@@ -650,6 +658,9 @@ class RecompilerApp:
             # ошибка если мы всегда ожидаем здесь подготовленный путь с вытащенным оригиналом из впк
             # я думаю что второй вариант будет лучше
             # return None
+        
+        # Вытаскивать и модельку и материалы из ВПК надо в пределах этого метода.
+        # И записывать этот путь экстрактнутой модельки надо в переменную с отдельным именем, типа abs path или real path, потому что orig_full_path должен остаться неизменным и в конце записаться в объект класса OrigAsset.
         
         if not os.path.exists(orig_full_path):
             logger.error(f'''Can't find this model: "{orig_full_path}"''')
