@@ -341,9 +341,9 @@ class RecompilerApp:
         # Предупреждающее сообщение для режима с проверкой хэш суммы оригинальных моделей
         if self.args.check_origs == 1:
             logger.warning(f'Warning! "check_origs" mode is active!')
-            logger.info(f'Hash-sum of all the original models of this map will be checked.')
-            logger.info(f'If its not same as before for a specific original model, all its scaled versions will be recompiled, because original asset has changed since last time we checked.')
-            logger.info(f"This increases the program's running time, so you can turn it off for fast presets of map compilation.")
+            logger.warning(f'Hash-sum of all the original models of this map will be checked.')
+            logger.warning(f'If its not same as before for a specific original model, all its scaled versions will be recompiled, because original asset has changed since last time we checked.')
+            logger.warning(f"This increases the program's running time, so you can turn it off for fast presets of map compilation.")
             # тут продолжить логику
             # внутри следующего блока нельзя, там оригиналы повторяются
         
@@ -375,7 +375,7 @@ class RecompilerApp:
                 continue
             
             # Если оригинальная модель есть - срабатывает эта ветка
-            logger.warning(f'Если оригинальная модель есть - срабатывает эта ветка. Модель: "{orig_hmr_rel_path}"')
+            logger.warning(f'Если оригинальная модель есть в project_assets - срабатывает эта ветка. Модель: "{orig_hmr_rel_path}"')
             # Получаем кортеж из keyvalues энтити по ключу (хаммер пути ориг модели)
             t_orig_pss = self.project.project_assets[orig_hmr_rel_path]
             # Получаем из кортежа объект ориг модели и словарь вариаций этой модели
@@ -423,7 +423,9 @@ class RecompilerApp:
                 t_orig_pss = self.project.project_assets[orig_hmr_rel_path]
                 # Получаем из кортежа объект ориг модели и словарь вариаций этой модели
                 orig_asset_obj, d_scary_pss = t_orig_pss
-                orig_full_path = orig_asset_obj.orig_full_path
+                logger.debug(f"orig_asset_obj: {orig_asset_obj}")
+                logger.debug(f"d_scary_pss: {d_scary_pss}")
+                orig_full_path = orig_asset_obj.orig_full_path # вот тут падает, почему-то orig_asset_obj может оказаться пустым
                 if orig_full_path:
                     logger.debug(f"orig_full_path: {orig_full_path}")
                     found_cache_count += 1
@@ -447,20 +449,14 @@ class RecompilerApp:
                         
                         orig_asset = self.build_orig_asset(orig_hmr_rel_path, orig_full_path)
                         
-                        input('OLOLO')
+                        if not orig_asset:
+                            logger.error(f'''Error! Can't build orig asset for "{orig_hmr_rel_path}". Full path: "{orig_full_path}"''')
+                            not_found_count += 1
+                            d_not_found_items[orig_hmr_rel_path] = s_pss_keyvalues
+                            break
                         
-                        # временно
-                        continue
-                        
-                        
-                        
-                        orig_asset = OrigAsset(orig_hmr_rel_path, orig_full_path, orig_is_static, orig_hash, orig_cdmaterials, orig_skinfamilies, orig_materials, orig_skin_map)
-                        
-                        
-                        
-                        pss = PropStaticScalable("scld_hmr_rel_path", "scld_skin", orig_asset, pss_scale_float, pss_skin, pss_rendercolor)
-                        self.project.project_assets[orig_hmr_rel_path] = (orig_asset, {scary_key: pss})
-                        
+                        # Добавляем в project_assets ориг модель, пока что с пустым словарём вариаций
+                        self.project.project_assets[orig_hmr_rel_path] = (orig_asset, {})
                         
                         found_project_count += 1
                         break
@@ -470,6 +466,9 @@ class RecompilerApp:
                     orig_full_path = self.find_file_in_vpk(orig_hmr_rel_path, searchpath)
                     if orig_full_path:
                         logger.debug(f"orig_full_path: {orig_full_path}")
+                        
+                        # тут надо вытаскивать ориг модели и все материалы во временную папку !!!
+                        
                         found_vpk_count += 1
                         break
                 
@@ -483,6 +482,16 @@ class RecompilerApp:
             else:
                 print(f"Progress: {int(progress*100/len(d_orig_setvalues_todo))}%", end="\r")
             
+        '''
+        # logger.debug(f" ")
+        # logger.debug(f"project_assets:")
+        # for project_asset in self.project.project_assets.items():
+            # logger.debug(f"{project_asset}")
+        # logger.debug(f"{self.project.project_assets}")
+        # self.cache.save()
+        # logger.debug(f" ")
+        '''
+        
         logger.info(f"From {len(d_orig_setvalues_todo)} original assets:")
         logger.info(f"{found_cache_count} found in cache")
         logger.info(f"{found_project_count} found in project files")
@@ -617,7 +626,7 @@ class RecompilerApp:
         return None
 
     def build_orig_asset(self, orig_hmr_rel_path, orig_full_path):
-        # logger.debug(f'build_orig_asset start')
+        logger.debug(f'build_orig_asset start')
         # logger.debug(f'orig_hmr_rel_path: {orig_hmr_rel_path}')
         # logger.debug(f'orig_full_path: {orig_full_path}')
         
@@ -649,11 +658,11 @@ class RecompilerApp:
                 return None
             (flags,) = struct.unpack('<I', data)
         orig_is_static = (flags & MDL_STATIC_PROP_FLAG) != 0
-        logger.debug(f'orig_is_static: {orig_is_static}')
+        # logger.debug(f'orig_is_static: {orig_is_static}')
         
         # Читаем хэш оригинала
         orig_hash = get_hash_of_file(orig_full_path)
-        logger.debug(f'orig_hash: {orig_hash}')
+        # logger.debug(f'orig_hash: {orig_hash}')
         
         # Функции для чтения orig_cdmaterials
         def read_u32(f) -> int:
@@ -733,7 +742,7 @@ class RecompilerApp:
                 name_abs = entry_off + name_rel
                 materials_names.append(read_cstring_at(f, name_abs))
             
-            logger.debug(f'materials_names: {materials_names}')
+            # logger.debug(f'materials_names: {materials_names}')
             
             # Читаем индексы для orig_skinfamilies (сырая таблица большого размера)
             f.seek(skin_index)
@@ -768,23 +777,25 @@ class RecompilerApp:
 
             # Если изменяемых колонок нет, возвращаем пустые списки на каждую строку, чтобы было корректно по типу
             if not varying_cols:
-                return [[] for _ in range(skinfam_count)]
-
-            # Собираем QC формат таблицы (только изменяемые колонки, имена материалов)
-            qc_fams: List[List[str]] = []
-            for row in orig_skinfamilies:
-                qc_row: List[str] = []
-                for c in varying_cols:
-                    name = row[c] or ''
-                    # Добавим .vmt, если его нет в имени
-                    if name and not name.lower().endswith('.vmt'):
-                        name = f"{name}.vmt"
-                    qc_row.append(name)
-                qc_fams.append(qc_row)
-            # return qc_fams
-            orig_skinfamilies = qc_fams
+                # return [[] for _ in range(skinfam_count)]
+                # orig_skinfamilies = [[] for _ in range(skinfam_count)]
+                pass # попробуем
+            else:
+                # Собираем QC формат таблицы (только изменяемые колонки, имена материалов)
+                qc_fams: List[List[str]] = []
+                for row in orig_skinfamilies:
+                    qc_row: List[str] = []
+                    for c in varying_cols:
+                        name = row[c] or ''
+                        # Добавим .vmt, если его нет в имени
+                        if name and not name.lower().endswith('.vmt'):
+                            name = f"{name}.vmt"
+                        qc_row.append(name)
+                    qc_fams.append(qc_row)
+                # return qc_fams
+                orig_skinfamilies = qc_fams
             
-            logger.debug(f' ')
+            # logger.debug(f' ')
             logger.debug(f'orig_skinfamilies: {orig_skinfamilies}')            
             
             # (version, texture_count, texture_index, txdir_count, txdir_index, skinref_count, skinfam_count, skin_index)
@@ -805,61 +816,41 @@ class RecompilerApp:
                     seen.add(p); orig_cdmaterials.append(p)
             # return orig_cdmaterials
             
-            logger.debug(f' ')
-            logger.debug(f'orig_cdmaterials: {orig_cdmaterials}')
-            logger.debug(f' ')
+            # logger.debug(f' ')
+            # logger.debug(f'orig_cdmaterials: {orig_cdmaterials}')
+            # logger.debug(f' ')
             
         # Конструируем множество orig_materials, зная orig_cdmaterials и materials_names
         orig_materials = set()
         for cdmat_rel_folder in orig_cdmaterials:
-            logger.debug(f'self.gameinfo_folder_path: {self.gameinfo_folder_path}')
-            logger.debug(f'cdmat_rel_folder: {cdmat_rel_folder}')
-            logger.debug(f'orig_full_path: {orig_full_path}')
+            # logger.debug(f'self.gameinfo_folder_path: {self.gameinfo_folder_path}')
+            # logger.debug(f'cdmat_rel_folder: {cdmat_rel_folder}')
+            # logger.debug(f'orig_full_path: {orig_full_path}')
             
             cdmat_abs_folder = self.gameinfo_folder_path + 'materials/' + cdmat_rel_folder
-            logger.debug(f'cdmat_abs_folder: {cdmat_abs_folder}')
+            cdmat_abs_folder = cdmat_abs_folder.lower()
+            # logger.debug(f'cdmat_abs_folder: {cdmat_abs_folder}')
             
             for mat_name in materials_names:
-                logger.debug(f'mat_name: {mat_name}')
-                
+                mat_name = mat_name.lower()
                 check_mat_path = cdmat_abs_folder + '/' + mat_name + '.vmt'
                 if os.path.exists(check_mat_path):
-                    logger.debug(f'KRUTO')
-            
+                    logger.debug(f'material found: {check_mat_path}')
+                    rel_mat_path = check_mat_path.split("materials/", 1)[1]
+                    # logger.debug(f'rel path: {rel_mat_path}')
+                    orig_materials.add(rel_mat_path)
+                else: logger.debug(f'material not found: {mat_name}')
         
-        input(f'woooow2')
-        
-        return None
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        # Читаем orig_skinfamilies
-        
-        # Конструируем orig_materials
+        # logger.debug(f' ')
+        # logger.debug(f'orig_materials: {orig_materials}')
         
         # Конструируем orig_skin_map
         
         
-        input('hahahhahaa')
-        
-        return None
+        orig_skin_map = {} # создаём пустой, потому что ещё ни разу не красили
+        '''
+        orig_skin_map: Dict[Tuple[int, str], int] = field(default_factory=dict) # словарь-карта ремапа: ориг скин + цвет -> новый скин
+        '''
         
         orig_asset = OrigAsset(orig_hmr_rel_path, orig_full_path, orig_is_static, orig_hash, orig_cdmaterials, orig_skinfamilies, orig_materials, orig_skin_map)
         
