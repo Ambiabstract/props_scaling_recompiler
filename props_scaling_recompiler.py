@@ -630,20 +630,49 @@ class RecompilerApp:
         if orig_basename in vpk_tree_out: return vpk_path + '/' + rel_path
         return None
 
+    # Умный метод для экстракции файлов из VPK
     def extract_from_vpk(self, full_path):
+        logger.debug(f'extract_from_vpk start')
+        logger.debug(f'vpkeditcli_path: {self.vpkeditcli_path}')
+        logger.debug(f'TEMP_FILES_FOLDER: {TEMP_FILES_FOLDER}')
+        
+        # Создаём пустое множество для относительных путей файлов внутри ВПК, которые хотим извлечь
+        s_extract_rel_paths = set()
+        
+        # Получаем абсолютный путь к ВПК
+        vpk_abs_path = full_path # сплит блаблабла
+        
+        # Заполняем множество
         if full_path.endswith('.mdl'):
             logger.debug(f'Логика если мы хотим вытащить из ВПК все файлы модельки, зная путь только до MDL')
-            return None
+            '''
+            ".mdl")
+            ".dx80.vtx")
+            ".dx90.vtx")
+            ".sw.vtx")
+            ".vvd")
+            ".phy")
+            '''
+            return
         if full_path.endswith('.vmt'):
             logger.debug(f'Логика если мы хотим вытащить из ВПК конкретный VMT файл')
-            return None
+            return
         if ".vpk/materials/models/" in full_path:
             logger.debug(f'Логика если мы хотим вытащить из ВПК папку с VMT файлами')
-            return None
+            return
         if ".vpk/models" in full_path:
             logger.debug(f'Логика если мы хотим вытащить из ВПК папку с моделями')
-            return None
-        return None
+            return
+        
+        # Проходимся по множеству и извлекаем из ВПК каждый файл
+        for extract_rel_path in s_extract_rel_paths:
+            # Абсолютный путь вытащенного файла
+            extracted_file_abs_path = TEMP_FILES_FOLDER + extract_rel_path # ну типа того, надо поправить
+            logger.debug(f'extracted_file_abs_path: {extracted_file_abs_path}')
+            
+            extract_result = subprocess.run([self.vpkeditcli_path, '--output', extracted_file_abs_path, '--extract', extract_rel_path, vpk_abs_path], check=True)
+        
+        return
 
     def build_orig_asset(self, orig_hmr_rel_path, orig_full_path):
         logger.debug(f'build_orig_asset start')
