@@ -441,35 +441,47 @@ class RecompilerApp:
                 
                 if path_type == "folder_materials": continue
                 
-                if path_type == "folder_models":
-                    orig_full_path = self.find_file_in_project(orig_hmr_rel_path, searchpath)
-                    # logger.debug(f"searchpath: {searchpath}")
+                if path_type in ("folder_models", "vpk"):
+                    # для vpk пропускаем material-пути
+                    if path_type == "vpk" and "_materials_" in searchpath:
+                        continue
+                    
+                    # Два разных метода для поиска в проекте или в впк
+                    finder = (
+                        self.find_file_in_project if path_type == "folder_models"
+                        else self.find_file_in_vpk
+                    )
+
+                    # Получаем фулл путь (абсолютный если в проекте, с "blabla.vpk/blabla" если впк)
+                    orig_full_path = finder(orig_hmr_rel_path, searchpath)
                     if orig_full_path:
                         logger.debug(f"orig_full_path: {orig_full_path}")
                         
+                        '''
+                        # Если моделька найдена в ВПК - надо вытащить её во временную папку вместе с материалами
+                        if path_type == "vpk":
+                            orig_extracted_path = !!!!!!!
+                            orig_full_path = orig_extracted_path
+                        '''
+
+                        # Пытаемся создать объект ориг ассета
                         orig_asset = self.build_orig_asset(orig_hmr_rel_path, orig_full_path)
-                        
+
                         if not orig_asset:
-                            logger.error(f'''Error! Can't build orig asset for "{orig_hmr_rel_path}". Full path: "{orig_full_path}"''')
+                            logger.error(
+                                f'''Error! Can't build orig asset for "{orig_hmr_rel_path}". Full path: "{orig_full_path}"'''
+                            )
                             not_found_count += 1
                             d_not_found_items[orig_hmr_rel_path] = s_pss_keyvalues
                             break
-                        
+
                         # Добавляем в project_assets ориг модель, пока что с пустым словарём вариаций
                         self.project.project_assets[orig_hmr_rel_path] = (orig_asset, {})
-                        
-                        found_project_count += 1
-                        break
-                
-                if path_type == "vpk":
-                    if "_materials_" in searchpath: continue
-                    orig_full_path = self.find_file_in_vpk(orig_hmr_rel_path, searchpath)
-                    if orig_full_path:
-                        logger.debug(f"orig_full_path: {orig_full_path}")
-                        
-                        # тут надо вытаскивать ориг модели и все материалы во временную папку !!!
-                        
-                        found_vpk_count += 1
+
+                        if path_type == "folder_models":
+                            found_project_count += 1
+                        else:
+                            found_vpk_count += 1
                         break
                 
             if not orig_full_path:
@@ -632,11 +644,15 @@ class RecompilerApp:
         
         # Проверочка на вшивость пути
         if ".vpk/" in orig_full_path:
-            logger.debug(f'".vpk/" in orig_full_path')
+            logger.warning(f'Warning! ".vpk/" in orig_full_path!')
             # тут нужна логика чтобы открывать впк и читать мдл 
             # ЛИБО
             # ошибка если мы всегда ожидаем здесь подготовленный путь с вытащенным оригиналом из впк
             # я думаю что второй вариант будет лучше
+            # return None
+        
+        if not os.path.exists(orig_full_path):
+            logger.error(f'''Can't find this model: "{orig_full_path}"''')
             return None
         
         # Проверяем является ли оригинал статик пропом
@@ -827,9 +843,15 @@ class RecompilerApp:
             # logger.debug(f'cdmat_rel_folder: {cdmat_rel_folder}')
             # logger.debug(f'orig_full_path: {orig_full_path}')
             
-            cdmat_abs_folder = self.gameinfo_folder_path + 'materials/' + cdmat_rel_folder
+            # Вот такой способ сработает только для ассетов найденных в проекте, а нам надо получать материалы ещё и из временной папки, путь к которой можно получить из orig_full_path
+            # cdmat_abs_folder = self.gameinfo_folder_path + 'materials/' + cdmat_rel_folder
+            
+            # Попробуем синтезировать путь к материалам из orig_full_path, чтобы материалы из временной папки экстрактнутых из ВПК ассетов тоже находились
+            # c:/program files (x86)/steam/steamapps/sourcemods/antenna_mod/models/props_antenna/us1_map02_base/concrate_tile1a.mdl
+            cdmat_abs_folder = orig_full_path.split("models/", 1)[0] + 'materials/' + cdmat_rel_folder
+            
             cdmat_abs_folder = cdmat_abs_folder.lower()
-            # logger.debug(f'cdmat_abs_folder: {cdmat_abs_folder}')
+            logger.debug(f'cdmat_abs_folder: {cdmat_abs_folder}')
             
             for mat_name in materials_names:
                 mat_name = mat_name.lower()
