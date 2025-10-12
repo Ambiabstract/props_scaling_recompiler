@@ -640,38 +640,43 @@ class RecompilerApp:
         s_extract_rel_paths = set()
         
         # Получаем абсолютный путь к ВПК
-        vpk_abs_path = full_path # сплит блаблабла
+        vpk_abs_path = full_path.split(".vpk/", 1)[0] + '.vpk'
+        logger.debug(f'vpk_abs_path: {vpk_abs_path}')
         
-        # Заполняем множество
-        if full_path.endswith('.mdl'):
-            logger.debug(f'Логика если мы хотим вытащить из ВПК все файлы модельки, зная путь только до MDL')
-            '''
-            ".mdl")
-            ".dx80.vtx")
-            ".dx90.vtx")
-            ".sw.vtx")
-            ".vvd")
-            ".phy")
-            '''
-            return
-        if full_path.endswith('.vmt'):
-            logger.debug(f'Логика если мы хотим вытащить из ВПК конкретный VMT файл')
-            return
-        if ".vpk/materials/models/" in full_path:
-            logger.debug(f'Логика если мы хотим вытащить из ВПК папку с VMT файлами')
-            return
-        if ".vpk/models" in full_path:
-            logger.debug(f'Логика если мы хотим вытащить из ВПК папку с моделями')
-            return
+        # Получаем относительный путь файла/папки внутри ВПК
+        rel_path = full_path.split(".vpk/", 1)[1]
+        logger.debug(f'rel_path: {rel_path}')
+        
+        # Получаем имя файла или папки
+        path_basename = os.path.basename(full_path)
+        logger.debug(f'path_basename: {path_basename}')
         
         # Проходимся по множеству и извлекаем из ВПК каждый файл
-        for extract_rel_path in s_extract_rel_paths:
-            # Абсолютный путь вытащенного файла
-            extracted_file_abs_path = TEMP_FILES_FOLDER + extract_rel_path # ну типа того, надо поправить
-            logger.debug(f'extracted_file_abs_path: {extracted_file_abs_path}')
-            
-            extract_result = subprocess.run([self.vpkeditcli_path, '--output', extracted_file_abs_path, '--extract', extract_rel_path, vpk_abs_path], check=True)
+        def extractor(s_extract_rel_paths):
+            for extract_rel_path in s_extract_rel_paths:
+                # Абсолютный путь вытащенного файла
+                extracted_file_abs_path = TEMP_FILES_FOLDER + '/' + extract_rel_path
+                extract_result = subprocess.run([self.vpkeditcli_path, '--output', extracted_file_abs_path, '--extract', extract_rel_path, vpk_abs_path], check=True)
         
+        # Заполняем множество и вызываем экстрактор
+        if full_path.endswith('.mdl'):
+            # Логика если мы хотим вытащить из ВПК все файлы модельки, зная путь только до MDL
+            for ending in {".mdl", ".dx80.vtx", ".dx90.vtx", ".sw.vtx", ".vvd", ".phy"}:
+                extract_rel_path = rel_path.replace('.mdl', ending)
+                s_extract_rel_paths.add(extract_rel_path)
+            extractor(s_extract_rel_paths)
+            return
+        if full_path.endswith('.vmt'):
+            # Логика если мы хотим вытащить из ВПК конкретный VMT файл
+            s_extract_rel_paths.add(rel_path)
+            extractor(s_extract_rel_paths)
+            return
+        if ".vpk/materials/models/" in full_path:
+            # Логика если мы хотим вытащить из ВПК папку с VMT файлами
+            return
+        if ".vpk/models" in full_path:
+            # Логика если мы хотим вытащить из ВПК папку с моделями
+            return        
         return
 
     def build_orig_asset(self, orig_hmr_rel_path, orig_full_path):
@@ -679,52 +684,50 @@ class RecompilerApp:
         # logger.debug(f'orig_hmr_rel_path: {orig_hmr_rel_path}')
         # logger.debug(f'orig_full_path: {orig_full_path}')
         
+        orig_abs_path = orig_full_path
+        
         # Проверочка на вшивость пути
-        if ".vpk/" in orig_full_path:
-            logger.warning(f'Warning! ".vpk/" in orig_full_path!')
-            # тут нужна логика чтобы открывать впк и читать мдл 
-            # ЛИБО
-            # ошибка если мы всегда ожидаем здесь подготовленный путь с вытащенным оригиналом из впк
-            # я думаю что второй вариант будет лучше
-            # return None
+        if ".vpk/" in orig_full_path:         
+            self.extract_from_vpk(orig_full_path)
+            orig_abs_path = TEMP_FILES_FOLDER + '/' + orig_full_path.split(".vpk/", 1)[1]
         
         # Вытаскивать и модельку и материалы из ВПК надо в пределах этого метода.
         # И записывать этот путь экстрактнутой модельки надо в переменную с отдельным именем, типа abs path или real path, потому что orig_full_path должен остаться неизменным и в конце записаться в объект класса OrigAsset.
         
-        if not os.path.exists(orig_full_path):
-            logger.error(f'''Can't find this model: "{orig_full_path}"''')
+        if not os.path.exists(orig_abs_path):
+            logger.error(f'''Can't find this model: "{orig_abs_path}"''')
             return None
         
         # Проверяем является ли оригинал статик пропом
-        with open(orig_full_path, 'rb') as f:
+        with open(orig_abs_path, 'rb') as f:
             # Проверяем сигнатуру и версию мдл файла
             hdr = f.read(8)  # int id; int version;
             if len(hdr) < 8:
-                logger.error(f"Error! The file is too short for the MDL header: {orig_full_path}")
+                logger.error(f"Error! The file is too short for the MDL header: {orig_abs_path}")
                 return None
             mdl_id, version = struct.unpack('<II', hdr)
             if mdl_id != MDL_IDST_LE:
-                logger.error(f"Error! Doesn't look like Source MDL (IDST was expected): {orig_full_path}")
+                logger.error(f"Error! Doesn't look like Source MDL (IDST was expected): {orig_abs_path}")
                 return None
             # В исходниках studio.h поле flags идёт после 6 векторов (смещение 0x98)
             f.seek(MDL_FLAGS_OFFSET)
             data = f.read(4)
             if len(data) < 4:
-                logger.error(f"Error! Failed to read the flags field: {orig_full_path}")
+                logger.error(f"Error! Failed to read the flags field: {orig_abs_path}")
                 return None
             (flags,) = struct.unpack('<I', data)
         orig_is_static = (flags & MDL_STATIC_PROP_FLAG) != 0
         # logger.debug(f'orig_is_static: {orig_is_static}')
         
         # Читаем хэш оригинала
-        orig_hash = get_hash_of_file(orig_full_path)
+        orig_hash = get_hash_of_file(orig_abs_path)
         # logger.debug(f'orig_hash: {orig_hash}')
         
         # Функции для чтения orig_cdmaterials
         def read_u32(f) -> int:
             d = f.read(4)
             if len(d) < 4:
-                logger.error(f"Error! Unexpected EOF while reading <I>. MDL: {orig_full_path}")
+                logger.error(f"Error! Unexpected EOF while reading <I>. MDL: {orig_abs_path}")
                 return None
             return struct.unpack('<I', d)[0]
         def read_i32_at(f, off: int) -> int:
@@ -739,10 +742,10 @@ class RecompilerApp:
             return out.decode('ascii', errors='ignore')
         
         # Читаем orig_cdmaterials
-        with open(orig_full_path, 'rb') as f:
+        with open(orig_abs_path, 'rb') as f:
             f.seek(0)
             if f.read(4) != MDL_IDST:
-                logger.error(f"Error! Doesn't look like Source MDL (IDST was expected): {orig_full_path}")
+                logger.error(f"Error! Doesn't look like Source MDL (IDST was expected): {orig_abs_path}")
                 return None
             version = read_u32(f)
             if not version: return None
@@ -750,7 +753,7 @@ class RecompilerApp:
             f.seek(0, os.SEEK_END)
             file_size = f.tell()
             if file_size < MDL_STUDIOHDR_SIZE_MIN:
-                logger.error(f"Error! MDL too short (broken header): {orig_full_path}")
+                logger.error(f"Error! MDL too short (broken header): {orig_abs_path}")
                 return None
 
             # Читаем приколы
@@ -769,19 +772,19 @@ class RecompilerApp:
                 skinref_count, skinfam_count,
                 skin_index
             )):
-                logger.error(f"Error reading materials info from MDL: {orig_full_path}")
+                logger.error(f"Error reading materials info from MDL: {orig_abs_path}")
                 return None
 
             # Доп проверка значения на всякий случай
             for name, val in (("textureindex", texture_index), ("cdtextureindex", txdir_index), ("skinindex", skin_index)):
                 if not (0 <= val < file_size):
-                    logger.error(f'Error! Incorrect "{name}" ({val})" in MDL: {orig_full_path}')
+                    logger.error(f'Error! Incorrect "{name}" ({val})" in MDL: {orig_abs_path}')
                     return None
 
             # И ещё одна проверочка
             if texture_count <= 0 or skinref_count <= 0 or skinfam_count <= 0:
                 # У моделей без "вариантов" skinfam_count обычно 1
-                logger.error(f'Error! Incorrect table sizes (values > 0 were expected). MDL: {orig_full_path}')
+                logger.error(f'Error! Incorrect table sizes (values > 0 were expected). MDL: {orig_abs_path}')
                 return None
 
             # return (version, texture_count, texture_index, txdir_count, txdir_index, skinref_count, skinfam_count, skin_index)
@@ -798,14 +801,14 @@ class RecompilerApp:
                 name_abs = entry_off + name_rel
                 materials_names.append(read_cstring_at(f, name_abs))
             
-            # logger.debug(f'materials_names: {materials_names}')
+            logger.debug(f'materials_names: {materials_names}')
             
             # Читаем индексы для orig_skinfamilies (сырая таблица большого размера)
             f.seek(skin_index)
             total = skinfam_count * skinref_count
             raw = f.read(total * 2)
             if len(raw) < total * 2:
-                logger.error(f'Error reading skin-table! MDL: {orig_full_path}')
+                logger.error(f'Error reading skin-table! MDL: {orig_abs_path}')
                 return None
             idxs = struct.unpack('<' + 'H'*total, raw)
             
@@ -880,14 +883,17 @@ class RecompilerApp:
         orig_materials = set()
         for cdmat_rel_folder in orig_cdmaterials:
             # logger.debug(f'self.gameinfo_folder_path: {self.gameinfo_folder_path}')
-            # logger.debug(f'cdmat_rel_folder: {cdmat_rel_folder}')
-            # logger.debug(f'orig_full_path: {orig_full_path}')
+            logger.debug(f'cdmat_rel_folder: {cdmat_rel_folder}')
+            # logger.debug(f'orig_abs_path: {orig_abs_path}')
             
-            # Вот такой способ сработает только для ассетов найденных в проекте, а нам надо получать материалы ещё и из временной папки, путь к которой можно получить из orig_full_path
+            # Вот такой способ сработает только для ассетов найденных в проекте, а нам надо получать материалы ещё и из временной папки, путь к которой можно получить из orig_abs_path
             # cdmat_abs_folder = self.gameinfo_folder_path + 'materials/' + cdmat_rel_folder
             
-            # Попробуем синтезировать путь к материалам из orig_full_path, чтобы материалы из временной папки экстрактнутых из ВПК ассетов тоже находились
+            # Попробуем синтезировать путь к материалам из orig_abs_path, чтобы материалы из временной папки экстрактнутых из ВПК ассетов тоже находились
             # c:/program files (x86)/steam/steamapps/sourcemods/antenna_mod/models/props_antenna/us1_map02_base/concrate_tile1a.mdl
+            # cdmat_abs_folder = orig_abs_path.split("models/", 1)[0] + 'materials/' + cdmat_rel_folder
+            
+            # Попробуем третий вариант. Используем full path вместо abs path, чек на впк делаем прям где проходимся по именам материалов
             cdmat_abs_folder = orig_full_path.split("models/", 1)[0] + 'materials/' + cdmat_rel_folder
             
             cdmat_abs_folder = cdmat_abs_folder.lower()
@@ -895,13 +901,31 @@ class RecompilerApp:
             
             for mat_name in materials_names:
                 mat_name = mat_name.lower()
+                
+                # Если материал надо искать в проекте
                 check_mat_path = cdmat_abs_folder + '/' + mat_name + '.vmt'
+                
+                # Если в ВПК
+                if ".vpk/" in orig_full_path: 
+                    mat_rel_path = 'materials/' + cdmat_rel_folder + '/' + mat_name + '.vmt'
+                    logger.debug(f'mat_rel_path: {mat_rel_path}')
+                    for t_searchpath in self.searchpaths:
+                        path_type, searchpath = t_searchpath
+                        if path_type != "vpk": continue
+                        mat_full_path = self.find_file_in_vpk(mat_rel_path, searchpath)
+                        if mat_full_path:
+                            logger.debug(f'mat_full_path: {mat_full_path}')
+                            self.extract_from_vpk(mat_full_path)
+                            mat_abs_path = TEMP_FILES_FOLDER + '/' + mat_full_path.split(".vpk/", 1)[1]
+                            logger.debug(f'mat_abs_path: {mat_abs_path}')
+                            check_mat_path = mat_abs_path
+                
                 if os.path.exists(check_mat_path):
                     logger.debug(f'material found: {check_mat_path}')
                     rel_mat_path = check_mat_path.split("materials/", 1)[1]
                     # logger.debug(f'rel path: {rel_mat_path}')
                     orig_materials.add(rel_mat_path)
-                else: logger.debug(f'material not found: {mat_name}')
+                else: logger.warning(f'Warning! Material "{mat_name}.vmt" not found! Model: "{orig_hmr_rel_path}"')
         
         # logger.debug(f' ')
         # logger.debug(f'orig_materials: {orig_materials}')
