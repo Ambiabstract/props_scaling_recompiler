@@ -493,9 +493,10 @@ class RecompilerApp:
         # for project_asset in self.project.project_assets.items():
             # logger.debug(f"{project_asset}")
         # logger.debug(f"{self.project.project_assets}")
-        # self.cache.save()
         # logger.debug(f" ")
         '''
+        
+        # self.cache.save()
         
         logger.info(f"From {len(d_orig_setvalues_todo)} original assets:")
         logger.info(f"{found_cache_count} found in cache")
@@ -510,7 +511,76 @@ class RecompilerApp:
         hours, remainder = divmod(elapsed_time, 3600)
         minutes, seconds = divmod(remainder, 60)
         logger.info(f"Time spent: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds\n")
+        
+        # Обработка d_orig_setvalues_todo. Вычисляем, красим, скейлим и так далее
+        logger.info(f"Processing variations...")
+        for orig_hmr_rel_path, s_pss_keyvalues in d_orig_setvalues_todo.items():
+            logger.debug(f"orig_hmr_rel_path: {orig_hmr_rel_path}")
+            logger.debug(f"s_pss_keyvalues: {s_pss_keyvalues}")
+            
+            # Всякие начальные проверки
+            if orig_hmr_rel_path in d_not_found_items:
+                logger.warning(f"Skipping model: {orig_hmr_rel_path}")
+                continue
+            if not orig_hmr_rel_path in self.project.project_assets:
+                logger.error(f"Error! Can't process model: {orig_hmr_rel_path}")
+            t_orig_pss = self.project.project_assets[orig_hmr_rel_path]
+            orig_asset_obj, d_scary_pss = t_orig_pss
+            logger.debug(f"orig_asset_obj: {orig_asset_obj}")
+            logger.debug(f"d_scary_pss: {d_scary_pss}")
+            orig_full_path = orig_asset_obj.orig_full_path
+            if orig_full_path:
+                logger.debug(f"orig_full_path: {orig_full_path}")
+            else:
+                logger.warning(f'Warning! "{orig_hmr_rel_path}" found in cache, but full path for it does not found.')
+            
+            # Получаем абсолютный путь к МДЛ
+            orig_abs_path = orig_full_path
+            if '.vpk/' in orig_full_path:
+                orig_abs_path_extracted = TEMP_FILES_FOLDER + '/' + orig_full_path.split(".vpk/", 1)[1]
+                if os.path.exists(orig_abs_path_extracted): orig_abs_path = orig_abs_path_extracted
+                else:
+                    logger.warning(f"Нужно экстрактить модельку из ВПК, в папке с временными файлами не найдена моделька!")
+                    input(f"ne kruto!")
+            logger.debug(f"orig_abs_path: {orig_abs_path}")
+            
+            # Декомпилируем модельку
+            decomp_folder = TEMP_FILES_FOLDER + '/' + orig_hmr_rel_path.replace('.mdl', '_decompiled')
+            # logger.debug(f"decomp_folder: {decomp_folder}")
+            if not self.decompile_mdl(orig_abs_path, decomp_folder):
+                logger.error(f"Error decompiling model, skipping!")
+                continue
+            orig_qc_path = decomp_folder + '/' + os.path.basename(orig_hmr_rel_path).replace('.mdl', '.qc')
+            logger.debug(f"orig_qc_path: {orig_qc_path}")
+            if not os.path.exists(orig_qc_path):
+                logger.error(f'QC path not found! Abs path of the model: "{orig_abs_path}"')
+                continue
+            
+            # Редактируем QC файл оригинальной модели. Покраска, статик, скейл если был физпропом и так далее.
+            # orig_qc_path
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            # input(f"kruto_06")
+        
+        
+        # где-то тут надо очищать временную папку от всякого говна
+        
+        elapsed_time = time.time() - start_time
+        hours, remainder = divmod(elapsed_time, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        logger.info(f"Time spent: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds\n")
+        
         input(f"edik_krutoi")
+        
         
         '''        
                 # - [покраска] вычисляем всякую хуйню по сочетаниям скинов и материалов, редактируем QC оригинала
@@ -941,6 +1011,27 @@ class RecompilerApp:
         orig_asset = OrigAsset(orig_hmr_rel_path, orig_full_path, orig_is_static, orig_hash, orig_cdmaterials, orig_skinfamilies, orig_materials, orig_skin_map)
         
         return orig_asset
+
+    def decompile_mdl(self, orig_abs_path, decomp_folder):
+        logger.debug(f'decompile_mdl start')
+        logger.debug(f'orig_abs_path: {orig_abs_path}')
+        logger.debug(f'decomp_folder: {decomp_folder}')
+        logger.debug(f'self.ccld_path: {self.ccld_path}')
+        try:
+            command = f'"{self.ccld_path}" -p "{orig_abs_path}" -o "{decomp_folder}"'
+            result = subprocess.run(command, shell=True, capture_output=True, text=True)
+            if result.returncode == 0:
+                logger.debug(f'End of decompilation. Path: "{decomp_folder}"')
+                #logger.debug(f"CrowbarCommandLineDecomp out: {result.stdout}")
+                return True
+            else:
+                logger.error(f"ERROR decompilation! Model path: {orig_abs_path}")
+                #print_and_log(f"CrowbarCommandLineDecomp Error: {result.stderr}")
+                return False
+        
+        except Exception as e:
+            logger.error(f"ERROR: {e}")
+            return False
 
 # ----------------------------------------
 #   Внешние функции
