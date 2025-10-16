@@ -515,8 +515,8 @@ class RecompilerApp:
         # Обработка d_orig_setvalues_todo. Вычисляем, красим, скейлим и так далее
         logger.info(f"Processing variations...")
         for orig_hmr_rel_path, s_pss_keyvalues in d_orig_setvalues_todo.items():
-            logger.debug(f"orig_hmr_rel_path: {orig_hmr_rel_path}")
-            logger.debug(f"s_pss_keyvalues: {s_pss_keyvalues}")
+            # logger.debug(f"orig_hmr_rel_path: {orig_hmr_rel_path}")
+            # logger.debug(f"s_pss_keyvalues: {s_pss_keyvalues}")
             
             # Всякие начальные проверки
             if orig_hmr_rel_path in d_not_found_items:
@@ -553,23 +553,31 @@ class RecompilerApp:
             orig_qc_path = decomp_folder + '/' + os.path.basename(orig_hmr_rel_path).replace('.mdl', '.qc')
             logger.debug(f"orig_qc_path: {orig_qc_path}")
             if not os.path.exists(orig_qc_path):
-                logger.error(f'QC path not found! Abs path of the model: "{orig_abs_path}"')
+                logger.error(f'Error! QC path not found! Abs path of the model: "{orig_abs_path}"')
                 continue
             
             # Редактируем QC файл оригинальной модели. Покраска, статик, скейл если был физпропом и так далее.
-            # orig_qc_path
+            if not self.orig_qc_process(orig_qc_path, orig_hmr_rel_path, s_pss_keyvalues):
+                logger.error(f'''Error! QC path of the original asset can't be processed: "{orig_qc_path}"''')
+                continue
+            
+            # Проходимся по s_pss_keyvalues и для каждой псс энтити создаём и редактируем QC
+            logger.debug(f'Making QC files for "{orig_hmr_rel_path}" variations...')
+            failed_qc_variations = set()
+            for pss_keyvalues in s_pss_keyvalues:
+                logger.debug(f"Processing {pss_keyvalues}")
+                pss_qc_path = self.copy_and_modify_orig_qc(orig_qc_path, orig_hmr_rel_path, pss_keyvalues)
+                if not pss_qc_path: failed_qc_variations.add(pss_keyvalues)
+            if failed_qc_variations:
+                logger.error(f'''Failed to copy and modify entities for QC file "{orig_qc_path}":''')
+                for pss_keyvalues in failed_qc_variations:
+                    logger.error(f'''{pss_keyvalues}''')
+            
+            # Компилируем все QC: как оригинальную модель, так и её вариации
+            # self.compile_folder(os.path.dirname(orig_qc_path))
             
             
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            # input(f"kruto_06")
+            input(f"kruto_06")
         
         
         # где-то тут надо очищать временную папку от всякого говна
@@ -580,6 +588,8 @@ class RecompilerApp:
         logger.info(f"Time spent: {int(hours)} hours, {int(minutes)} minutes, {seconds:.2f} seconds\n")
         
         input(f"edik_krutoi")
+        
+        # Где-то тут надо заполнять новый ВМФ
         
         
         '''        
@@ -1021,7 +1031,7 @@ class RecompilerApp:
             command = f'"{self.ccld_path}" -p "{orig_abs_path}" -o "{decomp_folder}"'
             result = subprocess.run(command, shell=True, capture_output=True, text=True)
             if result.returncode == 0:
-                logger.debug(f'End of decompilation. Path: "{decomp_folder}"')
+                # logger.debug(f'End of decompilation. Path: "{decomp_folder}"')
                 #logger.debug(f"CrowbarCommandLineDecomp out: {result.stdout}")
                 return True
             else:
@@ -1032,6 +1042,353 @@ class RecompilerApp:
         except Exception as e:
             logger.error(f"ERROR: {e}")
             return False
+
+    # Редактируем QC файл оригинальной модели. Покраска, статик, скейл если был физпропом и так далее
+    def orig_qc_process(self, orig_qc_path, orig_hmr_rel_path, s_pss_keyvalues):
+        # Получаем некоторые переменные из
+        t_orig_pss = self.project.project_assets[orig_hmr_rel_path]
+        orig_asset_obj, d_scary_pss = t_orig_pss
+        
+        # Открываем и читаем содержимое QC целиком
+        with open(orig_qc_path, 'r') as file:
+            orig_qc_content = file.read()
+        
+        # по моему я какой-то хуйнёй занимаюсь.
+        # у меня уже есть orig_qc_skinfamilies из mdl
+        # но возможно стоит всё таки кусишный брать и уметь туда-сюда конвертировать
+        # пока что буду возвращать из этой функции True, будет заглушкой, вернусь к ней позже
+        return True
+        
+        
+        
+        
+        
+        
+        
+        # Дебаг содержания QC
+        logger.debug(f'orig_qc_content:')
+        logger.debug(f'{orig_qc_content}')
+        
+        # 1) Найдём начало блока $texturegroup "skinfamilies" и первую '{'
+        start_re = re.compile(
+            r'\$texturegroup\s+"skinfamilies"\s*\{',
+            re.IGNORECASE
+        )
+        m = start_re.search(orig_qc_content)
+        if not m:
+            logger.error(f'Error! $texturegroup "skinfamilies" not found in QC! Path: "{orig_qc_path}"')
+            return None
+
+        # Индекс первой '{' после заголовка
+        brace_open_idx = orig_qc_content.find('{', m.end() - 1)
+        if brace_open_idx == -1:
+            logger.error(f'Error! $texturegroup "skinfamilies" not found in QC! Path: "{orig_qc_path}"')
+            return None
+
+        # 2) Пройдёмся по символам, считая скобки, чтобы вырезать ВЕСЬ блок { ... } целиком
+        i = brace_open_idx + 1
+        depth = 1
+        in_string = False
+        result_block_end = None
+
+        while i < len(orig_qc_content):
+            ch = orig_qc_content[i]
+
+            # Обработка строк: игнорировать скобки внутри кавычек
+            if in_string:
+                if ch == '\\':  # экранирование
+                    i += 2
+                    continue
+                elif ch == '"':
+                    in_string = False
+                i += 1
+                continue
+
+            # Не в строке: комментарий `//`?
+            if ch == '/' and i + 1 < len(orig_qc_content) and orig_qc_content[i + 1] == '/':
+                # пролистываем до конца строки
+                nl = orig_qc_content.find('\n', i + 2)
+                if nl == -1:
+                    break
+                i = nl + 1
+                continue
+
+            # Вход в строку?
+            if ch == '"':
+                in_string = True
+                i += 1
+                continue
+
+            # Счёт скобок
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    result_block_end = i
+                    break
+
+            i += 1
+
+        if result_block_end is None:
+            logger.error(f'Error! $texturegroup "skinfamilies" not found in QC! Path: "{orig_qc_path}"')
+            return None
+
+        # Полный контент блока между внешними скобками
+        block = orig_qc_content[brace_open_idx + 1: result_block_end]
+
+        # 3) Разберём каждый внутренний блок { ... } (одна skinfamily) тем же способом
+        families = []
+        i = 0
+        in_string = False
+        depth = 0
+        fam_start = None
+
+        while i < len(block):
+            ch = block[i]
+
+            if in_string:
+                if ch == '\\':
+                    i += 2
+                    continue
+                elif ch == '"':
+                    in_string = False
+                i += 1
+                continue
+
+            # комментарии `//`
+            if ch == '/' and i + 1 < len(block) and block[i + 1] == '/':
+                nl = block.find('\n', i + 2)
+                if nl == -1:
+                    break
+                i = nl + 1
+                continue
+
+            if ch == '"':
+                in_string = True
+                i += 1
+                continue
+
+            if ch == '{':
+                if depth == 0:
+                    fam_start = i + 1  # после '{'
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0 and fam_start is not None:
+                    fam_text = block[fam_start:i]
+                    families.append(fam_text.strip())
+                    fam_start = None
+
+            i += 1
+
+        # 4) Из каждого внутреннего блока достанем строки в кавычках
+        orig_qc_skinfamilies = []
+        qstr_re = re.compile(r'"([^"]*)"')
+        for fam in families:
+            # выкинуть комментарии // перед поиском кавычек (вне строк они уже не мешают, но на всякий)
+            cleaned = []
+            for line in fam.splitlines():
+                p = line.find('//')
+                cleaned.append(line if p == -1 else line[:p])
+            fam_clean = '\n'.join(cleaned)
+
+            items = tuple(s for s in qstr_re.findall(fam_clean) if s.strip() != '')
+            if items:
+                orig_qc_skinfamilies.append(items)
+        
+        logger.debug(f'orig_qc_skinfamilies:')
+        logger.debug(f'{orig_qc_skinfamilies}')
+        
+        input(f'1346')
+        
+        
+        
+        
+        
+        
+        
+        # Функция для комментирования строчки
+        def comment_line(line):
+            return f"// {line}"
+        
+        
+        # Открываем и читаем содержимое QC как набор строчек
+        with open(orig_qc_path, 'r') as file:
+            lines = file.readlines()
+        
+        # Дебаг содержания QC
+        logger.debug(f'orig_qc content:')
+        for line in lines:
+            line = line.replace('\n', '')
+            logger.debug(f'{line}')
+        
+        # Проверяем чё там у нас есть
+        staticprop_found = any("$staticprop" in line for line in lines)
+        keyvalues_found = any("$keyvalues" in line for line in lines)
+        prop_data_found = any("prop_data" in line for line in lines)
+        scale_found = any("$scale" in line for line in lines)
+        logger.debug(f'staticprop_found: {staticprop_found}')
+        logger.debug(f'keyvalues_found: {keyvalues_found}')
+        logger.debug(f'prop_data_found: {prop_data_found}')
+        logger.debug(f'scale_found: {scale_found}')
+        
+        # Крутая проверка
+        if orig_asset_obj.orig_is_static != staticprop_found:
+            logger.warning(f'Something wrong with "static_prop" flag detection logic! Model: "{orig_hmr_rel_path}"')
+            logger.warning(f'Please report about this message! <3')
+        
+        '''
+        Чё надо обработать то?
+        - покраска
+        - если ассет не был статик пропом, то надо во первых его ставить, а во вторых что-то там вроде комментировать строчки какие-то или чё хз
+        '''
+        
+        # $texturegroup "skinfamilies"
+        
+        for index, line in enumerate(lines):
+            if line.strip().startswith('$texturegroup "skinfamilies"'):
+                test = line.strip()
+                test_index = index
+                logger.debug(f'test: {test}')
+                logger.debug(f'test_index: {test_index}')
+        
+        
+        
+        
+        
+        
+        input(f'1346')
+        
+        
+        
+        
+        
+        '''        
+        # - [покраска] вычисляем всякую хуйню по сочетаниям скинов и материалов, редактируем QC оригинала
+        
+        # - [покраска] находим ориг материалы, создаём копии VMT в соответствии с вычислениями, кладём в нужное место
+        
+        # - [скейлинг] копируем QC для каждой вариации скейла и меняем параметры (скейл для разных типов, статик проп если был динамик и тд)
+        
+        # - компилируем оригинал и все вариации
+        
+        # - проверяем что всё доехало куда надо, заполняем данные о получившихся приколах в project_assets
+        '''
+        
+        
+        
+        
+        
+        
+        
+        
+        input(f'1346')
+        
+        return False
+        
+        
+        # For some reason, physical props are scaled not by N times, but by N^2 times, unlike statics and some (!) dynamic models
+        # Физические пропы по какой-то причине скейлятся не в N раз, а в N^2 раз, в отличие от статиков и некоторых (!) динмоделей
+        scale_multi = scale
+        if prop_data_found and not staticprop_found:
+            scale_multi = scale ** 2
+        
+        # Всякие чекеры-каунтеры
+        modelname_line = ""
+        modelname_index = -1
+        scale_line_index = -1
+        staticprop_line_index = -1
+        
+        
+        for index, line in enumerate(lines):
+            if line.strip().startswith("$modelname"):
+                modelname_line = line.strip()
+                modelname_index = index
+            if line.strip().startswith("$scale"):
+                scale_line_index = index
+            if line.strip().startswith("$staticprop"):
+                staticprop_line_index = index
+
+        if modelname_line:
+            parts = modelname_line.split('"')
+            model_path = parts[1]
+            model_name = os.path.basename(model_path).replace(".mdl", "")
+            
+            if debug_mode: print_and_log(Fore.YELLOW + f"!!! model_name: {model_name}")
+            if debug_mode: print_and_log(Fore.YELLOW + f"!!! float(scale): {float(scale)}")
+
+            if subfolders == True and float(scale) != 1.0:
+                if debug_mode: print_and_log(Fore.YELLOW + f"!!! subfolders == True and float(scale) != 1.0")
+                new_model_name = f"scaled/{model_name}_scaled_{int(scale * 100)}.mdl"
+            else:
+                if float(scale) == 1.0 and staticprop_found == False:
+                    if debug_mode: print_and_log(Fore.YELLOW + f"!!! float(scale) != 1.0 and staticprop_found == False")
+                    new_model_name = f"{model_name}_static.mdl"
+                elif float(scale) == 1.0:
+                    if debug_mode: print_and_log(Fore.YELLOW + f"!!! float(scale) != 1.0")
+                    new_model_name = f"_do_not_compile_me!"
+                    print_and_log(Fore.GREEN + f"{model_name}.mdl is already a static prop. Updating cache.")
+                    #real_mdl_path = psr_cache_data_ready.get(hammer_mdl_path, {}).get("real_mdl_path")
+                    psr_cache_data_ready = add_to_cache(psr_cache_data_ready, hammer_mdl_path, modelscale="1.0", rendercolor="255 255 255", skin="0", is_static=True)
+                    save_global_cache(psr_cache_data_ready)
+                    #print_and_log(f"psr_cache_data_ready: {psr_cache_data_ready}")
+                    return f"static_prop"
+                else:
+                    if debug_mode: print_and_log(Fore.YELLOW + f"!!! blyat")
+                    new_model_name = f"{model_name}_scaled_{int(scale * 100)}.mdl"
+            if debug_mode: print_and_log(f"new_model_name: {new_model_name}")
+            new_model_path = model_path.replace(f"{model_name}.mdl", new_model_name)
+            if debug_mode: print_and_log(f"new_model_path: {new_model_path}")
+            new_modelname_line = f'$modelname "{new_model_path}"\n'
+
+            lines[modelname_index] = new_modelname_line
+            
+            if scale_line_index != -1:
+                lines[scale_line_index] = f"$scale {scale_multi}\n"
+            else:
+                lines.insert(modelname_index + 1, '\n')
+                lines.insert(modelname_index + 2, f"$scale {scale_multi}\n")
+                scale_line_index = modelname_index + 2
+
+            if staticprop_line_index == -1:
+                lines.insert(scale_line_index + 1, "$staticprop\n")
+
+            for index, line in enumerate(lines):
+                if line.strip().startswith(("$lod")):
+                    lines[index] = scale_values(line, scale_multi)
+                if line.strip().startswith(("$bbox", "$cbox", "$illumposition")):
+                    lines[index] = comment_line(line)
+                if line.strip().startswith(("$definebone", "$hboxset")):
+                    lines[index] = comment_line(line)
+
+            with open(qc_path, 'w') as file:
+                file.writelines(lines)
+        else:
+            print_and_log(Fore.RED + f"$modelname not found in {model_name} QC!")
+
+        return new_qc_path
+        
+        # return True
+        
+        # orig_qc_path
+
+    def copy_and_modify_orig_qc(self, orig_qc_path, orig_hmr_rel_path, pss_keyvalues):
+        pss_qc_path = None
+        
+        '''
+        Доделать
+        '''
+        
+        return pss_qc_path
+
+    def compile_folder(self, folder_path):
+        
+        '''
+        Доделать
+        '''
+        
+        return
 
 # ----------------------------------------
 #   Внешние функции
