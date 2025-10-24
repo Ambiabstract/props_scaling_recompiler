@@ -1045,7 +1045,7 @@ class RecompilerApp:
 
     # Редактируем QC файл оригинальной модели. Покраска, статик, скейл если был физпропом и так далее
     def orig_qc_process(self, orig_qc_path, orig_hmr_rel_path, s_pss_keyvalues):
-        # Получаем некоторые переменные из
+        # Получаем некоторые переменные из кэша
         t_orig_pss = self.project.project_assets[orig_hmr_rel_path]
         orig_asset_obj, d_scary_pss = t_orig_pss
         
@@ -1057,153 +1057,21 @@ class RecompilerApp:
         # у меня уже есть orig_qc_skinfamilies из mdl
         # но возможно стоит всё таки кусишный брать и уметь туда-сюда конвертировать
         # пока что буду возвращать из этой функции True, будет заглушкой, вернусь к ней позже
-        return True
-        
-        
-        
-        
-        
         
         
         # Дебаг содержания QC
         logger.debug(f'orig_qc_content:')
         logger.debug(f'{orig_qc_content}')
         
-        # 1) Найдём начало блока $texturegroup "skinfamilies" и первую '{'
-        start_re = re.compile(
-            r'\$texturegroup\s+"skinfamilies"\s*\{',
-            re.IGNORECASE
-        )
-        m = start_re.search(orig_qc_content)
-        if not m:
-            logger.error(f'Error! $texturegroup "skinfamilies" not found in QC! Path: "{orig_qc_path}"')
-            return None
-
-        # Индекс первой '{' после заголовка
-        brace_open_idx = orig_qc_content.find('{', m.end() - 1)
-        if brace_open_idx == -1:
-            logger.error(f'Error! $texturegroup "skinfamilies" not found in QC! Path: "{orig_qc_path}"')
-            return None
-
-        # 2) Пройдёмся по символам, считая скобки, чтобы вырезать ВЕСЬ блок { ... } целиком
-        i = brace_open_idx + 1
-        depth = 1
-        in_string = False
-        result_block_end = None
-
-        while i < len(orig_qc_content):
-            ch = orig_qc_content[i]
-
-            # Обработка строк: игнорировать скобки внутри кавычек
-            if in_string:
-                if ch == '\\':  # экранирование
-                    i += 2
-                    continue
-                elif ch == '"':
-                    in_string = False
-                i += 1
-                continue
-
-            # Не в строке: комментарий `//`?
-            if ch == '/' and i + 1 < len(orig_qc_content) and orig_qc_content[i + 1] == '/':
-                # пролистываем до конца строки
-                nl = orig_qc_content.find('\n', i + 2)
-                if nl == -1:
-                    break
-                i = nl + 1
-                continue
-
-            # Вход в строку?
-            if ch == '"':
-                in_string = True
-                i += 1
-                continue
-
-            # Счёт скобок
-            if ch == '{':
-                depth += 1
-            elif ch == '}':
-                depth -= 1
-                if depth == 0:
-                    result_block_end = i
-                    break
-
-            i += 1
-
-        if result_block_end is None:
-            logger.error(f'Error! $texturegroup "skinfamilies" not found in QC! Path: "{orig_qc_path}"')
-            return None
-
-        # Полный контент блока между внешними скобками
-        block = orig_qc_content[brace_open_idx + 1: result_block_end]
-
-        # 3) Разберём каждый внутренний блок { ... } (одна skinfamily) тем же способом
-        families = []
-        i = 0
-        in_string = False
-        depth = 0
-        fam_start = None
-
-        while i < len(block):
-            ch = block[i]
-
-            if in_string:
-                if ch == '\\':
-                    i += 2
-                    continue
-                elif ch == '"':
-                    in_string = False
-                i += 1
-                continue
-
-            # комментарии `//`
-            if ch == '/' and i + 1 < len(block) and block[i + 1] == '/':
-                nl = block.find('\n', i + 2)
-                if nl == -1:
-                    break
-                i = nl + 1
-                continue
-
-            if ch == '"':
-                in_string = True
-                i += 1
-                continue
-
-            if ch == '{':
-                if depth == 0:
-                    fam_start = i + 1  # после '{'
-                depth += 1
-            elif ch == '}':
-                depth -= 1
-                if depth == 0 and fam_start is not None:
-                    fam_text = block[fam_start:i]
-                    families.append(fam_text.strip())
-                    fam_start = None
-
-            i += 1
-
-        # 4) Из каждого внутреннего блока достанем строки в кавычках
-        orig_qc_skinfamilies = []
-        qstr_re = re.compile(r'"([^"]*)"')
-        for fam in families:
-            # выкинуть комментарии // перед поиском кавычек (вне строк они уже не мешают, но на всякий)
-            cleaned = []
-            for line in fam.splitlines():
-                p = line.find('//')
-                cleaned.append(line if p == -1 else line[:p])
-            fam_clean = '\n'.join(cleaned)
-
-            items = tuple(s for s in qstr_re.findall(fam_clean) if s.strip() != '')
-            if items:
-                orig_qc_skinfamilies.append(items)
+        orig_qc_skinfamilies = parse_qc_skinfamilies(orig_qc_content)
         
         logger.debug(f'orig_qc_skinfamilies:')
-        logger.debug(f'{orig_qc_skinfamilies}')
+        for skinfamily in orig_qc_skinfamilies:
+            logger.debug(f'{skinfamily}')
         
         input(f'1346')
         
-        
-        
+        return True
         
         
         
@@ -1758,6 +1626,138 @@ def get_hash_of_file(filepath: str) -> str:
         for chunk in iter(lambda: f.read(4096), b""):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
+
+def parse_qc_skinfamilies(qc_text: str):
+    '''
+    Возвращает список кортежей. Каждая позиция - один скин (набор материалов).
+    '''
+
+    # 1) Найдём начало блока $texturegroup "skinfamilies" и первую '{'
+    start_re = re.compile(
+        r'\$texturegroup\s+"skinfamilies"\s*\{',
+        re.IGNORECASE
+    )
+    m = start_re.search(qc_text)
+    if not m:
+        return []
+
+    # Индекс первой '{' после заголовка
+    brace_open_idx = qc_text.find('{', m.end() - 1)
+    if brace_open_idx == -1:
+        return []
+
+    # 2) Пройдёмся по символам, считая скобки, чтобы вырезать ВЕСЬ блок { ... } целиком
+    i = brace_open_idx + 1
+    depth = 1
+    in_string = False
+    result_block_end = None
+
+    while i < len(qc_text):
+        ch = qc_text[i]
+
+        # Обработка строк: игнорировать скобки внутри кавычек
+        if in_string:
+            if ch == '\\':  # экранирование
+                i += 2
+                continue
+            elif ch == '"':
+                in_string = False
+            i += 1
+            continue
+
+        # Не в строке: комментарий `//`?
+        if ch == '/' and i + 1 < len(qc_text) and qc_text[i + 1] == '/':
+            # пролистываем до конца строки
+            nl = qc_text.find('\n', i + 2)
+            if nl == -1:
+                break
+            i = nl + 1
+            continue
+
+        # Вход в строку?
+        if ch == '"':
+            in_string = True
+            i += 1
+            continue
+
+        # Счёт скобок
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                result_block_end = i
+                break
+
+        i += 1
+
+    if result_block_end is None:
+        return []
+
+    # Полный контент блока между внешними скобками
+    block = qc_text[brace_open_idx + 1: result_block_end]
+
+    # 3) Разберём каждый внутренний блок { ... } (одна skinfamily) тем же способом
+    families = []
+    i = 0
+    in_string = False
+    depth = 0
+    fam_start = None
+
+    while i < len(block):
+        ch = block[i]
+
+        if in_string:
+            if ch == '\\':
+                i += 2
+                continue
+            elif ch == '"':
+                in_string = False
+            i += 1
+            continue
+
+        # комментарии `//`
+        if ch == '/' and i + 1 < len(block) and block[i + 1] == '/':
+            nl = block.find('\n', i + 2)
+            if nl == -1:
+                break
+            i = nl + 1
+            continue
+
+        if ch == '"':
+            in_string = True
+            i += 1
+            continue
+
+        if ch == '{':
+            if depth == 0:
+                fam_start = i + 1  # после '{'
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0 and fam_start is not None:
+                fam_text = block[fam_start:i]
+                families.append(fam_text.strip())
+                fam_start = None
+
+        i += 1
+
+    # 4) Из каждого внутреннего блока достанем строки в кавычках
+    res = []
+    qstr_re = re.compile(r'"([^"]*)"')
+    for fam in families:
+        # выкинуть комментарии // перед поиском кавычек (вне строк они уже не мешают, но на всякий)
+        cleaned = []
+        for line in fam.splitlines():
+            p = line.find('//')
+            cleaned.append(line if p == -1 else line[:p])
+        fam_clean = '\n'.join(cleaned)
+
+        items = tuple(s for s in qstr_re.findall(fam_clean) if s.strip() != '')
+        if items:
+            res.append(items)
+
+    return res
 
 # ----------------------------------------
 #   Мейн функция
