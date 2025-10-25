@@ -1123,6 +1123,13 @@ class RecompilerApp:
         else:
             logger.debug(f'No need to color anything, requested_color_pairs is empty!')
         
+
+        '''
+        Надо короче сделать так, чтобы:
+        - либо создавать нужные материалы и добавлять их в список списков(?) прям на ходу
+        - либо поэтапными циклами, но при этом надо хранить не только имена новых материалов, но и их пути
+        '''
+
         # colored_mat_name = mat_name.lower().replace('.vmt', '') + '_col_' + str(skin) + str(rendercolor).replace(' ', '')
         
         # orig_skin_map: Dict[Tuple[int, str], int]
