@@ -134,11 +134,12 @@ class GlobalCache:
         self.projects: Dict[str, Project] = {}
 
     def load(self) -> None:
-        logger.debug(f"GlobalCache load")
+        logger.debug(f"GlobalCache loading...")
         if self.path.exists():
             with self.path.open("rb") as f:
                 self.projects = pickle.load(f)
         else:
+            logger.debug(f"GlobalCache not found, creating new one.")
             self.projects = {}
 
     def save(self) -> None:
@@ -268,7 +269,8 @@ class RecompilerApp:
                 # logger.debug(f"\t{orig_hmr_rel_path}\t{pss_scale_float}\t{pss_rendercolor}\t{pss_skin}\n")
             '''
         else:
-            logger.critical(f"ERROR! Can't read {self.vmf_file_name}.vmf to get entities!")
+            logger.warning(f'Collected data from "{self.vmf_file_name}.vmf" is empty for some reason!\nIf all {vmf_fast_check_count} prop_static_scalable entities hidden - it is normal. Otherwise please report about this bug!')
+            return 1
         
         # Сканирование файлов проекта
         self.scan_project_files()
@@ -414,7 +416,7 @@ class RecompilerApp:
         d_not_found_items = {}
         progress = 0
         for orig_hmr_rel_path, s_pss_keyvalues in d_orig_setvalues_todo.items():
-            logger.debug(f"Searching orig model: {orig_hmr_rel_path}")
+            logger.debug(f"\nSearching orig model: {orig_hmr_rel_path}")
             
             orig_full_path = None
             
@@ -451,6 +453,8 @@ class RecompilerApp:
                         self.find_file_in_project if path_type == "folder_models"
                         else self.find_file_in_vpk
                     )
+
+                    logger.debug(f'searchpath: {searchpath}')
 
                     # Получаем фулл путь (абсолютный если в проекте, с "blabla.vpk/blabla" если впк)
                     orig_full_path = finder(orig_hmr_rel_path, searchpath)
@@ -655,10 +659,14 @@ class RecompilerApp:
     def find_file_in_project(self, rel_path, searchpath):
         base_path = self.args.game.lower().replace('\\', '/')
         rel_path = rel_path.lower().replace('\\', '/')
-        
+        # logger.debug(f'searchpath: {searchpath}')
+        # logger.debug(f'base_path: {base_path}')
+        # logger.debug(f'rel_path: {rel_path}')
         # Быстрая проверка по ключу
         ending = "/".join(os.path.dirname(rel_path).split("/")[1:]) if len(os.path.dirname(rel_path).split("/")) >1 else ''
+        # logger.debug(f'ending: {ending}')
         key_path = searchpath.replace(base_path, '')[1:] + '/' + ending
+        # logger.debug(f'key_path: {key_path}')
         if not key_path in self.project_files_index: return None
         files = self.project_files_index[key_path]
         if not files: return None
@@ -668,7 +676,7 @@ class RecompilerApp:
             # logger.debug(f'abs_path" {abs_path}')
             # logger.debug(f'os.path.exists(abs_path)" {os.path.exists(abs_path)}')
             if os.path.exists(abs_path): return abs_path
-        
+
         return None
         
         # Старый способ
@@ -1069,11 +1077,61 @@ class RecompilerApp:
         for skinfamily in orig_qc_skinfamilies:
             logger.debug(f'{skinfamily}')
         
-        input(f'1346')
+        if any('_col_' in mat_name for skinfamily in orig_qc_skinfamilies for mat_name in skinfamily):
+            logger.debug(f'Found _col_ in orig_qc_skinfamilies!')
+        else:
+            logger.debug(f'Did not find _col_ in orig_qc_skinfamilies!')
+
+        logger.debug(f's_pss_keyvalues:')
+        for pss_keyvalues in s_pss_keyvalues:
+            logger.debug(f'{pss_keyvalues}')
+
+        # Получаем сочетания цветов и индексов из s_pss_keyvalues (множество кортежей (цвет, скин))
+        requested_color_pairs = set()
+        for pss_keyvalues in s_pss_keyvalues:
+            _, _, _, rendercolor, skin = pss_keyvalues
+            if rendercolor == '255 255 255': continue
+            requested_color_pairs.add((skin, rendercolor))
+
+        requested_colored_materials = set()
+        if requested_color_pairs:
+            logger.debug(f'requested_color_pairs ({len(requested_color_pairs)}):')
+            for color_pair in requested_color_pairs:
+                logger.debug(f'color_pair: {color_pair}')
+                
+                skin = int(color_pair[0])
+                rendercolor = color_pair[1]
+
+                skinfamily = orig_qc_skinfamilies[skin]
+                logger.debug(f'skinfamily: {skinfamily}')
+                
+                for mat_name in skinfamily:
+                    # logger.debug(f'mat_name: {mat_name}')
+                    if not any(mat_name in mat_path for mat_path in orig_asset_obj.orig_materials):
+                        logger.debug(f'Skipping material: {mat_name}')
+                        continue
+                    colored_mat_name = mat_name.lower().replace('.vmt', '') + '_col_' + str(rendercolor).replace(' ', '_')
+                    requested_colored_materials.add(colored_mat_name)
+
+            logger.debug(f'requested_colored_materials ({len(requested_colored_materials)}):')
+            for colored_mat_name in requested_colored_materials:
+                logger.debug(f'colored_mat_name: {colored_mat_name}')
+                
+            logger.debug(f'orig_asset_obj.orig_materials: {orig_asset_obj.orig_materials}')
+
+            input(f'color 001')
+        else:
+            logger.debug(f'No need to color anything, requested_color_pairs is empty!')
+        
+        # colored_mat_name = mat_name.lower().replace('.vmt', '') + '_col_' + str(skin) + str(rendercolor).replace(' ', '')
+        
+        # orig_skin_map: Dict[Tuple[int, str], int]
+
+        # input(f'1346')
         
         return True
         
-        
+        # Дальше пока что не нужно, заглушка выше вернёт True и всё будет работать.
         
         
         # Функция для комментирования строчки
@@ -1129,29 +1187,6 @@ class RecompilerApp:
         input(f'1346')
         
         
-        
-        
-        
-        '''        
-        # - [покраска] вычисляем всякую хуйню по сочетаниям скинов и материалов, редактируем QC оригинала
-        
-        # - [покраска] находим ориг материалы, создаём копии VMT в соответствии с вычислениями, кладём в нужное место
-        
-        # - [скейлинг] копируем QC для каждой вариации скейла и меняем параметры (скейл для разных типов, статик проп если был динамик и тд)
-        
-        # - компилируем оригинал и все вариации
-        
-        # - проверяем что всё доехало куда надо, заполняем данные о получившихся приколах в project_assets
-        '''
-        
-        
-        
-        
-        
-        
-        
-        
-        input(f'1346')
         
         return False
         
