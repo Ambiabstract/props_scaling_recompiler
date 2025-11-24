@@ -891,6 +891,10 @@ class RecompilerApp:
             
             logger.debug(f'materials_names: {materials_names}')
             
+            # При первой постройке ориг ассета (неизвестного кэшу) не стоит насыщать orig_skinfamilies из MDL, так как нам надо хранить в кэше полную таблицу вместе с покрашенными материалами (и только там!). А добавляться она будет только при редактировании QC для покраски.
+            # Так что пока что комментирую.
+            orig_skinfamilies = []
+            '''
             # Читаем индексы для orig_skinfamilies (сырая таблица большого размера)
             f.seek(skin_index)
             total = skinfam_count * skinref_count
@@ -925,7 +929,7 @@ class RecompilerApp:
             # Если изменяемых колонок нет, возвращаем пустые списки на каждую строку, чтобы было корректно по типу
             if not varying_cols:
                 # return [[] for _ in range(skinfam_count)]
-                # orig_skinfamilies = [[] for _ in range(skinfam_count)]
+                # orig_skinfamilies = [[] for _ in range(skinfam_count)] # возможно без этого неправильно работает, но не уверен
                 pass # попробуем
             else:
                 # Собираем QC формат таблицы (только изменяемые колонки, имена материалов)
@@ -941,9 +945,9 @@ class RecompilerApp:
                     qc_fams.append(qc_row)
                 # return qc_fams
                 orig_skinfamilies = qc_fams
-            
+            '''
             # logger.debug(f' ')
-            logger.debug(f'orig_skinfamilies: {orig_skinfamilies}')            
+            logger.debug(f'orig_skinfamilies: {orig_skinfamilies}')
             
             # (version, texture_count, texture_index, txdir_count, txdir_index, skinref_count, skinfam_count, skin_index)
             
@@ -1111,9 +1115,34 @@ class RecompilerApp:
         logger.debug(f'orig_qc_content:')
         logger.debug(f'{orig_qc_content}')
         
-        # Скинфемелис будем парсить из QC вручную, потому что так проще будет работать с ними для покраски
+        # Сначала разберёмся с флагом статик пропа.
+        # Если модель изначально динамическая, а теперь будет статик пропом - добавляем параметр $staticprop
+        if '$staticprop' not in orig_qc_content.lower():
+            logger.debug(f'Adding $staticprop to orig_qc_content for model: "{orig_hmr_rel_path}"')
+            # Добавляем $staticprop в QC
+            # Ищем место для вставки
+            lines = orig_qc_content.splitlines()
+            insert_index = None
+            for i, line in enumerate(lines):
+                if line.strip().lower().startswith('$modelname'):
+                    insert_index = i + 1
+                    break
+            if insert_index is not None:
+                lines.insert(insert_index, '\n$staticprop')
+                orig_qc_content = '\n'.join(lines)
+            else:
+                logger.warning(f'Could not find place to insert $staticprop in QC! Model: "{orig_hmr_rel_path}"')
+            # Дебаг содержания QC после возможного добавления $staticprop
+            logger.debug(f'orig_qc_content after static_prop placed:')
+            logger.debug(f'{orig_qc_content}')
+        else:
+            logger.debug(f'$staticprop already present in orig_qc_content for model: "{orig_hmr_rel_path}"')
+        
+        # Далее разбираемся со скинфемилис.
+        # Парсим скинфемилис из QC
         orig_qc_skinfamilies = parse_qc_skinfamilies(orig_qc_content)
         
+        # Дебаг оригинальных скинфемилис
         logger.debug(f'orig_qc_skinfamilies:')
         for skinfamily in orig_qc_skinfamilies:
             logger.debug(f'{skinfamily}')
@@ -1122,10 +1151,24 @@ class RecompilerApp:
         if any('_col_' in mat_name for skinfamily in orig_qc_skinfamilies for mat_name in skinfamily):
             logger.warning(f'Found _col_ in orig_qc_skinfamilies! Model: "{orig_hmr_rel_path}"')
 
-        logger.debug(f'orig_asset_obj.orig_is_static: {orig_asset_obj.orig_is_static}')
-
-        # СМОТРИ ОТДЕЛЬНУЮ ЗАМЕТКУ orig_qc_process.txt
+        # Теперь надо понять изменились ли оригинальные скинфемилис по сравнению с кэшем.
+        # Читаем скинфемилис из кэша (не колоред скины)
+        orig_cached_skinfamilies = []
+        if orig_asset_obj.orig_skinfamilies:
+            for skinfamily in orig_asset_obj.orig_skinfamilies:
+                if not '_col_' in [mat_name for mat_name in skinfamily]:
+                    orig_cached_skinfamilies.append(skinfamily)
+            logger.debug(f'orig_cached_skinfamilies: {orig_cached_skinfamilies}')
         
+        # Сравниваем оригинальные скинфемилис из QC с кэшированными
+        skinfamilies_changed = len(orig_qc_skinfamilies) != len(orig_cached_skinfamilies) if orig_cached_skinfamilies else False
+        logger.debug(f'skinfamilies_changed (by length): {skinfamilies_changed}')
+
+        input(f'color 001')
+
+
+        
+        # Дебаг вариаций
         logger.debug(f's_pss_keyvalues:')
         for pss_keyvalues in s_pss_keyvalues:
             logger.debug(f'{pss_keyvalues}')
@@ -1163,7 +1206,7 @@ class RecompilerApp:
                 
             logger.debug(f'orig_asset_obj.orig_materials: {orig_asset_obj.orig_materials}')
 
-            input(f'color 001')
+            input(f'color 002')
         else:
             logger.debug(f'No need to color anything, requested_color_pairs is empty!')
         
