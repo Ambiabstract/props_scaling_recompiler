@@ -84,7 +84,7 @@ Video tutorial (English subtitles available):
 
 7. Now it is necessary to specify Parameters. Default parameters will be as follows:
 
-   `-game $gamedir -vmf_in $path\$file.vmf -vmf_out $path\psr_temp\$file.vmf -subfolders 1 -force_recompile 0`
+   `-game $gamedir -vmf_in $path\$file.vmf -vmf_out $path\psr_temp\$file.vmf -subfolders 1 -force_recompile 0 -mountcfg 1`
 
    It is important to pay attention to the following parameters:
 
@@ -95,6 +95,8 @@ Video tutorial (English subtitles available):
    `-subfolders 1` - put the scaled versions of the props in a separate subfolder (1 = yes, 0 = no)
 
    `-force_recompile 0` - recompile all scaled props that are available on the level from scratch (1 = yes, 0 = no). For example, this can be useful if the original non-scaled model has been modified.
+
+   `-mountcfg 1` - automatically read `mount.cfg` (1 = yes, 0 = no). Enabled by default for Garry's Mod to correctly locate and output models to mounted directories.
 
 8. Go through Compile/run commands and specify correct paths in Parameters. It should be the path that props_scaling_recompiler outputs.
 
