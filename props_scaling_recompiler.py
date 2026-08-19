@@ -18,7 +18,7 @@ from colorama import Fore, Style
 #   Константы
 # ----------------------------------------
 # Константы о программе
-ABOUT_TOOL_VERSION      = "2.0.0 - dev 001"
+ABOUT_TOOL_VERSION      = "2.0.0 - dev 002"
 ABOUT_TOOL_NAME         = Fore.CYAN + f"props_scaling_recompiler {ABOUT_TOOL_VERSION}" + Fore.RESET
 ABOUT_TOOL_AUTHOR       = "Shitcoded by Ambiabstract (Sergey Shavin)."
 ABOUT_TOOL_LINK         = "Github: https://github.com/Ambiabstract/props_scaling_recompiler"
