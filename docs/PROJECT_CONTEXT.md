@@ -9,7 +9,7 @@
 - равномерное масштабирование модели вместе с геометрией, LOD и collision;
 - преобразование подходящей dynamic/physics-модели в static-вариант;
 - покраска static prop через дополнительные материалы и skin families;
-- повторное использование готовых артефактов между картами;
+- повторное использование готовых артефактов между картами одного проекта;
 - безопасная актуализация generated-контента.
 
 Инструмент запускается отдельным этапом Hammer compile-run. Он получает `-game`, `-vmf_in` и `-vmf_out`, подготавливает ассеты и создаёт VMF для последующих стадий компиляции карты.
@@ -169,12 +169,15 @@ Mapping должен быть стабильным между запусками
 
 ### ProjectCache / Manifest
 
+- кэш является общим для карт только внутри одного проекта и никогда не объединяет данные разных проектов;
 - явная schema version;
 - нормализованный project identity на основе GameInfo;
 - SourceAsset, GeneratedModel, ColoredMaterial, SkinMapping и MapUsage как отдельные таблицы/коллекции;
 - атомарная запись через временный файл и replace;
 - возможность отклонить или мигрировать несовместимую схему;
 - отсутствие зависимости от импортируемых Python dataclass через неустойчивый pickle-граф.
+
+Граница проекта определяется нормализованной идентичностью его `GameInfo.txt`, а не именем карты, basename каталога или местом запуска PSR. Любые cache lookup, reuse артефактов, `MapUsage`, cleanup и блокировки выполняются только внутри этой project identity. Совпадающие logical paths, модели, материалы или имена карт в двух разных проектах не дают права переиспользовать между ними cache records или считать их одним managed-состоянием.
 
 ## Целевой pipeline
 
@@ -397,6 +400,7 @@ debug_logs/psr_big_map_test_02a_props_scaling_recompiler_log.txt
 - VMT: полные материалы и Patch matrix;
 - MDL: поддерживаемые версии, static flag, несколько `$cdmaterials`, несколько skins, повреждённые offsets;
 - cache: cold start, warm start, missing artifact, modified source, schema migration, interrupted write;
+- project isolation: две разные GameInfo identity с совпадающими именами карт и logical asset paths не разделяют cache records, `MapUsage`, cleanup-план или блокировку;
 - end-to-end: no-op VMF, один static 1.0 white, dynamic 1.0, scaled static, colored static и сочетание нескольких карт.
 
 Реальные VMF теперь доступны в проекте Antenna и описаны ниже. Они остаются mutable integration-окружением вне репозитория. Для unit/regression automation позднее нужно сделать минимальные source-preserving копии или synthetic fixtures с зафиксированным provenance/hash, не изменяя оригинальные карты.
