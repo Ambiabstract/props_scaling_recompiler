@@ -88,7 +88,15 @@ models/example/foo_static.mdl
 -> models/psr_scaled/example/foo_static_scaled_150.mdl
 ```
 
-Точное правило преобразования float scale в `XXX` ещё должно быть утверждено. Оно обязано быть валидируемым и не допускать тихих коллизий.
+Источник истины для итогового scale — видимое поведение Hammer++. PSR должен компилировать то, что художник видит в viewport, а не применять отдельную «строгую» валидацию. Подтверждённые примеры:
+
+```text
+blablabla -> 1.0
+1,0        -> 1.0
+3,0        -> 3.0
+```
+
+В модели данных нужно разделить raw-строку `modelscale` и Hammer-compatible effective scale. Именование, generated identity и кэш опираются на effective scale; raw-строка сохраняется для provenance и диагностики. Разные raw-строки могут намеренно схлопнуться в один `_scaled_XXX`, если Hammer++ отображает их одинаково. Полная таблица парсинга, пределов и округления Hammer++ ещё должна быть снята эмпирически; из неё будет следовать точный формат `XXX`.
 
 ### Материалы
 
@@ -123,7 +131,7 @@ materials/models/props_lab/cactus_sheet.vmt
 ### GeneratedModel
 
 - ссылка на SourceAsset;
-- канонический scale;
+- Hammer-compatible effective scale и его каноническое представление;
 - выходной logical/physical path;
 - static conversion state;
 - fingerprint skin layout;
@@ -155,7 +163,7 @@ Mapping должен быть стабильным между запусками
 
 - стабильный идентификатор карты, не только basename;
 - entity ID;
-- исходный запрос модели/scale/skin/color;
+- исходный запрос модели/raw scale/skin/color и вычисленный effective scale;
 - GeneratedModel и итоговый skin index;
 - версия последнего успешного анализа карты.
 
@@ -269,7 +277,8 @@ materials/models/psr_scaled/
 
 Legacy-контент хранится в многочисленных `scaled` подпапках рядом с оригиналами. В Antenna обнаружено:
 
-- 162 legacy-каталога с именем `scaled`/`psr_scaled` на момент инвентаризации, фактически новых `psr_scaled` ещё нет;
+- 162 legacy-каталога с именем `scaled`;
+- 0 новых каталогов `psr_scaled` на момент инвентаризации;
 - 6827 companion-файлов с `_scaled_XXX`;
 - 157 каталогов, содержащих такие файлы.
 
@@ -390,11 +399,82 @@ debug_logs/psr_big_map_test_02a_props_scaling_recompiler_log.txt
 - cache: cold start, warm start, missing artifact, modified source, schema migration, interrupted write;
 - end-to-end: no-op VMF, один static 1.0 white, dynamic 1.0, scaled static, colored static и сочетание нескольких карт.
 
-Реальные VMF и тестовые ассеты пользователь добавит позднее. До этого интеграционные предположения должны быть помечены и покрываться synthetic fixtures.
+Реальные VMF теперь доступны в проекте Antenna и описаны ниже. Они остаются mutable integration-окружением вне репозитория. Для unit/regression automation позднее нужно сделать минимальные source-preserving копии или synthetic fixtures с зафиксированным provenance/hash, не изменяя оригинальные карты.
+
+## Реальный regression-набор VMF
+
+Основной каталог:
+
+```text
+C:\Program Files (x86)\Steam\steamapps\sourcemods\antenna_sdk2013\maps
+```
+
+Приоритетные исходные карты структурно валидны и не содержат hidden entities. Последнее означает, что hidden-сценарии всё ещё требуют отдельного synthetic fixture.
+
+| Карта | SHA-256 | PSR entities | Модели | Уникальные requests | Повторы | Non-white |
+|---|---|---:|---:|---:|---:|---:|
+| `aa_models_color_tint_test_01a.vmf` | `18AEDE35A65477A3CECD00B6E063DE3E5807F5FB7388DD77C37F80958F57B69D` | 27 | 8 | 25 | 2 | 8 |
+| `aa_models_static_convert_test_01a.vmf` | `690C587A6D9C6FF50AA951A997BFA02E1B8DF896EF40B711DA090F9581EEAE4A` | 118 | 66 | 107 | 11 | 6 |
+| `psr_test_01a.vmf` | `506DA823F25275C40B0DFEA55F2F891A893626E9EB71F47D48865B376B94391A` | 49 | 7 | 49 | 0 | 24 |
+
+Здесь request — точная raw-комбинация `(model, modelscale, skin, rendercolor)` до Hammer-compatible нормализации. Повтор — дополнительная entity с уже встречавшейся raw-комбинацией. После вычисления effective scale число generated artifacts может быть меньше.
+
+### aa_models_color_tint_test_01a
+
+Главная integration-карта покраски и взаимодействия покраски со scale/static conversion.
+
+- 27 PSR entities и 12 side-by-side `prop_scalable` reference entities.
+- Восемь non-white entities используют четыре цвета: `190 48 148`, `228 0 228`, `76 146 211`, `86 202 181`.
+- `models/props_se/storage/book_2.mdl` представлен 11 сущностями, исходными skins 0/1/2, четырьмя цветами и восемью масштабами.
+- Для `book_2` есть разные цвета одного исходного skin и один scale `2.65` с white/magenta и другим цветовым запросом на том же исходном skin. Это важная проверка того, что цвет не входит в identity GeneratedModel, а становится отдельным SkinMapping/ColoredMaterial.
+- `models/props_se/airplane_funal_parachute.mdl` проверяет white и blue при scale 1.0.
+- 12 entities содержат legacy-key `convert_prop_to_static`; 2.0 не должен зависеть от порядка или наличия этого ключа.
+- Невалидных scale/RGB и generated `_scaled_` inputs не обнаружено.
+
+### aa_models_static_convert_test_01a
+
+Широкая compatibility- и diagnostics-карта, а не набор только корректных happy paths.
+
+- 118 PSR entities, 66 моделей и 36 side-by-side `prop_scalable` references.
+- Охватывает static, dynamic, physics и проблемные реальные модели, масштабы меньше/равно/больше 1.0, source skins 0/1/2 и несколько non-white запросов.
+- Содержит восемь Hammer++ scale-compatibility probes: шесть raw-значений с запятой (`0,8`/`0,4`), `sfgsfg` и `0.009` ниже старого минимального порога. Их нельзя заранее классифицировать как ошибки только по синтаксису строки.
+- Содержит три намеренно повторно масштабированных `_scaled_` model path, включая цепочку из трёх `_scaled_` суффиксов. Это legacy/diagnostic input для явной политики отказа или миграции.
+- Имена, заканчивающиеся на `_static.mdl`, сами по себе не являются доказательством generated-ассета и не должны интерпретироваться специально.
+- 59 entities содержат legacy-key `convert_prop_to_static`.
+- Версия после старого instance preprocessing находится в `maps/inst_fix/aa_models_static_convert_test_01a.vmf`: она также валидна, но содержит 112 PSR entities и не включает часть позднее добавленных invalid-input тестов. Основным источником считать root VMF.
+
+Ожидаемое поведение 2.0 для этих сущностей определяется Hammer++, а не Python `float()` и не старым порогом PSR. Подтверждено: `blablabla` и `1,0` видны как 1.0, `3,0` — как 3.0. Остальные границы и необычные строки нужно фиксировать по реальному viewport; если Hammer++ показывает 1.0, это не аварийный fallback, а правильный effective scale.
+
+### psr_test_01a
+
+Компактная regression-карта для scale/static conversion, Hammer++ scale parsing и покраски при исходном skin 0.
+
+- 49 PSR entities, 7 моделей и 49 уникальных raw requests; точных raw-повторов в текущем снимке нет.
+- Все 49 entities используют source skin 0. Поэтому карта хорошо проверяет покраску, но не заменяет `aa_models_color_tint_test_01a` для remap нескольих исходных skin families.
+- 24 non-white entities охватывают девять non-white RGB; вместе с white это десять цветовых значений.
+- Raw scale matrix: `1.0` (15), `0.50` (13), `1.50` (15), `3` (2), а также по одной entity с `1,0`, `3,0`, `invalid_scale_test` и `blablabla`.
+- По поведению output 1.1.2 три модели при scale 1.0 используют оригинал как static, четыре получают legacy `_static` вариант. Это удобная начальная матрица уже-static против convert-to-static.
+
+Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и структурно валиден:
+
+- все 45 source entity ID сохранены;
+- все 45 `prop_static_scalable` превращены в `prop_static`;
+- получилось 21 уникальное output model path;
+- source `modelscale`, `rendercolor` и `skin` остались в entity, хотя model path уже указывает на физически масштабированную модель;
+- output старше текущего root VMF, поэтому является историческим примером, а не полным oracle текущего входа.
+
+Решение 2.0: из итогового `prop_static` удаляются PSR-only keys — raw `modelscale`, `rendercolor`, legacy `convert_prop_to_static` и будущие служебные поля PSR. `skin` не является PSR-only property: он нужен `prop_static` и записывается как итоговый mapped skin index, чтобы выбрать исходную или generated color skin family.
+
+### Роль legacy-файлов рядом с картами
+
+- `.vmx`, `_backup.vmf`, `inst_fix/**` и `psr_temp/**` сохранять как исторические артефакты и использовать только при явном сравнении.
+- Root `.vmf` трёх приоритетных карт является текущим integration input.
+- Не переписывать эти VMF при автоматизации. Для destructive/end-to-end теста сначала делать отдельную копию и задавать отдельный `vmf_out`.
+- Hash в таблице служит provenance текущего снимка, но карты пользователь может дальше редактировать; изменение hash требует повторной инвентаризации, а не автоматического отказа от тестирования.
 
 ## Открытые решения
 
-- правило округления/пределов scale и формат канонического scale key;
+- полная эмпирическая матрица Hammer++-парсинга, пределов и округления scale, а также формат канонического scale key;
 - выбор `$color` или `$color2` по shader и поведение для неподдерживаемых shader'ов;
 - точная семантика Patch `insert`/`replace` на SDK 2013 SP;
 - способ fingerprint зависимостей для Patch из VPK;
@@ -412,6 +492,8 @@ debug_logs/psr_big_map_test_02a_props_scaling_recompiler_log.txt
 - Generated-материалы живут в `materials/models/psr_scaled`.
 - Используется только `_scaled_XXX`; `_static` не создаётся и не трактуется специально.
 - Нейтральный static 1.0 использует оригинал; остальные случаи создают managed-модель.
+- Effective scale повторяет видимое поведение Hammer++, включая его обработку необычных raw-строк.
+- Из итогового `prop_static` удаляются PSR-only properties; `skin` сохраняется как итоговый mapped index.
 - Normal cleanup управляет только новыми managed roots.
 - Legacy migration/cleanup является отдельной операцией.
 - Покраска предпочитает Patch с fallback на полную VMT-копию.
