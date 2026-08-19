@@ -162,3 +162,4 @@ cython_debug/
 #.idea/
 props_scaling_recompiler_log.txt
 props_scaling_recompiler_200_notes.txt
+/prod
