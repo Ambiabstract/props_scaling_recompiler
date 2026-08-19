@@ -60,7 +60,7 @@ Garry's Mod, Portal 2 и другие ветки Source не входят в sco
 Оригинальная модель используется напрямую только при одновременном выполнении условий:
 
 - она уже имеет static-prop flag;
-- запрошенный scale равен 1.0;
+- Hammer-compatible effective scale равен 1.0;
 - запрошенный цвет равен `255 255 255`.
 
 Любая другая комбинация создаёт managed-модель PSR, включая dynamic при scale 1.0 и покрашенный static при scale 1.0.
@@ -441,7 +441,7 @@ C:\Program Files (x86)\Steam\steamapps\sourcemods\antenna_sdk2013\maps
 - Содержит три намеренно повторно масштабированных `_scaled_` model path, включая цепочку из трёх `_scaled_` суффиксов. Это legacy/diagnostic input для явной политики отказа или миграции.
 - Имена, заканчивающиеся на `_static.mdl`, сами по себе не являются доказательством generated-ассета и не должны интерпретироваться специально.
 - 59 entities содержат legacy-key `convert_prop_to_static`.
-- Версия после старого instance preprocessing находится в `maps/inst_fix/aa_models_static_convert_test_01a.vmf`: она также валидна, но содержит 112 PSR entities и не включает часть позднее добавленных invalid-input тестов. Основным источником считать root VMF.
+- Версия после старого instance preprocessing находится в `maps/inst_fix/aa_models_static_convert_test_01a.vmf`: она также валидна, но содержит 112 PSR entities и не включает часть позднее добавленных Hammer++ compatibility-тестов. Основным источником считать root VMF.
 
 Ожидаемое поведение 2.0 для этих сущностей определяется Hammer++, а не Python `float()` и не старым порогом PSR. Подтверждено: `blablabla` и `1,0` видны как 1.0, `3,0` — как 3.0. Остальные границы и необычные строки нужно фиксировать по реальному viewport; если Hammer++ показывает 1.0, это не аварийный fallback, а правильный effective scale.
 
