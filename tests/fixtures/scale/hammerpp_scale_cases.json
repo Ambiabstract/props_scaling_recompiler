@@ -4,10 +4,10 @@
   "oracle_prefix": "effective_scale=",
   "source": {
     "map": "psr_scale_compatibility_01a.vmf",
-    "sha256": "b6a5a5827ec4bf8cbeeed8163ac1b85d9d17560a2759d2062b4342c928afd6ed",
-    "bytes": 41255,
-    "active_entities": 29,
-    "note": "Extracted read-only from the Antenna research map on 2026-08-20. The effective_scale oracle is test-only and includes the PSR lower clamp."
+    "sha256": "af598164d2d04972a0a2d785fda6688e393ac4b24b177acb4d0919b08a7a12db",
+    "bytes": 45234,
+    "active_entities": 35,
+    "note": "Extracted read-only from the Antenna research map on 2026-08-21. The effective_scale oracle is test-only and includes PSR lower clamp and ROUND_HALF_UP hundredth quantisation."
   },
   "cases": [
     { "entity_id": "104", "raw_modelscale": "1", "effective_scale": "1.0" },
@@ -38,6 +38,12 @@
     { "entity_id": "2517", "raw_modelscale": "1.02", "effective_scale": "1.02" },
     { "entity_id": "2816", "raw_modelscale": "1.5", "effective_scale": "1.5" },
     { "entity_id": "2820", "raw_modelscale": "1ю5", "effective_scale": "1.0" },
-    { "entity_id": "2824", "raw_modelscale": "0.5", "effective_scale": "0.5" }
+    { "entity_id": "2824", "raw_modelscale": "0.5", "effective_scale": "0.5" },
+    { "entity_id": "2861", "raw_modelscale": "1.001", "effective_scale": "1.0", "reason": "psr_scale_rounding" },
+    { "entity_id": "2868", "raw_modelscale": "1.009", "effective_scale": "1.01", "reason": "psr_scale_rounding" },
+    { "entity_id": "2889", "raw_modelscale": "1.999", "effective_scale": "2.0", "reason": "psr_scale_rounding" },
+    { "entity_id": "2893", "raw_modelscale": "2.001", "effective_scale": "2.0", "reason": "psr_scale_rounding" },
+    { "entity_id": "2932", "raw_modelscale": "1.095", "effective_scale": "1.1", "reason": "psr_scale_rounding" },
+    { "entity_id": "2937", "raw_modelscale": "1.23", "effective_scale": "1.23" }
   ]
 }

@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Literal, Mapping
 
 from psr.assets import SourceAssetMetadata
+from psr.domain import resolve_compile_scale, scaled_model_path
 
 from .discovery import (
     InspectedMap,
@@ -20,13 +21,14 @@ WHITE = (255, 255, 255)
 
 @dataclass(frozen=True, slots=True)
 class MapUsagePlan:
-    """Resolved intent for one VMF entity; no output path is committed yet."""
+    """Resolved intent and deterministic output model for one VMF entity."""
 
     request: VmfEntityRequest
     compile_scale: Decimal
     source_skin: int
     render_color: tuple[int, int, int]
     operation: Literal["reuse_original", "generate_model"]
+    logical_output_model: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +36,7 @@ class GeneratedModelRequirement:
     """One unique source/compile-scale model requirement."""
 
     logical_source_model: str
+    logical_output_model: str
     compile_scale: Decimal
     requires_static_conversion: bool
     entity_ids: tuple[str, ...]
@@ -70,14 +73,8 @@ class OperationPlan:
 
 def build_operation_plan(
     inspected: InspectedMap,
-    compile_scales: Mapping[str, Decimal],
 ) -> OperationPlan:
-    """Build a side-effect-free plan from explicit, externally resolved scales.
-
-    Hammer++ scale parsing and suffix formatting are deliberately outside this
-    function until their empirical contract is complete. Raw strings remain in
-    each ``VmfEntityRequest``; callers provide only the resulting compile scale.
-    """
+    """Build a side-effect-free plan using the confirmed Hammer scale policy."""
     diagnostics = list(inspected.diagnostics)
     assets = {
         asset.logical_model_path: asset
@@ -89,28 +86,16 @@ def build_operation_plan(
         asset = assets.get(request.logical_model_path)
         if asset is None:
             continue
-        compile_scale = compile_scales.get(request.entity_id)
-        if compile_scale is None:
-            diagnostics.append(_request_error(
-                request,
-                "compile_scale_unresolved",
-                "no empirically resolved PSR compile scale was supplied",
+        scale = resolve_compile_scale(request.raw_modelscale)
+        for item in scale.diagnostics:
+            diagnostics.append(PipelineDiagnostic(
+                "warning",
+                item.code,
+                item.detail,
+                request.entity_id,
+                request.source_line,
             ))
-            continue
-        if not isinstance(compile_scale, Decimal) or not compile_scale.is_finite():
-            diagnostics.append(_request_error(
-                request,
-                "invalid_compile_scale",
-                f"compile scale must be a finite Decimal, got {compile_scale!r}",
-            ))
-            continue
-        if compile_scale < Decimal("0.01"):
-            diagnostics.append(_request_error(
-                request,
-                "invalid_compile_scale",
-                f"compile scale {compile_scale} is below the approved PSR minimum 0.01",
-            ))
-            continue
+        compile_scale = scale.compile_scale
         source_skin = _parse_skin(request, asset, diagnostics)
         render_color = _parse_color(request, diagnostics)
         if source_skin is None or render_color is None:
@@ -125,14 +110,20 @@ def build_operation_plan(
         operation: Literal["reuse_original", "generate_model"]
         if asset.is_static_prop and compile_scale == 1 and render_color == WHITE:
             operation = "reuse_original"
+            logical_output_model = request.logical_model_path
         else:
             operation = "generate_model"
+            logical_output_model = scaled_model_path(
+                request.logical_model_path,
+                compile_scale,
+            )
         usages.append(MapUsagePlan(
             request,
             compile_scale,
             source_skin,
             render_color,
             operation,
+            logical_output_model,
         ))
 
     generated_models = _group_generated_models(usages, assets)
@@ -241,6 +232,7 @@ def _group_generated_models(
     return tuple(
         GeneratedModelRequirement(
             logical_source_model=model,
+            logical_output_model=scaled_model_path(model, scale),
             compile_scale=scale,
             requires_static_conversion=not assets[model].is_static_prop,
             entity_ids=tuple(grouped[(model, scale)]),

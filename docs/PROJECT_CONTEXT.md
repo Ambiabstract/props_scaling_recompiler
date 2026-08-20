@@ -21,12 +21,13 @@
 - `props_scaling_recompiler.py` — незавершённый архитектурный прототип 2.0.
 - Прототип 2.0 синтаксически корректен, но функционально не завершает pipeline: содержит интерактивные остановки, заглушки генерации QC/компиляции, не сохраняет новый кэш и не пишет `vmf_out`.
 - Создан начальный проектный фундамент: `pyproject.toml`, пакет `psr` с архитектурными границами и автономные smoke/contract-тесты, совместимые с pytest и стандартным `unittest`.
-- Зафиксированы первые synthetic fixtures для VMF и GameInfo, а также test-only scale oracle из 29 сущностей `psr_scale_compatibility_01a.vmf`; VMT/Patch fixtures намеренно отложены до этапа покраски.
+- Зафиксированы первые synthetic fixtures для VMF и GameInfo, а также test-only scale oracle из 35 сущностей `psr_scale_compatibility_01a.vmf`; VMT/Patch fixtures намеренно отложены до этапа покраски.
 - Добавлен первый `srctools` integration spike: ordered SearchPaths plan, ручная цепочка folder/VPK, точный logical-path lookup и provenance победившего источника. Synthetic VPK создаются только во временных каталогах тестов.
 - Добавлен production-адаптер `psr.assets.mdl`: он разрешает исходный MDL через ordered SearchPaths, читает MDL 44–49 посредством `srctools.mdl.Model` и возвращает immutable `SourceAssetMetadata` с provenance, SHA-256 MDL/companions, static flag, `$cdmaterials`, skin families и точными ссылками на найденные VMT. `models/psr_scaled/**` отклоняется до чтения как managed output.
 - Добавлены детерминированные synthetic MDL v44/v48 fixtures и contract-тесты для folder/VPK, static/dynamic, нескольких материалов и skins, отсутствующего VMT и повреждённого offset. Бинарники fixtures строятся во временном каталоге и не коммитятся.
 - Добавлен байтовый source-preserving VMF parser `psr.keyvalues.vmf`: он сохраняет исходные bytes и spans, порядок и повторяющиеся свойства/блоки, различает direct и nested properties, понимает комментарии и не выполняет сериализацию при discovery.
 - Добавлен read-only pipeline `discover_vmf_requests -> inspect_map_sources -> build_operation_plan`. Он игнорирует entities внутри top-level `hidden`, связывает активные VMF requests с `SourceAssetMetadata`, агрегирует generated-model requirements независимо от color/skin и color requirements независимо от scale, но ничего не генерирует и не изменяет VMF.
+- Добавлен pure resolver `psr.domain.resolve_compile_scale`, совпадающий со всеми 35 подтверждёнными Hammer++ cases. Он читает беззнаковый десятичный prefix, использует fallback `1.0`, применяет PSR clamp `0.01` и decimal `ROUND_HALF_UP` до сотых; prefix/fallback/clamp/rounding становятся явными warnings `OperationPlan`. `scaled_model_path()` детерминированно назначает managed `_scaled_XXX` path из целого процента, форматируя его с минимальной шириной 3.
 - Исследовательские скрипты `is_staticprop.py`, `skins_from_mdl.py` и `mdl_skins_and_cdmaterials*.py` подтверждают возможность чтения static flag, material table, `$cdmaterials` и skin families непосредственно из MDL.
 - Пользовательское незакоммиченное изменение в `props_scaling_recompiler.py`: версия `2.0.0 - dev 001` заменена на `2.0.0 - dev 002`.
 
@@ -120,16 +121,19 @@ models/example/foo_static.mdl
 -> models/psr_scaled/example/foo_static_scaled_150.mdl
 ```
 
-Источник истины для Hammer-compatible effective scale — видимое поведение Hammer++. PSR повторяет то, что художник видит в viewport, кроме единственного утверждённого ограничения: effective scale ниже `0.01` клампится для компиляции до `0.01`. Это намеренное исключение необходимо ради практической полезности и производительности очень маленьких моделей и должно сопровождаться явной диагностикой. Подтверждённые примеры:
+Источник истины для Hammer-compatible effective scale — видимое поведение Hammer++. Для конечной compile identity PSR применяет два намеренных преобразования: effective scale ниже `0.01` клампится до `0.01`, затем значение округляется через decimal `ROUND_HALF_UP` до сотых. Clamp защищает от практически бесполезных и дорогих сверхмалых моделей, а округление обеспечивает однозначный целочисленный процент `_scaled_XXX`. Оба преобразования явно диагностируются. Подтверждённые примеры:
 
 ```text
 blablabla -> 1.0
 1,0        -> 1.0
 3,0        -> 3.0
 0.001      -> Hammer effective 0.001 -> PSR compile 0.01
+1.095      -> PSR compile 1.10 -> _scaled_110
+1.104      -> PSR compile 1.10 -> _scaled_110
+1.105      -> PSR compile 1.11 -> _scaled_111
 ```
 
-В production-модели данных и кэше нужно разделить только raw-строку `modelscale` и итоговый PSR compile scale после Hammer-совместимой нормализации и нижнего clamp. Именование, generated identity и кэш опираются на compile scale; raw сохраняется в `MapUsage` для provenance и диагностики. Hammer-compatible effective scale является тестовым oracle: он нужен исследовательской матрице для доказательства соответствия Hammer++, но не входит в cache schema и не сохраняется как состояние проекта. Разные raw-значения могут намеренно схлопнуться в один `_scaled_XXX`, если Hammer++ отображает их одинаково либо если они попадают под нижний clamp. Полная таблица парсинга, пределов и округления Hammer++ ещё должна быть снята эмпирически; из неё будет следовать точный формат `XXX`.
+В production-модели данных и кэше нужно разделить только raw-строку `modelscale` и итоговый PSR compile scale после Hammer-совместимой нормализации, нижнего clamp и округления. Именование, generated identity и кэш опираются на compile scale; raw сохраняется в `MapUsage` для provenance и диагностики. Hammer-compatible effective scale является тестовым oracle и не входит в cache schema. Разные raw-значения намеренно схлопываются в один `_scaled_XXX`, если дают одинаковый округлённый compile scale. Числовая identity равна точному целому `compile_scale * 100`; в имени она форматируется с минимальной шириной 3 и ведущими нулями для коротких значений (`001`, `050`, `110`, но `1000` и `5500` не обрезаются). Внутренняя структура исходного model path сохраняется под `models/psr_scaled/`.
 
 ### Материалы
 
@@ -236,7 +240,7 @@ validate inputs
 
 Если активных PSR-сущностей нет, `vmf_out` всё равно должен быть создан как эквивалент `vmf_in`.
 
-Реализованный pre-generation `OperationPlan` всегда устанавливает `requires_vmf_output=True`, включая no-op карту. Он хранит raw `modelscale` в `VmfEntityRequest`, но принимает итоговый `compile_scale` извне как явный `Decimal`. Это намеренная граница: пока полная Hammer++-матрица и формат `_scaled_XXX` не утверждены, текущая гипотеза числового prefix parsing не становится production-политикой. План уже определяет `reuse_original` только для static + compile scale 1.0 + white, валидирует skin/RGB и детерминированно агрегирует остальные model/color requirements.
+Реализованный pre-generation `OperationPlan` всегда устанавливает `requires_vmf_output=True`, включая no-op карту. Он хранит raw `modelscale` в `VmfEntityRequest`, получает итоговый `Decimal` compile scale и назначает детерминированный output model path. План определяет `reuse_original` только для static + compile scale 1.0 + white; остальные usages указывают на `models/psr_scaled/**/_scaled_XXX.mdl`. Model requirements агрегируются уже по округлённому compile scale, поэтому `1.095`, `1.1` и `1.104` переиспользуют одну `_scaled_110`.
 
 Нельзя записывать VMF, указывающий на неподтверждённый артефакт. Частично успешная генерация должна либо сохранить корректные ранее существовавшие артефакты, либо завершиться до commit-этапа с понятным отчётом.
 
@@ -443,7 +447,9 @@ debug_logs/psr_big_map_test_02a_props_scaling_recompiler_log.txt
 
 Реальные VMF теперь доступны в проекте Antenna и описаны ниже. Они остаются mutable integration-окружением вне репозитория. Для unit/regression automation позднее нужно сделать минимальные source-preserving копии или synthetic fixtures с зафиксированным provenance/hash, не изменяя оригинальные карты.
 
-Read-only проверка нового VMF discovery воспроизвела зафиксированные counts и SHA-256 всех трёх приоритетных карт: 27/118/49 активных PSR entities, ноль hidden и ноль structural diagnostics. Для `aa_models_color_tint_test_01a.vmf` все восемь уникальных моделей дополнительно разрешены и прочитаны через production MDL adapter без diagnostics.
+Read-only проверка нового VMF discovery воспроизвела зафиксированные counts и SHA-256 всех трёх приоритетных карт: 27/118/49 активных PSR entities, ноль hidden и ноль structural diagnostics. Для `aa_models_color_tint_test_01a.vmf` все восемь уникальных моделей дополнительно разрешены и прочитаны через production MDL adapter без diagnostics. После подключения scale resolver полный pre-generation plan этой карты также валиден: 27 usages агрегированы в 17 generated-model requirements и 8 color/skin requirements без diagnostics.
+
+Обновлённая `psr_scale_compatibility_01a.vmf` структурно валидна: 35 active requests, 45 234 байта, SHA-256 `af598164d2d04972a0a2d785fda6688e393ac4b24b177acb4d0919b08a7a12db`. Read-only plan разрешил одну исходную модель и все 35 usages, агрегировав их в 10 generated paths от `_scaled_001` до `_scaled_5500`; ожидаемые prefix/fallback/clamp/rounding warnings не делают plan невалидным.
 
 Отдельная исследовательская карта `psr_scale_compatibility_01a.vmf` используется для эмпирического определения Hammer++-совместимого scale. В её `prop_static_scalable` поле `debug_string` хранит test oracle в формате `effective_scale=<value>` для каждого raw `modelscale`. Oracle соответствует ожидаемому PSR compile scale: обычно он совпадает с viewport Hammer++, но уже учитывает утверждённый clamp значений ниже `0.01`. Это тестовая аннотация, а не поле production/cache schema. Актуальный структурно проверенный снимок и список незакрытых случаев находятся в `docs/research/HAMMERPP_SCALE_COMPATIBILITY.md`. Карта является источником наблюдений, но не должна изменяться автоматическими тестами PSR.
 
@@ -520,7 +526,7 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 
 ## Открытые решения
 
-- полная эмпирическая матрица Hammer++-парсинга, пределов и округления scale, а также формат канонического scale key;
+- расширение Hammer++ regression-матрицы редкими формами и верхними пределами;
 - выбор `$color` или `$color2` по shader и поведение для неподдерживаемых shader'ов;
 - точная семантика Patch `insert`/`replace` на SDK 2013 SP;
 - способ fingerprint зависимостей для Patch из VPK;
@@ -539,7 +545,7 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - Используется только `_scaled_XXX`; `_static` не создаётся и не трактуется специально.
 - Нейтральный static 1.0 использует оригинал; остальные случаи создают managed-модель.
 - Effective scale повторяет видимое поведение Hammer++, включая его обработку необычных raw-строк.
-- PSR compile scale равен effective scale, кроме значений ниже `0.01`, которые намеренно клампятся до `0.01`; generated identity и имя артефакта используют compile scale.
+- PSR compile scale получается из effective scale нижним clamp `0.01` и decimal `ROUND_HALF_UP` до сотых; generated identity и `_scaled_XXX` используют этот compile scale и точный целый процент с минимальной шириной 3 в имени.
 - Из итогового `prop_static` удаляются PSR-only properties; `skin` сохраняется как итоговый mapped index.
 - Normal cleanup управляет только новыми managed roots.
 - Legacy migration/cleanup является отдельной операцией.

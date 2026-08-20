@@ -140,10 +140,7 @@ class DiscoveryPlanningTests(unittest.TestCase):
             map_identity="maps/fixture/active_and_hidden_psr.vmf",
         )
         inspected = inspect_map_sources(discovery, self.filesystem())
-        plan = build_operation_plan(
-            inspected,
-            {"100": Decimal("1.0"), "101": Decimal("0.01")},
-        )
+        plan = build_operation_plan(inspected)
 
         self.assertEqual([request.entity_id for request in discovery.requests], ["100", "101"])
         self.assertEqual(discovery.hidden_psr_entities, 1)
@@ -155,13 +152,28 @@ class DiscoveryPlanningTests(unittest.TestCase):
             [(usage.request.entity_id, usage.operation) for usage in plan.usages],
             [("100", "reuse_original"), ("101", "generate_model")],
         )
+        self.assertEqual(
+            [usage.logical_output_model for usage in plan.usages],
+            [
+                "models/props_fixture/already_static.mdl",
+                "models/psr_scaled/props_fixture/dynamic_scaled_001.mdl",
+            ],
+        )
         self.assertEqual(len(plan.generated_models), 1)
         self.assertEqual(
             plan.generated_models[0].logical_source_model,
             dynamic["logical_model_path"],
         )
         self.assertTrue(plan.generated_models[0].requires_static_conversion)
+        self.assertEqual(
+            plan.generated_models[0].logical_output_model,
+            "models/psr_scaled/props_fixture/dynamic_scaled_001.mdl",
+        )
         self.assertEqual(plan.colored_skins, ())
+        self.assertEqual(
+            [diagnostic.code for diagnostic in plan.diagnostics],
+            ["psr_minimum_scale_clamp"],
+        )
 
     def test_model_and_color_requirements_are_aggregated_independently(self) -> None:
         static = load_mdl_case("static_multi_material")
@@ -175,25 +187,57 @@ class DiscoveryPlanningTests(unittest.TestCase):
         ).encode("ascii")
         discovery = discover_vmf_requests(source, map_identity="maps/colors.vmf")
         inspected = inspect_map_sources(discovery, self.filesystem())
-        plan = build_operation_plan(
-            inspected,
-            {
-                "1": Decimal("1"),
-                "2": Decimal("1"),
-                "3": Decimal("2"),
-                "4": Decimal("2"),
-            },
-        )
+        plan = build_operation_plan(inspected)
 
         self.assertTrue(plan.is_valid)
         self.assertEqual(
             [(item.compile_scale, item.entity_ids) for item in plan.generated_models],
             [(Decimal("1"), ("2",)), (Decimal("2"), ("3", "4"))],
         )
+        self.assertEqual(
+            [item.logical_output_model for item in plan.generated_models],
+            [
+                "models/psr_scaled/fixture/static_multi_scaled_100.mdl",
+                "models/psr_scaled/fixture/static_multi_scaled_200.mdl",
+            ],
+        )
         self.assertEqual(len(plan.colored_skins), 1)
         self.assertEqual(plan.colored_skins[0].entity_ids, ("2", "3"))
         self.assertEqual(plan.colored_skins[0].render_color, (190, 48, 148))
         self.assertEqual(plan.colored_skins[0].source_materials, ("body", "accent"))
+
+    def test_distinct_raw_scales_collapse_to_one_generated_identity(self) -> None:
+        dynamic = load_mdl_case("dynamic_v44")
+        model = dynamic["logical_model_path"]
+        self.install_case(dynamic)
+        source = (
+            entity("5", model, "1.095")
+            + entity("6", model, "1.1")
+            + entity("7", model, "1.104")
+        ).encode("ascii")
+        discovery = discover_vmf_requests(source, map_identity="maps/scales.vmf")
+        inspected = inspect_map_sources(discovery, self.filesystem())
+        plan = build_operation_plan(inspected)
+
+        self.assertTrue(plan.is_valid)
+        self.assertEqual(
+            [usage.request.raw_modelscale for usage in plan.usages],
+            ["1.095", "1.1", "1.104"],
+        )
+        self.assertEqual(
+            [usage.compile_scale for usage in plan.usages],
+            [Decimal("1.10"), Decimal("1.10"), Decimal("1.10")],
+        )
+        self.assertEqual(len(plan.generated_models), 1)
+        self.assertEqual(plan.generated_models[0].entity_ids, ("5", "6", "7"))
+        self.assertEqual(
+            plan.generated_models[0].logical_output_model,
+            "models/psr_scaled/fixture/dynamic_v44_scaled_110.mdl",
+        )
+        self.assertEqual(
+            [diagnostic.code for diagnostic in plan.diagnostics],
+            ["psr_scale_rounding", "psr_scale_rounding"],
+        )
 
     def test_invalid_inputs_are_aggregated_as_plan_diagnostics(self) -> None:
         static = load_mdl_case("static_multi_material")
@@ -207,14 +251,7 @@ class DiscoveryPlanningTests(unittest.TestCase):
         ).encode("ascii")
         discovery = discover_vmf_requests(source, map_identity="maps/invalid.vmf")
         inspected = inspect_map_sources(discovery, self.filesystem())
-        plan = build_operation_plan(
-            inspected,
-            {
-                "10": Decimal("1"),
-                "11": Decimal("1"),
-                "12": Decimal("1"),
-            },
-        )
+        plan = build_operation_plan(inspected)
 
         self.assertFalse(plan.is_valid)
         self.assertEqual(
@@ -223,10 +260,14 @@ class DiscoveryPlanningTests(unittest.TestCase):
                 "invalid_skin",
                 "rendercolor_out_of_range",
                 "material_not_found",
-                "compile_scale_unresolved",
+                "hammer_scale_fallback",
             ],
         )
-        self.assertEqual(plan.usages, ())
+        self.assertEqual(
+            [usage.request.entity_id for usage in plan.usages],
+            ["13"],
+        )
+        self.assertEqual(plan.usages[0].compile_scale, Decimal("1"))
 
     def test_no_psr_entities_still_require_equivalent_vmf_output(self) -> None:
         discovery = discover_vmf_requests(
@@ -234,7 +275,7 @@ class DiscoveryPlanningTests(unittest.TestCase):
             map_identity="maps/no_psr_entities.vmf",
         )
         inspected = inspect_map_sources(discovery, OrderedAssetFileSystem(()))
-        plan = build_operation_plan(inspected, {})
+        plan = build_operation_plan(inspected)
 
         self.assertTrue(plan.is_valid)
         self.assertEqual(plan.usages, ())
