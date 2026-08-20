@@ -1,0 +1,24 @@
+// Synthetic no-op fixture. LF newlines and formatting are intentional.
+versioninfo
+{
+	"editorversion" "400"
+	"editorbuild" "10000"
+	"mapversion" "1"
+}
+world
+{
+	"id" "1"
+	"classname" "worldspawn"
+}
+entity
+{
+	"id" "10"
+	"classname" "info_player_start"
+	"origin" "0 0 16"
+	editor
+	{
+		"color" "220 30 220"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+	}
+}

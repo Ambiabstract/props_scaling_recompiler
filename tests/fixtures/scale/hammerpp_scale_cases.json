@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "oracle_field": "debug_string",
+  "oracle_prefix": "effective_scale=",
+  "source": {
+    "map": "psr_scale_compatibility_01a.vmf",
+    "sha256": "b6a5a5827ec4bf8cbeeed8163ac1b85d9d17560a2759d2062b4342c928afd6ed",
+    "bytes": 41255,
+    "active_entities": 29,
+    "note": "Extracted read-only from the Antenna research map on 2026-08-20. The effective_scale oracle is test-only and includes the PSR lower clamp."
+  },
+  "cases": [
+    { "entity_id": "104", "raw_modelscale": "1", "effective_scale": "1.0" },
+    { "entity_id": "1191", "raw_modelscale": "1.0", "effective_scale": "1.0" },
+    { "entity_id": "1195", "raw_modelscale": "1,0", "effective_scale": "1.0" },
+    { "entity_id": "1199", "raw_modelscale": "blablabla", "effective_scale": "1.0" },
+    { "entity_id": "1203", "raw_modelscale": "01", "effective_scale": "1.0" },
+    { "entity_id": "1224", "raw_modelscale": "02", "effective_scale": "2.0" },
+    { "entity_id": "1246", "raw_modelscale": "2", "effective_scale": "2.0" },
+    { "entity_id": "1251", "raw_modelscale": "2.0", "effective_scale": "2.0" },
+    { "entity_id": "1271", "raw_modelscale": "2,0", "effective_scale": "2.0" },
+    { "entity_id": "1362", "raw_modelscale": ".", "effective_scale": "1.0" },
+    { "entity_id": "1368", "raw_modelscale": ",", "effective_scale": "1.0" },
+    { "entity_id": "1406", "raw_modelscale": ">", "effective_scale": "1.0" },
+    { "entity_id": "1412", "raw_modelscale": "'", "effective_scale": "1.0" },
+    { "entity_id": "1416", "raw_modelscale": "''", "effective_scale": "1.0" },
+    { "entity_id": "1421", "raw_modelscale": "'''", "effective_scale": "1.0" },
+    { "entity_id": "1443", "raw_modelscale": "''", "effective_scale": "1.0" },
+    { "entity_id": "1447", "raw_modelscale": "'''", "effective_scale": "1.0" },
+    { "entity_id": "2346", "raw_modelscale": "0,01", "effective_scale": "1.0" },
+    { "entity_id": "2370", "raw_modelscale": "1,5", "effective_scale": "1.0" },
+    { "entity_id": "2394", "raw_modelscale": "0,5", "effective_scale": "1.0" },
+    { "entity_id": "2430", "raw_modelscale": "0.01", "effective_scale": "0.01" },
+    { "entity_id": "2434", "raw_modelscale": "0.02", "effective_scale": "0.02" },
+    { "entity_id": "2438", "raw_modelscale": "55", "effective_scale": "55.0" },
+    { "entity_id": "2460", "raw_modelscale": "0.001", "effective_scale": "0.01", "reason": "psr_minimum_scale_clamp" },
+    { "entity_id": "2513", "raw_modelscale": "1.01", "effective_scale": "1.01" },
+    { "entity_id": "2517", "raw_modelscale": "1.02", "effective_scale": "1.02" },
+    { "entity_id": "2816", "raw_modelscale": "1.5", "effective_scale": "1.5" },
+    { "entity_id": "2820", "raw_modelscale": "1ю5", "effective_scale": "1.0" },
+    { "entity_id": "2824", "raw_modelscale": "0.5", "effective_scale": "0.5" }
+  ]
+}

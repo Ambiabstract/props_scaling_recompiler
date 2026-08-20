@@ -1,0 +1,18 @@
+// Synthetic GameInfo fixture. Repeated SearchPath keys and order are intentional.
+GameInfo
+{
+	game "PSR fixture"
+	FileSystem
+	{
+		SteamAppId "243730"
+		SearchPaths
+		{
+			game+mod+mod_write+default_write_path "|gameinfo_path|."
+			game "|gameinfo_path|custom/*"
+			game "|gameinfo_path|fixture_dir.vpk"
+			game "|all_source_engine_paths|hl2/hl2_textures.vpk"
+			game "ep2/ep2_pak.vpk"
+			game "."
+		}
+	}
+}

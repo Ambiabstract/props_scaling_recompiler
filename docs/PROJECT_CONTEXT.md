@@ -20,7 +20,8 @@
 - `props_scaling_recompiler_v1.1.2.py` — последняя релизная реализация и текущий поведенческий baseline.
 - `props_scaling_recompiler.py` — незавершённый архитектурный прототип 2.0.
 - Прототип 2.0 синтаксически корректен, но функционально не завершает pipeline: содержит интерактивные остановки, заглушки генерации QC/компиляции, не сохраняет новый кэш и не пишет `vmf_out`.
-- Автоматических тестов и зафиксированных test fixtures пока нет.
+- Создан начальный проектный фундамент: `pyproject.toml`, пакет `psr` с архитектурными границами и восемь автономных smoke/contract-тестов, совместимых с pytest и стандартным `unittest`.
+- Зафиксированы первые synthetic fixtures для VMF и GameInfo, а также test-only scale oracle из 29 сущностей `psr_scale_compatibility_01a.vmf`; VMT/Patch fixtures намеренно отложены до этапа покраски.
 - Исследовательские скрипты `is_staticprop.py`, `skins_from_mdl.py` и `mdl_skins_and_cdmaterials*.py` подтверждают возможность чтения static flag, material table, `$cdmaterials` и skin families непосредственно из MDL.
 - Пользовательское незакоммиченное изменение в `props_scaling_recompiler.py`: версия `2.0.0 - dev 001` заменена на `2.0.0 - dev 002`.
 

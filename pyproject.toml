@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "props-scaling-recompiler"
+dynamic = ["version"]
+description = "Compile-time model scaling and static-prop conversion for Hammer++"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Ambiabstract (Sergey Shavin)" },
+]
+dependencies = [
+    "colorama>=0.4.6,<1",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.3,<10",
+]
+
+[tool.setuptools.packages.find]
+include = ["psr", "psr.*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "psr._version.__version__" }
+
+[tool.pytest.ini_options]
+minversion = "8.3"
+testpaths = ["tests"]
+addopts = ["--strict-config", "--strict-markers", "-ra"]
+markers = [
+    "integration: isolated integration tests that may invoke local tool adapters",
+    "external_sdk: opt-in tests requiring the user's Source SDK 2013 SP environment",
+]

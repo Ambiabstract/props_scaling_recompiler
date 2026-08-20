@@ -1,0 +1,57 @@
+// Synthetic fixture for direct properties, ordering, duplicate keys and hidden blocks.
+versioninfo
+{
+	"editorversion" "400"
+	"mapversion" "7"
+}
+world
+{
+	"id" "1"
+	"classname" "worldspawn"
+}
+entity
+{
+	"id" "100"
+	"classname" "prop_static_scalable"
+	"model" "models/props_fixture/already_static.mdl"
+	"modelscale" "1.0"
+	"debug_string" "effective_scale=1.0"
+	"skin" "0"
+	"rendercolor" "255 255 255"
+	"custom_repeat" "first"
+	"custom_repeat" "second"
+	editor
+	{
+		"color" "255 255 0"
+		"visgroupshown" "1"
+	}
+}
+hidden
+{
+	entity
+	{
+		"id" "200"
+		"classname" "prop_static_scalable"
+		"model" "models/props_fixture/hidden.mdl"
+		"modelscale" "2"
+		"debug_string" "effective_scale=2.0"
+		"skin" "0"
+		"rendercolor" "255 255 255"
+	}
+}
+entity
+{
+	"id" "101"
+	editor
+	{
+		// This nested value must never define the entity class.
+		"classname" "prop_static"
+		"color" "255 255 0"
+	}
+	"modelscale" "0.001"
+	"model" "models/props_fixture/dynamic.mdl"
+	"classname" "prop_static_scalable"
+	"debug_string" "effective_scale=0.01"
+	"rendercolor" "255 255 255"
+	"skin" "0"
+}
