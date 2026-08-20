@@ -31,9 +31,12 @@ Runtime-зависимость `srctools` закреплена точной ве
 
 Высокоуровневый `srctools.game.Game.get_filesystem()` не использовать: он не сохраняет требуемый PSR порядок folder/VPK SearchPaths. `FileSystemChain` собирается вручную из `RawFileSystem` и `VPKFileSystem`. `srctools.vmf.VMF.export()` также не используется для итоговой записи VMF; source-preserving edits остаются ответственностью `psr/keyvalues`.
 
+Исходные модели инспектируются через `psr.assets.inspect_source_model()`. Функция принимает только логический `models/**/*.mdl` path, запрещает managed namespace `models/psr_scaled/**`, разрешает модель, companions и VMT через одну ordered filesystem chain и возвращает immutable discovery DTO. Порядок material slots берётся из отсортированных числовых индексов MDL mesh table, а не из внутреннего `set` в `srctools.mdl.Model`.
+
 ## Уровни тестов
 
 - Unit/contract tests всегда изолированы от установленного SDK и проектов пользователя.
+- Synthetic MDL cases описаны JSON-метаданными; минимальные MDL/PHY и VPK строятся детерминированно только во временных каталогах тестов.
 - Маркер `integration` предназначен для тестов на временном synthetic project root.
 - Маркер `external_sdk` является opt-in и никогда не разрешает изменение оригинальных файлов Antenna.
 - VMT/Patch research и fixtures добавляются ближе к реализации покраски.

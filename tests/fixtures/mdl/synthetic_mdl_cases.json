@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "name": "static_multi_material",
+      "logical_model_path": "models/fixture/static_multi.mdl",
+      "internal_model_name": "fixture/static_multi.mdl",
+      "mdl_version": 48,
+      "checksum_hex": "11223344",
+      "static_prop": true,
+      "surface_property": "default",
+      "cdmaterials": [
+        "models/fixture/primary/",
+        "models/fixture/fallback/"
+      ],
+      "skin_families": [
+        ["body", "accent"],
+        ["body_alt", "accent_alt"]
+      ],
+      "material_files": {
+        "materials/models/fixture/primary/body.vmt": "VertexLitGeneric {}",
+        "materials/models/fixture/fallback/accent.vmt": "VertexLitGeneric {}",
+        "materials/models/fixture/primary/body_alt.vmt": "VertexLitGeneric {}"
+      },
+      "companions": [".phy", ".vvd", ".dx90.vtx"]
+    },
+    {
+      "name": "dynamic_v44",
+      "logical_model_path": "models/fixture/dynamic_v44.mdl",
+      "internal_model_name": "fixture/dynamic_v44.mdl",
+      "mdl_version": 44,
+      "checksum_hex": "a1b2c3d4",
+      "static_prop": false,
+      "surface_property": "metal",
+      "cdmaterials": ["models/fixture/dynamic/"],
+      "skin_families": [["shell"]],
+      "material_files": {
+        "materials/models/fixture/dynamic/shell.vmt": "VertexLitGeneric {}"
+      },
+      "companions": [".vvd"]
+    }
+  ]
+}

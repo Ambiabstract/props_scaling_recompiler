@@ -1,6 +1,6 @@
 # Память проекта props_scaling_recompiler
 
-Дата фиксации: 2026-08-20.
+Дата фиксации: 2026-08-21.
 
 ## Назначение
 
@@ -23,6 +23,8 @@
 - Создан начальный проектный фундамент: `pyproject.toml`, пакет `psr` с архитектурными границами и автономные smoke/contract-тесты, совместимые с pytest и стандартным `unittest`.
 - Зафиксированы первые synthetic fixtures для VMF и GameInfo, а также test-only scale oracle из 29 сущностей `psr_scale_compatibility_01a.vmf`; VMT/Patch fixtures намеренно отложены до этапа покраски.
 - Добавлен первый `srctools` integration spike: ordered SearchPaths plan, ручная цепочка folder/VPK, точный logical-path lookup и provenance победившего источника. Synthetic VPK создаются только во временных каталогах тестов.
+- Добавлен production-адаптер `psr.assets.mdl`: он разрешает исходный MDL через ordered SearchPaths, читает MDL 44–49 посредством `srctools.mdl.Model` и возвращает immutable `SourceAssetMetadata` с provenance, SHA-256 MDL/companions, static flag, `$cdmaterials`, skin families и точными ссылками на найденные VMT. `models/psr_scaled/**` отклоняется до чтения как managed output.
+- Добавлены детерминированные synthetic MDL v44/v48 fixtures и contract-тесты для folder/VPK, static/dynamic, нескольких материалов и skins, отсутствующего VMT и повреждённого offset. Бинарники fixtures строятся во временном каталоге и не коммитятся.
 - Исследовательские скрипты `is_staticprop.py`, `skins_from_mdl.py` и `mdl_skins_and_cdmaterials*.py` подтверждают возможность чтения static flag, material table, `$cdmaterials` и skin families непосредственно из MDL.
 - Пользовательское незакоммиченное изменение в `props_scaling_recompiler.py`: версия `2.0.0 - dev 001` заменена на `2.0.0 - dev 002`.
 
@@ -71,10 +73,11 @@ Upstream и документация: `https://github.com/TeamSpen210/srctools`,
 
 - `srctools.vmf.VMF.export()` не является source-preserving writer: он нормализует форматирование, удаляет обычные комментарии, меняет порядок/представление части данных, схлопывает повторяющиеся direct entity keys и по умолчанию увеличивает map version. Итоговый VMF поэтому редактируется собственным lossless span-editor; `srctools.vmf` допустим как semantic reader/validator.
 - `srctools.game.Game.get_filesystem()` нельзя использовать как resolver PSR. В версии 2.7.0 он группирует VPK раньше folder roots и автоматически добавляет некоторые DLC/update/platform paths, поэтому фактический порядок отличается от строк `SearchPaths`. PSR самостоятельно разбирает GameInfo и вручную собирает `FileSystemChain` строго в утверждённом порядке.
+- `srctools.mdl.Model` 2.7.0 отбрасывает неиспользуемые material slots, проходя по Python `set`. Чтобы этот неустойчивый порядок не стал частью skin-layout identity, адаптер PSR повторно читает только offsets таблиц texture/skin/bodypart/model/mesh, сортирует числовые material-slot indexes и сверяет результат с `srctools` без учёта порядка внутри family.
 - QC библиотекой не поддерживается; для него остаётся собственный token-aware transformer.
 - Семантика VMT Patch из библиотеки полезна как parser/evaluator, но реальный выбор `$color`/`$color2` и поведение `insert`/`replace` всё равно проверяются на SDK 2013 SP.
 
-Read-only probe на Antenna подтвердил применимость установленной версии и собственного ordered adapter: 35 исходных SearchPath leaves развёрнуты в 39 конкретных mounts без группировки VPK перед folder roots; `models/props_se/storage/book_2.mdl` разрешён через исходную строку `|gameinfo_path|.` из project folder, MDL v48 прочитан как non-static с восемью skin families и корректным `materials/models/props_se/book/book_small_face_01.vmt` для skin 0. Отсутствующие optional paths и numbered VPK chunks остаются отдельными diagnostics, а не ломают построение цепочки.
+Read-only probe на Antenna подтвердил применимость установленной версии и собственных ordered/MDL adapters: 35 исходных SearchPath leaves развёрнуты в 39 конкретных mounts без группировки VPK перед folder roots; `models/props_se/storage/book_2.mdl` разрешён через исходную строку `|gameinfo_path|.` из project folder. Production-адаптер определил MDL v48 как non-static, сохранил восемь skin families, разрешил первые четыре реально существующих VMT по `models/props_se/book/` и зафиксировал MDL, PHY, VVD и три VTX companions с размерами и SHA-256. Отсутствующие optional paths, numbered VPK chunks и отсутствующие VMT остаются явным состоянием/diagnostics, а не ломают discovery.
 
 `vpkeditcli.exe` пока остаётся в зафиксированном toolchain как baseline/fallback. Возможность исключить его из поставки рассматривается только после regression-проверки `srctools` на реальных VPK Antenna.
 
@@ -155,6 +158,8 @@ materials/models/props_lab/cactus_sheet.vmt
 - static flag;
 - material names, `$cdmaterials`, skin families;
 - версия прочитанного MDL-формата.
+
+Текущий `SourceAssetMetadata` является результатом read-only discovery, а не преждевременно утверждённой cache schema. В persistent manifest попадут только поля, необходимые для identity/invalidation, после отдельного проектирования versioned schema и миграций.
 
 ### GeneratedModel
 
