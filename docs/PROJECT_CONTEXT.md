@@ -20,8 +20,9 @@
 - `props_scaling_recompiler_v1.1.2.py` — последняя релизная реализация и текущий поведенческий baseline.
 - `props_scaling_recompiler.py` — незавершённый архитектурный прототип 2.0.
 - Прототип 2.0 синтаксически корректен, но функционально не завершает pipeline: содержит интерактивные остановки, заглушки генерации QC/компиляции, не сохраняет новый кэш и не пишет `vmf_out`.
-- Создан начальный проектный фундамент: `pyproject.toml`, пакет `psr` с архитектурными границами и восемь автономных smoke/contract-тестов, совместимых с pytest и стандартным `unittest`.
+- Создан начальный проектный фундамент: `pyproject.toml`, пакет `psr` с архитектурными границами и автономные smoke/contract-тесты, совместимые с pytest и стандартным `unittest`.
 - Зафиксированы первые synthetic fixtures для VMF и GameInfo, а также test-only scale oracle из 29 сущностей `psr_scale_compatibility_01a.vmf`; VMT/Patch fixtures намеренно отложены до этапа покраски.
+- Добавлен первый `srctools` integration spike: ordered SearchPaths plan, ручная цепочка folder/VPK, точный logical-path lookup и provenance победившего источника. Synthetic VPK создаются только во временных каталогах тестов.
 - Исследовательские скрипты `is_staticprop.py`, `skins_from_mdl.py` и `mdl_skins_and_cdmaterials*.py` подтверждают возможность чтения static flag, material table, `$cdmaterials` и skin families непосредственно из MDL.
 - Пользовательское незакоммиченное изменение в `props_scaling_recompiler.py`: версия `2.0.0 - dev 001` заменена на `2.0.0 - dev 002`.
 
@@ -51,6 +52,31 @@ Garry's Mod, Portal 2 и другие ветки Source не входят в sco
 | studiomdl.exe из SDK 2013 SP | file version отсутствует | `E6C4EA7477B8CE31DE878FF53CA640CB222C4978F3BA33C4715DE3DE1C7A6416` |
 
 Бинарники Crowbar и VPKEdit из production-комплекта побайтно совпадают с установленными в SDK `bin`.
+
+## Роль srctools 2.7.0
+
+`srctools==2.7.0` принят как закреплённая runtime-зависимость PSR 2.0. Библиотека распространяется под MIT и предоставляет проверенные реализации для Valve KeyValues, виртуальных файловых систем, VPK, MDL и VMT. В проекте она используется через собственные тонкие adapters, чтобы продуктовые правила PSR не зависели от неявной политики высокоуровневых helpers.
+
+Upstream и документация: `https://github.com/TeamSpen210/srctools`, `https://srctools.readthedocs.io/`.
+
+Подтверждённые области повторного использования:
+
+- `srctools.keyvalues` — semantic parse и структурная валидация GameInfo/VMT, а также дополнительная проверка VMF;
+- `srctools.filesys.RawFileSystem`, `VPKFileSystem` и `FileSystemChain` — точный lookup полного logical path в папках и directory VPK;
+- `srctools.mdl.Model` — MDL versions 44–49, static-prop flag, `$cdmaterials`, skin families и разрешение материалов;
+- `srctools.vmt.Material` — shader/parameters/proxies, раскрытие Patch и сбор его include-зависимостей;
+- встроенный PyInstaller hook — для будущей Windows-сборки.
+
+Ограничения интеграции:
+
+- `srctools.vmf.VMF.export()` не является source-preserving writer: он нормализует форматирование, удаляет обычные комментарии, меняет порядок/представление части данных, схлопывает повторяющиеся direct entity keys и по умолчанию увеличивает map version. Итоговый VMF поэтому редактируется собственным lossless span-editor; `srctools.vmf` допустим как semantic reader/validator.
+- `srctools.game.Game.get_filesystem()` нельзя использовать как resolver PSR. В версии 2.7.0 он группирует VPK раньше folder roots и автоматически добавляет некоторые DLC/update/platform paths, поэтому фактический порядок отличается от строк `SearchPaths`. PSR самостоятельно разбирает GameInfo и вручную собирает `FileSystemChain` строго в утверждённом порядке.
+- QC библиотекой не поддерживается; для него остаётся собственный token-aware transformer.
+- Семантика VMT Patch из библиотеки полезна как parser/evaluator, но реальный выбор `$color`/`$color2` и поведение `insert`/`replace` всё равно проверяются на SDK 2013 SP.
+
+Read-only probe на Antenna подтвердил применимость установленной версии и собственного ordered adapter: 35 исходных SearchPath leaves развёрнуты в 39 конкретных mounts без группировки VPK перед folder roots; `models/props_se/storage/book_2.mdl` разрешён через исходную строку `|gameinfo_path|.` из project folder, MDL v48 прочитан как non-static с восемью skin families и корректным `materials/models/props_se/book/book_small_face_01.vmt` для skin 0. Отсутствующие optional paths и numbered VPK chunks остаются отдельными diagnostics, а не ломают построение цепочки.
+
+`vpkeditcli.exe` пока остаётся в зафиксированном toolchain как baseline/fallback. Возможность исключить его из поставки рассматривается только после regression-проверки `srctools` на реальных VPK Antenna.
 
 ## Утверждённые продуктовые правила
 

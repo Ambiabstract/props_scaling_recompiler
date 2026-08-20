@@ -14,6 +14,7 @@ authors = [
 ]
 dependencies = [
     "colorama>=0.4.6,<1",
+    "srctools==2.7.0",
 ]
 
 [project.optional-dependencies]

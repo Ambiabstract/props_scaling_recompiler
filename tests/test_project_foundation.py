@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unittest
+from importlib.metadata import version
 
 import psr
 import psr.assets
@@ -32,6 +33,9 @@ class ProjectFoundationTests(unittest.TestCase):
             psr.pipeline.__name__,
         }
         self.assertEqual(imported, expected)
+
+    def test_srctools_runtime_version_is_pinned(self) -> None:
+        self.assertEqual(version("srctools"), "2.7.0")
 
 
 if __name__ == "__main__":

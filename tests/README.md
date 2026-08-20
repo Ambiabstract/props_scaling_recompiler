@@ -20,3 +20,5 @@ python -m unittest discover -s tests -v
 ```
 
 VMT/Patch fixtures и SDK-эксперименты намеренно отложены до этапа реализации покраски.
+
+`test_srctools_searchpaths.py` создаёт маленькие folder/VPK деревья только внутри системного temporary directory. Он проверяет строгий source order, exact logical path, provenance, `_dir.vpk` resolution и детерминированное раскрытие wildcard без обращения к SDK или пользовательскому проекту.
