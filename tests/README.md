@@ -22,3 +22,5 @@ python -m unittest discover -s tests -v
 VMT/Patch fixtures и SDK-эксперименты намеренно отложены до этапа реализации покраски.
 
 `test_srctools_searchpaths.py` создаёт маленькие folder/VPK деревья только внутри системного temporary directory. Он проверяет строгий source order, exact logical path, provenance, `_dir.vpk` resolution и детерминированное раскрытие wildcard без обращения к SDK или пользовательскому проекту.
+
+`test_vmf_discovery_planning.py` использует байтовые VMF fixtures и синтетические MDL только во временном project root. Он проверяет, что hidden/nested данные не становятся активными requests, raw scale не подменяется гипотезой парсинга, а pre-generation plan агрегирует model и color identities независимо и не записывает VMF.

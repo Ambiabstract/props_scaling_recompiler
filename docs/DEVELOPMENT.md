@@ -33,10 +33,13 @@ Runtime-зависимость `srctools` закреплена точной ве
 
 Исходные модели инспектируются через `psr.assets.inspect_source_model()`. Функция принимает только логический `models/**/*.mdl` path, запрещает managed namespace `models/psr_scaled/**`, разрешает модель, companions и VMT через одну ordered filesystem chain и возвращает immutable discovery DTO. Порядок material slots берётся из отсортированных числовых индексов MDL mesh table, а не из внутреннего `set` в `srctools.mdl.Model`.
 
+VMF читается как bytes через `psr.keyvalues.parse_vmf()`. Parser сохраняет исходный документ и source spans, не схлопывает повторяющиеся keys и никогда не принимает nested `editor` property за direct entity property. Текущий этап является read-only: `discover_vmf_requests()` собирает активные top-level requests, `inspect_map_sources()` разрешает уникальные MDL, а чистая `build_operation_plan()` получает отдельно подтверждённые `Decimal` compile scales. До завершения Hammer++ scale research планировщик не парсит raw `modelscale` самостоятельно и не назначает `_scaled_XXX` paths.
+
 ## Уровни тестов
 
 - Unit/contract tests всегда изолированы от установленного SDK и проектов пользователя.
 - Synthetic MDL cases описаны JSON-метаданными; минимальные MDL/PHY и VPK строятся детерминированно только во временных каталогах тестов.
+- VMF discovery/planning contract-тесты проверяют direct/nested scope, hidden entities, repeated keys, malformed syntax, no-op output intent, source inspection, model/color aggregation и накопление diagnostics.
 - Маркер `integration` предназначен для тестов на временном synthetic project root.
 - Маркер `external_sdk` является opt-in и никогда не разрешает изменение оригинальных файлов Antenna.
 - VMT/Patch research и fixtures добавляются ближе к реализации покраски.
