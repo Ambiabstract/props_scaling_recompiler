@@ -60,7 +60,7 @@ Garry's Mod, Portal 2 и другие ветки Source не входят в sco
 Оригинальная модель используется напрямую только при одновременном выполнении условий:
 
 - она уже имеет static-prop flag;
-- Hammer-compatible effective scale равен 1.0;
+- итоговый PSR compile scale равен 1.0;
 - запрошенный цвет равен `255 255 255`.
 
 Любая другая комбинация создаёт managed-модель PSR, включая dynamic при scale 1.0 и покрашенный static при scale 1.0.
@@ -88,15 +88,16 @@ models/example/foo_static.mdl
 -> models/psr_scaled/example/foo_static_scaled_150.mdl
 ```
 
-Источник истины для итогового scale — видимое поведение Hammer++. PSR должен компилировать то, что художник видит в viewport, а не применять отдельную «строгую» валидацию. Подтверждённые примеры:
+Источник истины для Hammer-compatible effective scale — видимое поведение Hammer++. PSR повторяет то, что художник видит в viewport, кроме единственного утверждённого ограничения: effective scale ниже `0.01` клампится для компиляции до `0.01`. Это намеренное исключение необходимо ради практической полезности и производительности очень маленьких моделей и должно сопровождаться явной диагностикой. Подтверждённые примеры:
 
 ```text
 blablabla -> 1.0
 1,0        -> 1.0
 3,0        -> 3.0
+0.001      -> Hammer effective 0.001 -> PSR compile 0.01
 ```
 
-В модели данных нужно разделить raw-строку `modelscale` и Hammer-compatible effective scale. Именование, generated identity и кэш опираются на effective scale; raw-строка сохраняется для provenance и диагностики. Разные raw-строки могут намеренно схлопнуться в один `_scaled_XXX`, если Hammer++ отображает их одинаково. Полная таблица парсинга, пределов и округления Hammer++ ещё должна быть снята эмпирически; из неё будет следовать точный формат `XXX`.
+В production-модели данных и кэше нужно разделить только raw-строку `modelscale` и итоговый PSR compile scale после Hammer-совместимой нормализации и нижнего clamp. Именование, generated identity и кэш опираются на compile scale; raw сохраняется в `MapUsage` для provenance и диагностики. Hammer-compatible effective scale является тестовым oracle: он нужен исследовательской матрице для доказательства соответствия Hammer++, но не входит в cache schema и не сохраняется как состояние проекта. Разные raw-значения могут намеренно схлопнуться в один `_scaled_XXX`, если Hammer++ отображает их одинаково либо если они попадают под нижний clamp. Полная таблица парсинга, пределов и округления Hammer++ ещё должна быть снята эмпирически; из неё будет следовать точный формат `XXX`.
 
 ### Материалы
 
@@ -131,7 +132,7 @@ materials/models/props_lab/cactus_sheet.vmt
 ### GeneratedModel
 
 - ссылка на SourceAsset;
-- Hammer-compatible effective scale и его каноническое представление;
+- итоговый PSR compile scale и его каноническое представление;
 - выходной logical/physical path;
 - static conversion state;
 - fingerprint skin layout;
@@ -163,7 +164,7 @@ Mapping должен быть стабильным между запусками
 
 - стабильный идентификатор карты, не только basename;
 - entity ID;
-- исходный запрос модели/raw scale/skin/color и вычисленный effective scale;
+- исходный запрос модели/raw scale/skin/color и итоговый PSR compile scale;
 - GeneratedModel и итоговый skin index;
 - версия последнего успешного анализа карты.
 
@@ -401,9 +402,12 @@ debug_logs/psr_big_map_test_02a_props_scaling_recompiler_log.txt
 - MDL: поддерживаемые версии, static flag, несколько `$cdmaterials`, несколько skins, повреждённые offsets;
 - cache: cold start, warm start, missing artifact, modified source, schema migration, interrupted write;
 - project isolation: две разные GameInfo identity с совпадающими именами карт и logical asset paths не разделяют cache records, `MapUsage`, cleanup-план или блокировку;
+- scale: production/cache сохраняют raw `modelscale` и PSR compile scale, но не Hammer-compatible effective scale; тесты отдельно доказывают Hammer-совместимую нормализацию, а значения ниже `0.01` детерминированно клампятся до `0.01` и дают диагностику;
 - end-to-end: no-op VMF, один static 1.0 white, dynamic 1.0, scaled static, colored static и сочетание нескольких карт.
 
 Реальные VMF теперь доступны в проекте Antenna и описаны ниже. Они остаются mutable integration-окружением вне репозитория. Для unit/regression automation позднее нужно сделать минимальные source-preserving копии или synthetic fixtures с зафиксированным provenance/hash, не изменяя оригинальные карты.
+
+Отдельная исследовательская карта `psr_scale_compatibility_01a.vmf` используется для эмпирического определения Hammer++-совместимого scale. В её `prop_static_scalable` поле `debug_string` хранит test oracle в формате `effective_scale=<value>` для каждого raw `modelscale`. Oracle соответствует ожидаемому PSR compile scale: обычно он совпадает с viewport Hammer++, но уже учитывает утверждённый clamp значений ниже `0.01`. Это тестовая аннотация, а не поле production/cache schema. Актуальный структурно проверенный снимок и список незакрытых случаев находятся в `docs/research/HAMMERPP_SCALE_COMPATIBILITY.md`. Карта является источником наблюдений, но не должна изменяться автоматическими тестами PSR.
 
 ## Реальный regression-набор VMF
 
@@ -421,7 +425,7 @@ C:\Program Files (x86)\Steam\steamapps\sourcemods\antenna_sdk2013\maps
 | `aa_models_static_convert_test_01a.vmf` | `690C587A6D9C6FF50AA951A997BFA02E1B8DF896EF40B711DA090F9581EEAE4A` | 118 | 66 | 107 | 11 | 6 |
 | `psr_test_01a.vmf` | `506DA823F25275C40B0DFEA55F2F891A893626E9EB71F47D48865B376B94391A` | 49 | 7 | 49 | 0 | 24 |
 
-Здесь request — точная raw-комбинация `(model, modelscale, skin, rendercolor)` до Hammer-compatible нормализации. Повтор — дополнительная entity с уже встречавшейся raw-комбинацией. После вычисления effective scale число generated artifacts может быть меньше.
+Здесь request — точная raw-комбинация `(model, modelscale, skin, rendercolor)` до Hammer-compatible нормализации. Повтор — дополнительная entity с уже встречавшейся raw-комбинацией. После вычисления effective scale и итогового compile scale число generated artifacts может быть меньше.
 
 ### aa_models_color_tint_test_01a
 
@@ -447,7 +451,7 @@ C:\Program Files (x86)\Steam\steamapps\sourcemods\antenna_sdk2013\maps
 - 59 entities содержат legacy-key `convert_prop_to_static`.
 - Версия после старого instance preprocessing находится в `maps/inst_fix/aa_models_static_convert_test_01a.vmf`: она также валидна, но содержит 112 PSR entities и не включает часть позднее добавленных Hammer++ compatibility-тестов. Основным источником считать root VMF.
 
-Ожидаемое поведение 2.0 для этих сущностей определяется Hammer++, а не Python `float()` и не старым порогом PSR. Подтверждено: `blablabla` и `1,0` видны как 1.0, `3,0` — как 3.0. Остальные границы и необычные строки нужно фиксировать по реальному viewport; если Hammer++ показывает 1.0, это не аварийный fallback, а правильный effective scale.
+Ожидаемый effective scale для этих сущностей определяется Hammer++, а не Python `float()` и не старым порогом PSR. Подтверждено: `blablabla` и `1,0` видны как 1.0, `3,0` — как 3.0. Остальные границы и необычные строки нужно фиксировать по реальному viewport; если Hammer++ показывает 1.0, это не аварийный fallback, а правильный effective scale. После этого PSR применяет единственное отдельное правило: effective scale ниже `0.01` компилируется как `0.01`.
 
 ### psr_test_01a
 
@@ -497,6 +501,7 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - Используется только `_scaled_XXX`; `_static` не создаётся и не трактуется специально.
 - Нейтральный static 1.0 использует оригинал; остальные случаи создают managed-модель.
 - Effective scale повторяет видимое поведение Hammer++, включая его обработку необычных raw-строк.
+- PSR compile scale равен effective scale, кроме значений ниже `0.01`, которые намеренно клампятся до `0.01`; generated identity и имя артефакта используют compile scale.
 - Из итогового `prop_static` удаляются PSR-only properties; `skin` сохраняется как итоговый mapped index.
 - Normal cleanup управляет только новыми managed roots.
 - Legacy migration/cleanup является отдельной операцией.
