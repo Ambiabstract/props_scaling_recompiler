@@ -39,10 +39,25 @@ from .qc import (
     build_scaled_qc,
     inspect_qc,
 )
+from .toolchain import (
+    CompiledFileMetadata,
+    CompiledModelValidation,
+    CompiledModelValidationError,
+    CrowbarDecompileResult,
+    ToolExecutionError,
+    ToolInvocation,
+    run_crowbar_decompile,
+    run_studiomdl_compile,
+    validate_compiled_model,
+)
 
 __all__ = [
     "AssetProvenance",
     "ColorParameter",
+    "CompiledFileMetadata",
+    "CompiledModelValidation",
+    "CompiledModelValidationError",
+    "CrowbarDecompileResult",
     "MaterialReferenceMetadata",
     "MaterialBlockMetadata",
     "MountedSearchPath",
@@ -61,6 +76,8 @@ __all__ = [
     "SourceMaterialInspectionError",
     "SourceMaterialMetadata",
     "SourceQCMetadata",
+    "ToolExecutionError",
+    "ToolInvocation",
     "build_reference_qc",
     "build_scaled_qc",
     "colored_material_path",
@@ -71,5 +88,8 @@ __all__ = [
     "parse_gameinfo_search_paths",
     "parse_search_paths_text",
     "plan_search_paths",
+    "run_crowbar_decompile",
+    "run_studiomdl_compile",
     "select_color_parameter",
+    "validate_compiled_model",
 ]

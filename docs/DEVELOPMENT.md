@@ -29,6 +29,10 @@ Runtime-зависимость `srctools` закреплена точной ве
 
 Корневые `props_scaling_recompiler.py` и `props_scaling_recompiler_v1.1.2.py` пока не являются entry point нового пакета: первый остаётся незавершённым прототипом, второй — поведенческим baseline.
 
+Внешние model tools вызываются только через `psr.assets.toolchain`: argv передаётся списком без shell, stdout/stderr сохраняются как bytes, timeout и ненулевой exit code становятся категоризированными ошибками. Crowbar обязан выдать ровно один QC в пустом isolated output directory. Успех StudioMDL сам по себе не считается готовым артефактом: `validate_compiled_model()` отдельно проверяет managed logical path, MDL 44–49, точный internal model name, static-prop flag и `.mdl/.vvd/.dx80.vtx/.dx90.vtx/.sw.vtx`, а при collision также `.phy`.
+
+`psr.pipeline.StagingWorkspace` создаёт уникальный каталог из operation identity и случайного suffix под явно переданным parent. Все записи ограничены этим root; source files перед materialization повторно сверяются с discovery provenance/size/SHA-256. Cleanup разрешён только для собственного каталога с marker-файлом. Режим `preserve=True` оставляет staging для диагностики и требует явного cleanup.
+
 Высокоуровневый `srctools.game.Game.get_filesystem()` не использовать: он не сохраняет требуемый PSR порядок folder/VPK SearchPaths. `FileSystemChain` собирается вручную из `RawFileSystem` и `VPKFileSystem`. `srctools.vmf.VMF.export()` также не используется для итоговой записи VMF; source-preserving edits остаются ответственностью `psr/keyvalues`.
 
 Исходные модели инспектируются через `psr.assets.inspect_source_model()`. Функция принимает только логический `models/**/*.mdl` path, запрещает managed namespace `models/psr_scaled/**`, разрешает модель, companions и VMT через одну ordered filesystem chain и возвращает immutable discovery DTO. Порядок material slots берётся из отсортированных числовых индексов MDL mesh table, а не из внутреннего `set` в `srctools.mdl.Model`.

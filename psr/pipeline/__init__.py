@@ -38,6 +38,14 @@ from .qc import (
     ScaledQCArtifactPlan,
     build_qc_operation_plan,
 )
+from .staging import (
+    StagedFile,
+    StagedSourceModel,
+    StagingError,
+    StagingWorkspace,
+    stage_qc_operation,
+    stage_source_model,
+)
 
 __all__ = [
     "ColoredSkinRequirement",
@@ -57,6 +65,10 @@ __all__ = [
     "ReferenceQCArtifactPlan",
     "ScaledQCArtifactPlan",
     "SkinLayoutOperationPlan",
+    "StagedFile",
+    "StagedSourceModel",
+    "StagingError",
+    "StagingWorkspace",
     "VmfEntityRequest",
     "WHITE",
     "build_operation_plan",
@@ -68,4 +80,6 @@ __all__ = [
     "inspect_colored_material_sources",
     "inspect_map_sources",
     "source_skin_families_fingerprint",
+    "stage_qc_operation",
+    "stage_source_model",
 ]
