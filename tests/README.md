@@ -33,6 +33,8 @@ python -m unittest discover -s tests -v
 
 `test_runtime_foundation.py` проверяет project-scoped `%LOCALAPPDATA%` layout, межпроцессную блокировку и дедуплицированный отчёт. `test_commit_recovery.py` моделирует прерывание commit и доказывает восстановление только разрешённых managed/manifest/VMF targets, включая отказ от подменённого journal. Дополнительные coordinator cases в `test_generation_pipeline.py` проходят полный synthetic compile-run и no-op через production runtime.
 
+Warm-cache matrix в `test_generation_pipeline.py` повторяет тот же compile-run без Crowbar/StudioMDL, затем отдельно повреждает один model companion, удаляет один colored VMT и изменяет исходный MDL. Проверяется минимальный repair batch, generated/reused statistics и обязательный abort, если reused-файл изменился между planning и commit.
+
 `test_cli.py` фиксирует основные и deprecated аргументы, поиск отдельного Crowbar и no-op CLI. `test_frozen_executable.py` по явному `PSR_FROZEN_EXE=<path>` запускает настоящий one-file exe в полностью временном проекте без Python/Crowbar/StudioMDL, проверяет `vmf_out`, LocalAppData manifest, deprecated warning и жёсткий предел 64 MiB; по умолчанию этот тест пропускается.
 
 `test_external_sdk_generation.py` по явному `PSR_RUN_EXTERNAL_SDK=1` запускает read-only/isolated matrix на реальном `book_2`, Crowbar 0.68 и StudioMDL SDK 2013 SP. Direct `insert`, direct `replace` и source-Patch full-copy cases используют только temporary staging/overlays; capacity cases доказывают успешные 31 material/1024 family rows и отказ StudioMDL на 32 material/1025 rows. Default test run пропускает их; протокол границ находится в `docs/research/SDK_SKIN_LIMITS.md`.

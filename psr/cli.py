@@ -146,7 +146,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         outcome = "SUCCESS" if result.success and not report.has_errors else "FAILED"
         print(
             f"PSR {__version__}: {outcome}; entities={result.active_entities}, "
-            f"models={result.generated_models}, materials={result.generated_materials}, "
+            f"models_generated={result.generated_models}, "
+            f"models_reused={result.reused_models}, "
+            f"materials_generated={result.generated_materials}, "
+            f"materials_reused={result.reused_materials}, "
             f"published_files={result.published_files}"
         )
         _write_report_log(report, result.state.logs)

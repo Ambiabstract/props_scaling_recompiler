@@ -31,6 +31,8 @@ from psr.pipeline import (
     generate_and_validate,
     inspect_colored_material_sources,
     inspect_map_sources,
+    plan_artifact_reuse,
+    reconcile_generation_requirements,
 )
 from psr.runtime import CompileRequest, DiagnosticReport, execute_compile_run
 from tests.mdl_fixture_builder import build_case_files
@@ -531,6 +533,271 @@ class GenerationPipelineTests(unittest.TestCase):
         )
         self.assertFalse(result.state.recovery_journal.exists())
         self.assertEqual(list(result.state.staging.iterdir()), [])
+
+    def test_runtime_warm_cache_reuses_every_asset_without_external_tools(self) -> None:
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1.5", "190 48 148")
+            + entity("2", model, "2", "255 255 255")
+        ).encode("ascii")
+        vmf_input = self.root / "maps" / "warm.vmf"
+        vmf_output = self.root / "maps" / "psr_temp" / "warm.vmf"
+        vmf_input.parent.mkdir()
+        vmf_input.write_bytes(source_vmf)
+        common = {
+            "game_directory": self.root,
+            "vmf_input_path": vmf_input,
+            "vmf_output_path": vmf_output,
+            "engine_root": self.engine,
+            "local_appdata": self.root / "localappdata",
+        }
+
+        cold = execute_compile_run(
+            CompileRequest(
+                **common,
+                crowbar_command=(sys.executable, self.crowbar),
+                studiomdl_command=(sys.executable, self.studiomdl),
+            ),
+            DiagnosticReport(),
+        )
+        warm_report = DiagnosticReport()
+        warm = execute_compile_run(
+            CompileRequest(
+                **common,
+                crowbar_command=None,
+                studiomdl_command=None,
+            ),
+            warm_report,
+        )
+
+        self.assertTrue(cold.success)
+        self.assertTrue(warm.success)
+        self.assertFalse(warm_report.has_errors)
+        self.assertEqual(warm.generated_models, 0)
+        self.assertEqual(warm.reused_models, 2)
+        self.assertEqual(warm.generated_materials, 0)
+        self.assertEqual(warm.reused_materials, 2)
+        self.assertEqual(warm.published_files, 0)
+        self.assertEqual(self.crowbar_counter.read_text(), "1")
+        self.assertEqual(self.studiomdl_counter.read_text(), "2")
+
+    def test_runtime_warm_cache_rebuilds_only_corrupt_model_variant(self) -> None:
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1.5", "190 48 148")
+            + entity("2", model, "2", "255 255 255")
+        ).encode("ascii")
+        vmf_input = self.root / "maps" / "repair_model.vmf"
+        vmf_output = self.root / "maps" / "psr_temp" / "repair_model.vmf"
+        vmf_input.parent.mkdir()
+        vmf_input.write_bytes(source_vmf)
+        request = CompileRequest(
+            game_directory=self.root,
+            vmf_input_path=vmf_input,
+            vmf_output_path=vmf_output,
+            engine_root=self.engine,
+            crowbar_command=(sys.executable, self.crowbar),
+            studiomdl_command=(sys.executable, self.studiomdl),
+            local_appdata=self.root / "localappdata",
+        )
+        cold = execute_compile_run(request, DiagnosticReport())
+        loaded = load_manifest(cold.state.manifest, build_project_identity(self.gameinfo))
+        damaged = next(
+            item
+            for item in loaded.manifest.generated_models
+            if item.compile_scale_percent == 150
+        )
+        companion = next(
+            path for path in damaged.expected_files if path.endswith(".vvd")
+        )
+        self.root.joinpath(*Path(companion).parts).write_bytes(b"corrupt")
+        report = DiagnosticReport()
+
+        repaired = execute_compile_run(request, report)
+
+        self.assertTrue(repaired.success)
+        self.assertEqual(repaired.generated_models, 1)
+        self.assertEqual(repaired.reused_models, 1)
+        self.assertEqual(repaired.generated_materials, 0)
+        self.assertEqual(repaired.reused_materials, 2)
+        self.assertEqual(repaired.published_files, 6)
+        self.assertEqual(self.crowbar_counter.read_text(), "2")
+        self.assertEqual(self.studiomdl_counter.read_text(), "3")
+        self.assertTrue(any(
+            item.code == "cached_model_artifact_invalid"
+            for item in report.entries
+        ))
+
+    def test_runtime_warm_cache_regenerates_only_missing_material(self) -> None:
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1.5", "190 48 148")
+            + entity("2", model, "2", "255 255 255")
+        ).encode("ascii")
+        vmf_input = self.root / "maps" / "repair_material.vmf"
+        vmf_output = self.root / "maps" / "psr_temp" / "repair_material.vmf"
+        vmf_input.parent.mkdir()
+        vmf_input.write_bytes(source_vmf)
+        common = {
+            "game_directory": self.root,
+            "vmf_input_path": vmf_input,
+            "vmf_output_path": vmf_output,
+            "engine_root": self.engine,
+            "local_appdata": self.root / "localappdata",
+        }
+        cold = execute_compile_run(
+            CompileRequest(
+                **common,
+                crowbar_command=(sys.executable, self.crowbar),
+                studiomdl_command=(sys.executable, self.studiomdl),
+            ),
+            DiagnosticReport(),
+        )
+        loaded = load_manifest(cold.state.manifest, build_project_identity(self.gameinfo))
+        missing = loaded.manifest.colored_materials[0].logical_output_material
+        self.root.joinpath(*Path(missing).parts).unlink()
+        report = DiagnosticReport()
+
+        repaired = execute_compile_run(
+            CompileRequest(
+                **common,
+                crowbar_command=None,
+                studiomdl_command=None,
+            ),
+            report,
+        )
+
+        self.assertTrue(repaired.success)
+        self.assertEqual(repaired.generated_models, 0)
+        self.assertEqual(repaired.reused_models, 2)
+        self.assertEqual(repaired.generated_materials, 1)
+        self.assertEqual(repaired.reused_materials, 1)
+        self.assertEqual(repaired.published_files, 1)
+        self.assertEqual(self.crowbar_counter.read_text(), "1")
+        self.assertEqual(self.studiomdl_counter.read_text(), "2")
+        self.assertTrue(any(
+            item.code == "cached_material_artifact_invalid"
+            for item in report.entries
+        ))
+
+    def test_runtime_source_change_invalidates_every_cached_scale(self) -> None:
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1.5", "190 48 148")
+            + entity("2", model, "2", "255 255 255")
+        ).encode("ascii")
+        vmf_input = self.root / "maps" / "source_change.vmf"
+        vmf_output = self.root / "maps" / "psr_temp" / "source_change.vmf"
+        vmf_input.parent.mkdir()
+        vmf_input.write_bytes(source_vmf)
+        request = CompileRequest(
+            game_directory=self.root,
+            vmf_input_path=vmf_input,
+            vmf_output_path=vmf_output,
+            engine_root=self.engine,
+            crowbar_command=(sys.executable, self.crowbar),
+            studiomdl_command=(sys.executable, self.studiomdl),
+            local_appdata=self.root / "localappdata",
+        )
+        cold = execute_compile_run(request, DiagnosticReport())
+        self.assertTrue(cold.success)
+        source_model = self.content.joinpath(*Path(model).parts)
+        source_model.write_bytes(source_model.read_bytes() + b"source-revision")
+
+        rebuilt = execute_compile_run(request, DiagnosticReport())
+
+        self.assertTrue(rebuilt.success)
+        self.assertEqual(rebuilt.generated_models, 2)
+        self.assertEqual(rebuilt.reused_models, 0)
+        self.assertEqual(rebuilt.generated_materials, 0)
+        self.assertEqual(rebuilt.reused_materials, 2)
+        self.assertEqual(rebuilt.published_files, 12)
+        self.assertEqual(self.crowbar_counter.read_text(), "2")
+        self.assertEqual(self.studiomdl_counter.read_text(), "4")
+
+    def test_reused_artifact_changed_after_planning_aborts_commit(self) -> None:
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1.5", "190 48 148")
+            + entity("2", model, "2", "255 255 255")
+        ).encode("ascii")
+        vmf_input = self.root / "maps" / "reuse_race.vmf"
+        vmf_output = self.root / "maps" / "psr_temp" / "reuse_race.vmf"
+        vmf_input.parent.mkdir()
+        vmf_input.write_bytes(source_vmf)
+        cold = execute_compile_run(
+            CompileRequest(
+                game_directory=self.root,
+                vmf_input_path=vmf_input,
+                vmf_output_path=vmf_output,
+                engine_root=self.engine,
+                crowbar_command=(sys.executable, self.crowbar),
+                studiomdl_command=(sys.executable, self.studiomdl),
+                local_appdata=self.root / "localappdata",
+            ),
+            DiagnosticReport(),
+        )
+        project = build_project_identity(self.gameinfo)
+        manifest = load_manifest(cold.state.manifest, project).manifest
+        filesystem = self.filesystem()
+        discovery = discover_vmf_requests(
+            source_vmf,
+            map_identity="maps/reuse_race.vmf",
+        )
+        operation = build_operation_plan(inspect_map_sources(discovery, filesystem))
+        materials = build_colored_material_plan(
+            operation,
+            inspect_colored_material_sources(operation, filesystem),
+        )
+        skin_layout = build_skin_layout_plan(operation, materials, manifest)
+        operation = reconcile_generation_requirements(
+            operation,
+            skin_layout,
+            manifest,
+        )
+        reuse = plan_artifact_reuse(
+            self.root,
+            manifest,
+            operation,
+            materials,
+            skin_layout,
+        )
+        self.assertEqual(len(reuse.reused_models), 2)
+
+        with StagingWorkspace.create(
+            self.staging,
+            operation_identity=operation.map_identity,
+        ) as workspace:
+            generation = generate_and_validate(
+                workspace,
+                filesystem,
+                reuse.generation_operation,
+                reuse.generation_materials,
+                skin_layout,
+                crowbar_command=("unused-crowbar",),
+                studiomdl_command=("unused-studiomdl",),
+            )
+            commit_plan = build_commit_plan(
+                source_vmf,
+                manifest,
+                operation,
+                materials,
+                skin_layout,
+                generation,
+                reuse,
+            )
+            changed = reuse.reused_models[0].files[0].physical_path
+            changed.write_bytes(b"changed-after-plan")
+
+            with self.assertRaises(CommitError) as raised:
+                apply_commit_plan(
+                    commit_plan,
+                    game_directory=self.root,
+                    manifest_path=cold.state.manifest,
+                    vmf_output_path=vmf_output,
+                )
+
+        self.assertEqual(raised.exception.code, "commit_existing_artifact_changed")
 
     def test_runtime_noop_writes_equivalent_vmf_without_external_tools(self) -> None:
         vmf_input = self.root / "maps" / "noop.vmf"

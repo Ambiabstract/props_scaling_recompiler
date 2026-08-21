@@ -240,7 +240,7 @@ def generate_and_validate(
             compile_qc=compile_qc,
             compile_invocation=invocation,
             validation=validation,
-            artifact_fingerprint=_model_artifact_fingerprint(validation),
+            artifact_fingerprint=model_artifact_fingerprint(validation),
         ))
 
     if len(model_results) != len(operation.generated_models):
@@ -421,7 +421,7 @@ def _stage_compile_qc(
         ) from exc
 
 
-def _model_artifact_fingerprint(validation: CompiledModelValidation) -> str:
+def model_artifact_fingerprint(validation: CompiledModelValidation) -> str:
     digest = hashlib.sha256()
     for item in sorted(validation.files, key=lambda value: value.logical_path):
         digest.update(item.logical_path.encode("utf-8"))
@@ -437,4 +437,5 @@ __all__ = [
     "ValidatedMaterialArtifact",
     "ValidatedModelArtifact",
     "generate_and_validate",
+    "model_artifact_fingerprint",
 ]

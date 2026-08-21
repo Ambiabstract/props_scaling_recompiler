@@ -21,6 +21,7 @@ from psr.domain import canonical_scale_percent
 from .generation import GenerationResult
 from .materials import ColoredMaterialOperationPlan
 from .planning import OperationPlan
+from .reuse import ArtifactReusePlan, ExistingArtifact
 from .skin_layout import (
     SkinLayoutOperationPlan,
     commit_skin_layout_plan,
@@ -55,6 +56,7 @@ class CommitPlan:
     map_identity: str
     staging_root: Path
     artifacts: tuple[CommitArtifact, ...]
+    existing_artifacts: tuple[ExistingArtifact, ...]
     manifest: ProjectManifest
     manifest_content: bytes
     vmf_output: VmfOutput
@@ -96,6 +98,7 @@ def build_commit_plan(
     materials: ColoredMaterialOperationPlan,
     skin_layout: SkinLayoutOperationPlan,
     generation: GenerationResult,
+    reuse: ArtifactReusePlan | None = None,
 ) -> CommitPlan:
     """Prove staged outputs and build cache/VMF candidates without publishing."""
     identities = {
@@ -104,6 +107,8 @@ def build_commit_plan(
         skin_layout.map_identity,
         generation.map_identity,
     }
+    if reuse is not None:
+        identities.add(reuse.map_identity)
     if len(identities) != 1:
         raise CommitError(
             "commit_map_identity_mismatch",
@@ -134,10 +139,24 @@ def build_commit_plan(
         item.requirement.logical_output_model: item
         for item in generation.models
     }
-    if len(actual_models) != len(generation.models) or set(actual_models) != set(expected_models):
+    reused_model_items = () if reuse is None else reuse.reused_models
+    reused_models = {
+        item.record.logical_output_model: item
+        for item in reused_model_items
+    }
+    if len(reused_models) != len(reused_model_items):
+        raise CommitError("commit_reused_model_duplicate", repr(sorted(reused_models)))
+    expected_generated_models = set(expected_models) - set(reused_models)
+    if (
+        len(actual_models) != len(generation.models)
+        or set(actual_models) != expected_generated_models
+        or set(actual_models) & set(reused_models)
+        or set(actual_models) | set(reused_models) != set(expected_models)
+    ):
         raise CommitError(
             "commit_model_set_mismatch",
-            f"validated outputs {sorted(actual_models)!r}, expected {sorted(expected_models)!r}",
+            f"generated {sorted(actual_models)!r}, reused {sorted(reused_models)!r}, "
+            f"expected {sorted(expected_models)!r}",
         )
 
     accepted_materials = _accepted_material_outputs(materials, skin_layout)
@@ -145,17 +164,32 @@ def build_commit_plan(
         item.generated.logical_output_material: item
         for item in generation.materials
     }
+    reused_material_items = () if reuse is None else reuse.reused_materials
+    reused_materials = {
+        item.record.logical_output_material: item
+        for item in reused_material_items
+    }
+    if len(reused_materials) != len(reused_material_items):
+        raise CommitError(
+            "commit_reused_material_duplicate",
+            repr(sorted(reused_materials)),
+        )
+    expected_generated_materials = accepted_materials - set(reused_materials)
     if (
         len(actual_materials) != len(generation.materials)
-        or set(actual_materials) != accepted_materials
+        or set(actual_materials) != expected_generated_materials
+        or set(actual_materials) & set(reused_materials)
+        or set(actual_materials) | set(reused_materials) != accepted_materials
     ):
         raise CommitError(
             "commit_material_set_mismatch",
-            f"validated outputs {sorted(actual_materials)!r}, "
+            f"generated {sorted(actual_materials)!r}, "
+            f"reused {sorted(reused_materials)!r}, "
             f"expected {sorted(accepted_materials)!r}",
         )
 
     artifacts: list[CommitArtifact] = []
+    existing_artifacts: list[ExistingArtifact] = []
     material_records: list[ColoredMaterialRecord] = []
     material_plan_by_output = {
         item.logical_output_material: item
@@ -192,6 +226,25 @@ def build_commit_plan(
             source_fingerprint=planned.source_fingerprint,
             artifact_sha256=item.generated.sha256,
         ))
+
+    for logical_path in sorted(reused_materials):
+        item = reused_materials[logical_path]
+        planned = material_plan_by_output.get(logical_path)
+        record = item.record
+        if planned is None or (
+            record.logical_source_material != planned.logical_source_material
+            or record.render_color != planned.render_color
+            or record.color_parameter != planned.color_parameter
+            or record.generation_mode != planned.generation_mode
+            or record.logical_output_material != planned.logical_output_material
+            or record.source_fingerprint != planned.source_fingerprint
+        ):
+            raise CommitError("commit_reused_material_identity_mismatch", logical_path)
+        checked = _checked_existing_artifact(item.file)
+        if checked.logical_path != logical_path or checked.sha256 != record.artifact_sha256:
+            raise CommitError("commit_reused_material_changed", logical_path)
+        existing_artifacts.append(checked)
+        material_records.append(record)
 
     model_records: list[GeneratedModelRecord] = []
     for logical_model in sorted(actual_models):
@@ -236,6 +289,35 @@ def build_commit_plan(
             artifact_fingerprint=item.artifact_fingerprint,
         ))
 
+    for logical_model in sorted(reused_models):
+        item = reused_models[logical_model]
+        requirement = expected_models[logical_model]
+        layout = layout_by_model.get(requirement.logical_source_model)
+        record = item.record
+        if layout is None or (
+            record.logical_source_model != requirement.logical_source_model
+            or record.compile_scale_percent
+            != canonical_scale_percent(requirement.compile_scale)
+            or record.logical_output_model != requirement.logical_output_model
+            or record.requires_static_conversion
+            != requirement.requires_static_conversion
+            or record.skin_layout_fingerprint != layout.layout_fingerprint
+        ):
+            raise CommitError("commit_reused_model_identity_mismatch", logical_model)
+        checked_files = tuple(
+            _checked_existing_artifact(file)
+            for file in item.files
+        )
+        if (
+            {file.logical_path for file in checked_files}
+            != set(record.expected_files)
+            or _existing_model_fingerprint(checked_files)
+            != record.artifact_fingerprint
+        ):
+            raise CommitError("commit_reused_model_changed", logical_model)
+        existing_artifacts.extend(checked_files)
+        model_records.append(record)
+
     _validate_reconciliation(
         manifest,
         operation,
@@ -248,6 +330,15 @@ def build_commit_plan(
         raise CommitError(
             "commit_artifact_path_duplicate",
             repr(sorted(logical_paths)),
+        )
+    existing_paths = [item.logical_path for item in existing_artifacts]
+    if (
+        len(set(existing_paths)) != len(existing_paths)
+        or set(logical_paths) & set(existing_paths)
+    ):
+        raise CommitError(
+            "commit_existing_artifact_path_duplicate",
+            repr(sorted(existing_paths)),
         )
 
     candidate = commit_skin_layout_plan(manifest, operation, skin_layout)
@@ -262,6 +353,10 @@ def build_commit_plan(
         map_identity=operation.map_identity,
         staging_root=staging_root,
         artifacts=tuple(sorted(artifacts, key=lambda item: item.logical_path)),
+        existing_artifacts=tuple(sorted(
+            existing_artifacts,
+            key=lambda item: item.logical_path,
+        )),
         manifest=candidate,
         manifest_content=manifest_content,
         vmf_output=vmf_output,
@@ -285,6 +380,18 @@ def apply_commit_plan(
 
     writes: list[tuple[Path, Path | bytes, int, str]] = []
     artifact_targets: list[Path] = []
+    existing_targets: list[ExistingArtifact] = []
+    for existing in plan.existing_artifacts:
+        checked = _checked_existing_artifact(existing)
+        target = game_root.joinpath(
+            *PurePosixPath(checked.logical_path).parts
+        ).resolve()
+        if target != checked.physical_path.resolve():
+            raise CommitError(
+                "commit_existing_artifact_target_mismatch",
+                checked.logical_path,
+            )
+        existing_targets.append(checked)
     for artifact in plan.artifacts:
         checked = _checked_artifact(
             plan.staging_root,
@@ -320,6 +427,8 @@ def apply_commit_plan(
     try:
         for target, content, size, sha256 in writes:
             prepared.append(_prepare_write(target, content, size, sha256))
+        for existing in existing_targets:
+            _checked_existing_artifact(existing)
         _install_prepared(prepared, recovery_journal_path=recovery_journal_path)
     except CommitError:
         _discard_temporaries(prepared)
@@ -462,6 +571,28 @@ def _accepted_material_outputs(
         ) in accepted
         for logical_path in colored_skin.logical_colored_materials
     }
+
+
+def _checked_existing_artifact(artifact: ExistingArtifact) -> ExistingArtifact:
+    _validate_managed_logical_path(artifact.logical_path)
+    physical = artifact.physical_path.resolve()
+    if not physical.is_file():
+        raise CommitError("commit_existing_artifact_missing", artifact.logical_path)
+    size = physical.stat().st_size
+    sha256 = _file_sha256(physical)
+    if size != artifact.size or sha256 != artifact.sha256:
+        raise CommitError("commit_existing_artifact_changed", artifact.logical_path)
+    return ExistingArtifact(artifact.logical_path, physical, size, sha256)
+
+
+def _existing_model_fingerprint(files: tuple[ExistingArtifact, ...]) -> str:
+    digest = hashlib.sha256()
+    for item in sorted(files, key=lambda value: value.logical_path):
+        digest.update(item.logical_path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(bytes.fromhex(item.sha256))
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def _checked_artifact(

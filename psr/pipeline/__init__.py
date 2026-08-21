@@ -53,8 +53,16 @@ from .generation import (
     ValidatedMaterialArtifact,
     ValidatedModelArtifact,
     generate_and_validate,
+    model_artifact_fingerprint,
 )
 from .reconciliation import reconcile_generation_requirements
+from .reuse import (
+    ArtifactReusePlan,
+    ExistingArtifact,
+    ReusedMaterialArtifact,
+    ReusedModelArtifact,
+    plan_artifact_reuse,
+)
 from .vmf_output import VmfOutput, VmfOutputError, build_vmf_output
 from .commit import (
     CommitArtifact,
@@ -68,6 +76,7 @@ from .commit import (
 )
 
 __all__ = [
+    "ArtifactReusePlan",
     "ColoredSkinRequirement",
     "CommitArtifact",
     "CommitError",
@@ -78,6 +87,7 @@ __all__ = [
     "ColoredMaterialPlan",
     "ColoredSkinMaterialPlan",
     "EntitySkinAssignment",
+    "ExistingArtifact",
     "GeneratedModelRequirement",
     "GenerationError",
     "GenerationResult",
@@ -90,6 +100,8 @@ __all__ = [
     "PipelineDiagnostic",
     "QCOperationPlan",
     "ReferenceQCArtifactPlan",
+    "ReusedMaterialArtifact",
+    "ReusedModelArtifact",
     "ScaledQCArtifactPlan",
     "SkinLayoutOperationPlan",
     "StagedFile",
@@ -114,6 +126,8 @@ __all__ = [
     "inspect_colored_material_sources",
     "inspect_map_sources",
     "generate_and_validate",
+    "model_artifact_fingerprint",
+    "plan_artifact_reuse",
     "reconcile_generation_requirements",
     "recover_interrupted_commit",
     "source_asset_fingerprint",

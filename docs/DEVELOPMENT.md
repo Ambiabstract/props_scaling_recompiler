@@ -44,7 +44,7 @@ CLI сохраняет совместимость с Hammer compile-run чере
 powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_release.ps1 -CrowbarPath <path-to-CrowbarCommandLineDecomp.exe>
 ```
 
-Скрипт сначала запускает обычные тесты, пересоздаёт только собственный `dist/props_scaling_recompiler_v2`, выполняет frozen `--version` smoke и отклоняет основной exe крупнее 64 MiB. Размер свыше предпочтительных 16 MiB даёт warning. Текущая проверенная сборка на Python 3.14/PyInstaller 6.22.2 — 10,89 MiB.
+Скрипт сначала запускает обычные тесты, пересоздаёт только собственный `dist/props_scaling_recompiler_v2`, выполняет frozen `--version` smoke и отклоняет основной exe крупнее 64 MiB. Размер свыше предпочтительных 16 MiB даёт warning. Текущая проверенная сборка на Python 3.14/PyInstaller 6.22.2 — 10,90 MiB.
 
 Полный frozen no-op regression запускается отдельно, чтобы тестировать уже собранный файл:
 
@@ -58,6 +58,8 @@ python -m pytest -q tests/test_frozen_executable.py
 `psr.assets.generate_colored_material()` детерминированно создаёт generated Patch либо раскрытую full-copy VMT, повторно парсит собственный output через `srctools.vmt.Material` и возвращает bytes вместе с SHA-256. Patch включает полный logical source VMT path и помещает выбранный `$color`/`$color2` в запланированный `insert`/`replace`; full-copy сохраняет effective shader, параметры, blocks и proxies. Синтаксический/semantic контракт автоматизирован, но runtime-семантика Patch всё ещё требует отдельной opt-in проверки на SDK 2013 SP перед production commit цветных материалов.
 
 `psr.pipeline.generate_and_validate()` связывает валидные operation/material/skin plans только внутри caller-owned `StagingWorkspace`. Он повторно инспектирует VMT dependency graph, материализует и сверяет исходные MDL/companions, декомпилирует каждый source model ровно один раз, строит QC plan, размещает compile-ready variant QC рядом с Crowbar QC для сохранения относительных SMD/include paths, запускает StudioMDL и проверяет полный generated companion set. Результат содержит только validated staged artifacts и ничего не публикует в проект, manifest или VMF.
+
+Перед generation `psr.pipeline.plan_artifact_reuse()` делит полный operation на проверенные cache hits и минимальный batch misses. Модель считается reusable только после повторного `validate_compiled_model()` и сравнения полного companion set/artifact fingerprint с текущими source/layout identities. Материал требует точного SHA-256 и совпадения VMT dependency fingerprint/режима генерации. `build_commit_plan()` объединяет generated и reused records, а `apply_commit_plan()` ещё раз хэширует все reused-файлы непосредственно перед установкой manifest/VMF. Поэтому warm run может обойтись без Crowbar/StudioMDL, но не ослабляет all-or-nothing commit.
 
 `psr.pipeline.build_vmf_output()` применяет финальные model/skin assignments только к direct properties активных entity: сверяет SHA-256 и исходные spans, меняет `classname/model/skin`, удаляет `modelscale`, `rendercolor` и legacy `convert_prop_to_static`, сохраняет остальные bytes и повторно структурно валидирует каждую затронутую сущность. No-op возвращает побайтно исходный VMF. `build_commit_plan()` затем повторно сверяет все staged hashes и полноту project-wide reconciliation, строит manifest-кандидат и VMF-кандидат. `apply_commit_plan()` сначала готовит и хэширует sibling temp-файлы, после чего устанавливает managed VMT/MDL, manifest и последним `vmf_out`; ошибка посередине восстанавливает предыдущие файлы из operation-local backups.
 
@@ -82,7 +84,7 @@ VMF читается как bytes через `psr.keyvalues.parse_vmf()`. Parser
 - Unit/contract tests всегда изолированы от установленного SDK и проектов пользователя.
 - Synthetic MDL cases описаны JSON-метаданными; минимальные MDL/PHY и VPK строятся детерминированно только во временных каталогах тестов.
 - VMF discovery/planning contract-тесты проверяют direct/nested scope, hidden entities, repeated keys, malformed syntax, no-op output intent, source inspection, model/color aggregation и накопление diagnostics.
-- VMF output/commit contract-тесты проверяют CRLF и untouched bytes, hidden/nested scope, вставку и remap `skin`, удаление PSR-only keys, stale input/staging, no-op, manifest records и полный rollback при сбое последней замены.
+- VMF output/commit contract-тесты проверяют CRLF и untouched bytes, hidden/nested scope, вставку и remap `skin`, удаление PSR-only keys, stale input/staging/reused artifacts, no-op, manifest records и полный rollback при сбое последней замены.
 - Маркер `integration` предназначен для тестов на временном synthetic project root.
 - Маркер `external_sdk` является opt-in и никогда не разрешает изменение оригинальных файлов Antenna.
 - VMT/Patch fixtures проверяют generated semantic round-trip; runtime Patch-проверка на SDK остаётся отдельным opt-in уровнем.

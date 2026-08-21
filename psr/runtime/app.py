@@ -30,6 +30,7 @@ from psr.pipeline import (
     generate_and_validate,
     inspect_colored_material_sources,
     inspect_map_sources,
+    plan_artifact_reuse,
     reconcile_generation_requirements,
     recover_interrupted_commit,
 )
@@ -65,7 +66,9 @@ class CompileRunResult:
     state: ProjectStatePaths
     active_entities: int
     generated_models: int
+    reused_models: int
     generated_materials: int
+    reused_materials: int
     published_files: int
     retained_staging: Path | None = None
 
@@ -148,16 +151,29 @@ def execute_compile_run(
         report.extend_pipeline(skin_layout.diagnostics)
         if not operation.is_valid or not materials.is_valid or not skin_layout.is_valid:
             return CompileRunResult(
-                False,
-                map_identity,
-                state,
-                len(discovery.requests),
-                0,
-                0,
-                0,
+                success=False,
+                map_identity=map_identity,
+                state=state,
+                active_entities=len(discovery.requests),
+                generated_models=0,
+                reused_models=0,
+                generated_materials=0,
+                reused_materials=0,
+                published_files=0,
             )
 
-        if operation.generated_models:
+        reuse = plan_artifact_reuse(
+            game,
+            loaded.manifest,
+            operation,
+            materials,
+            skin_layout,
+        )
+        report.extend_pipeline(reuse.diagnostics)
+        generation_operation = reuse.generation_operation
+        generation_materials = reuse.generation_materials
+
+        if generation_operation.generated_models:
             if not request.crowbar_command:
                 raise RuntimeExecutionError(
                     "crowbar_not_found",
@@ -180,8 +196,8 @@ def execute_compile_run(
             generation = generate_and_validate(
                 workspace,
                 filesystem,
-                operation,
-                materials,
+                generation_operation,
+                generation_materials,
                 skin_layout,
                 crowbar_command=crowbar,
                 studiomdl_command=studiomdl,
@@ -193,6 +209,7 @@ def execute_compile_run(
                 materials,
                 skin_layout,
                 generation,
+                reuse,
             )
             committed = apply_commit_plan(
                 commit_plan,
@@ -213,14 +230,16 @@ def execute_compile_run(
                 f"failed-run staging retained at {workspace.root}",
             )
             return CompileRunResult(
-                False,
-                map_identity,
-                state,
-                len(discovery.requests),
-                0,
-                0,
-                0,
-                workspace.root,
+                success=False,
+                map_identity=map_identity,
+                state=state,
+                active_entities=len(discovery.requests),
+                generated_models=0,
+                reused_models=len(reuse.reused_models),
+                generated_materials=0,
+                reused_materials=len(reuse.reused_materials),
+                published_files=0,
+                retained_staging=workspace.root,
             )
         else:
             try:
@@ -228,13 +247,15 @@ def execute_compile_run(
             except StagingError as exc:
                 report.add("warning", exc.code, exc.detail)
             return CompileRunResult(
-                True,
-                map_identity,
-                state,
-                len(discovery.requests),
-                len(generation.models),
-                len(generation.materials),
-                len(committed.published_artifacts),
+                success=True,
+                map_identity=map_identity,
+                state=state,
+                active_entities=len(discovery.requests),
+                generated_models=len(generation.models),
+                reused_models=len(reuse.reused_models),
+                generated_materials=len(generation.materials),
+                reused_materials=len(reuse.reused_materials),
+                published_files=len(committed.published_artifacts),
             )
 
 
