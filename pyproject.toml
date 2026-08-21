@@ -13,13 +13,18 @@ authors = [
     { name = "Ambiabstract (Sergey Shavin)" },
 ]
 dependencies = [
-    "colorama>=0.4.6,<1",
     "srctools==2.7.0",
 ]
+
+[project.scripts]
+props-scaling-recompiler = "psr.cli:main"
 
 [project.optional-dependencies]
 test = [
     "pytest>=8.3,<10",
+]
+build = [
+    "pyinstaller==6.22.2",
 ]
 
 [tool.setuptools.packages.find]

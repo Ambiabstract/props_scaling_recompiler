@@ -47,7 +47,10 @@
 - Synthetic compile-validation matrix из 12 комбинаций перекрёстно покрывает static/dynamic source, отсутствие collision/`$collisionmodel`/`$collisionjoints` и отсутствие/наличие исходного `$scale`. Она подтверждает, что transformer добавляет `$staticprop` только при необходимости, заменяет исходный `$scale` итоговым geometry scale, сохраняет collision и explicit bounds побайтно и масштабирует только top-level LOD distance.
 - Реальная isolated SDK 2013 SP matrix успешно декомпилировала Crowbar 0.68 и скомпилировала StudioMDL четыре staged cases при compile scale 1.50: static `apt/fsmit01` с `$collisionmodel` и geometry 1.50; one-bone dynamic `apt/monitor01` и `props_se/doll01` с `$collisionmodel` и geometry 2.25; one-bone dynamic `props_vehicles/car_van1a_doors1a` с `$collisionjoints`, исходным `$scale 1` и geometry 2.25. Во всех случаях exit code равен 0, generated MDL имеет точный managed internal name и static flag, выпущены непустые `.mdl`, `.vvd`, `.dx80.vtx`, `.dx90.vtx`, `.sw.vtx` и `.phy`. Внешние Antenna/SDK assets не изменялись; компиляция выполнялась в отдельный staging game root. Протокол и границы результата зафиксированы в `docs/research/SDK_QC_COMPILE_VALIDATION.md`.
 - Добавлен source-preserving `build_vmf_output`: он принимает только неизменившийся по SHA-256 исходный VMF и валидные operation/skin plans, повторно связывает top-level entity по ID и discovery span, меняет direct `classname/model/skin`, удаляет direct `modelscale`, `rendercolor` и legacy `convert_prop_to_static`, сохраняет остальные bytes и после span-edits повторно парсит документ и доказывает итоговые значения каждой затронутой сущности. Hidden/nested blocks не затрагиваются; no-op output побайтно равен input.
-- Добавлен финальный `build_commit_plan -> apply_commit_plan`: до записи он повторно хэширует каждый staged VMT/MDL companion, требует точного совпадения generation set и полноты reconciliation всех cached scale variants, строит строго валидный manifest-кандидат и VMF-кандидат. Публикация сначала создаёт и проверяет sibling temp-файлы, затем заменяет managed assets, manifest и последним `vmf_out`; при любой ошибке уже заменённые targets откатываются из уникальных backup-файлов. Synthetic end-to-end подтверждает совместный commit 14 generated artifacts, cache и VMF, stale-stage abort и полный rollback при искусственном сбое установки VMF. CLI пока не подключён к этому coordinator, а crash-recovery/межпроцессная project lock остаются следующим отдельным этапом.
+- Добавлен финальный `build_commit_plan -> apply_commit_plan`: до записи он повторно хэширует каждый staged VMT/MDL companion, требует точного совпадения generation set и полноты reconciliation всех cached scale variants, строит строго валидный manifest-кандидат и VMF-кандидат. Публикация сначала создаёт и проверяет sibling temp-файлы, затем заменяет managed assets, manifest и последним `vmf_out`; при любой ошибке уже заменённые targets откатываются из уникальных backup-файлов. Durable recovery journal позволяет следующему запуску безопасно откатить прерванный процессом commit; journal принимает только точные managed roots, manifest и заданный `vmf_out`.
+- Добавлен production runtime coordinator и CLI entry point `psr_entrypoint.py`: полный запуск связывает discovery, planning, reconciliation, generation, validation и commit, а no-op создаёт эквивалентный `vmf_out` без Crowbar/StudioMDL. Project state размещается под `%LOCALAPPDATA%\PropsScalingRecompiler\projects\<project_id>`, содержит manifest, lock, recovery journal, logs и staging. OS-level project lock запрещает два одновременных compile-run одного проекта и автоматически освобождается после завершения процесса.
+- CLI сохраняет обязательные `-game`, `-vmf_in`, `-vmf_out`; старые `-subfolders`, `-force_recompile`, `-check_origs`, `-remove_unused` и `-debug` принимаются как deprecated compatibility arguments, игнорируются и дают дедуплицированное предупреждение. Обычный запуск всегда завершается общим отчётом и корректным exit code.
+- Добавлена воспроизводимая one-file PyInstaller-сборка для Windows 10/11 x64. Собственный hook исключает неиспользуемую FGD-базу и модули `srctools`; frozen no-op regression проходит без установленного Python и model tools. Текущий `props_scaling_recompiler.exe` имеет размер 11 417 725 байт (10,89 MiB), ниже целевого бюджета 16 MiB и жёсткого предела 64 MiB. Тестовый комплект содержит только основной exe и отдельный `third-party/CrowbarCommandLineDecomp.exe`, суммарно 15 471 229 байт; VPKEdit в комплект не входит.
 - Исследовательские скрипты `is_staticprop.py`, `skins_from_mdl.py` и `mdl_skins_and_cdmaterials*.py` подтверждают возможность чтения static flag, material table, `$cdmaterials` и skin families непосредственно из MDL.
 - Пользовательское незакоммиченное изменение в `props_scaling_recompiler.py`: версия `2.0.0 - dev 001` заменена на `2.0.0 - dev 002`.
 
@@ -55,7 +58,7 @@
 
 Первый релиз PSR 2.0 поддерживает только:
 
-- Windows;
+- Windows 10/11 x64;
 - Source SDK 2013 Singleplayer;
 - Hammer++;
 - MDL и toolchain фактической SDK 2013 SP среды пользователя.
@@ -68,15 +71,14 @@ Garry's Mod, Portal 2 и другие ветки Source не входят в sco
 - реальный мод: `C:\Program Files (x86)\Steam\steamapps\sourcemods\antenna_sdk2013`;
 - production-комплект 1.1.2: `prod/props_scaling_recompiler_v1.1.2`.
 
-Зафиксированные внешние инструменты:
+Зафиксированные внешние инструменты production pipeline:
 
 | Инструмент | Версия | SHA-256 |
 |---|---:|---|
 | CrowbarCommandLineDecomp.exe | 0.68.0.0 | `4B5FC8F5092448C1F8FE12F6849BF8EE3996406F02109EC90AB800C6CF145B2A` |
-| vpkeditcli.exe | 4.2.3 | `A28E5B596161995BEE529DF2FCB06F754482255B2306F697D4FEF4F6F79BEA2A` |
 | studiomdl.exe из SDK 2013 SP | file version отсутствует | `E6C4EA7477B8CE31DE878FF53CA640CB222C4978F3BA33C4715DE3DE1C7A6416` |
 
-Бинарники Crowbar и VPKEdit из production-комплекта побайтно совпадают с установленными в SDK `bin`.
+Crowbar из production-комплекта 1.1.2 побайтно совпадает с установленным в SDK `bin` и поставляется отдельным файлом рядом с PSR 2.0. Исторический `vpkeditcli.exe` 4.2.3 (`A28E5B596161995BEE529DF2FCB06F754482255B2306F697D4FEF4F6F79BEA2A`) больше не является зависимостью и не входит в комплект 2.0.
 
 ## Роль srctools 2.7.0
 
@@ -90,7 +92,7 @@ Upstream и документация: `https://github.com/TeamSpen210/srctools`,
 - `srctools.filesys.RawFileSystem`, `VPKFileSystem` и `FileSystemChain` — точный lookup полного logical path в папках и directory VPK;
 - `srctools.mdl.Model` — MDL versions 44–49, static-prop flag, `$cdmaterials`, skin families и разрешение материалов;
 - `srctools.vmt.Material` — shader/parameters/proxies, раскрытие Patch и сбор его include-зависимостей;
-- встроенный PyInstaller hook — для будущей Windows-сборки.
+- собственный минимизирующий PyInstaller hook — для production Windows-сборки.
 
 Ограничения интеграции:
 
@@ -104,7 +106,7 @@ Read-only probe на Antenna подтвердил применимость ус�
 
 Read-only QC inventory разобрал без structural errors все 392 найденных `.qc` в Antenna и сохранённом SDK temp: 355 static и 37 dynamic scripts, 147 со `$scale`, 7 scripts/15 commands с `$lod`, 257 с `$collisionmodel`, 10 с `$collisionjoints` и 8 со `skinfamilies`. Реальный Crowbar 0.68 QC `fsmit01.qc` подтвердил важную QC-лексему `$cdmaterials "models\apt\"`: обратный слеш перед закрывающей кавычкой является path separator, а не KeyValues-style escape. Его skin row точно совпал с MDL `models/apt/fsmit01.mdl`; reference transform при неизменном layout вернул исходные bytes без mutations. Внешние файлы не изменялись, Crowbar и studiomdl не запускались.
 
-`vpkeditcli.exe` пока остаётся в зафиксированном toolchain как baseline/fallback. Возможность исключить его из поставки рассматривается только после regression-проверки `srctools` на реальных VPK Antenna.
+`vpkeditcli.exe` исключён из production toolchain и поставки: folder/VPK resolution выполняет закреплённый `srctools==2.7.0` через собственную ordered SearchPaths policy PSR.
 
 ## Утверждённые продуктовые правила
 
@@ -574,8 +576,7 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - способ fingerprint зависимостей для Patch из VPK;
 - политика переноса legacy-generated модели, выбранной как новый original;
 - обработка частичного успеха, когда одна из моделей карты не компилируется;
-- допустимость параллельного запуска двух Hammer compile jobs для одного проекта;
-- окончательное CLI-место staging parent и retention policy для failed runs;
+- retention/cleanup policy для сохранённых staging и failed runs;
 - UX и CLI-флаг явного project-wide colored-layout cleanup/compaction; базовая safety-policy и требование dry-run уже утверждены.
 
 ## Принятые решения
@@ -601,4 +602,9 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - Для SDK 2013 SP ожидаемый compiled model set — `.mdl`, `.vvd`, `.dx80.vtx`, `.dx90.vtx`, `.sw.vtx` и `.phy` при наличии collision. Exit code/строка `Completed` недостаточны: до commit обязательны проверка каждого файла, managed internal model name и static-prop flag MDL.
 - Сохранение `$collisionmodel`/`$collisionjoints`, explicit bounds и замена pre-existing `$scale` подтверждены staged compile-validation на четырёх реальных cases. Специальные числовые переписывания collision/bounds и прежнее массовое комментирование `$bbox`/`$definebone` не требуются для подтверждённой матрицы.
 - Первый 2.0 ограничен Source SDK 2013 SP.
+- Поддерживаются только Windows 10/11 x64.
+- Дистрибутив состоит из `props_scaling_recompiler.exe` и отдельного Crowbar в `third-party`; сторонние программы не встраиваются в основной exe, VPKEdit не поставляется.
+- Project state хранится под `%LOCALAPPDATA%\PropsScalingRecompiler\projects\<project_id>`; одновременные run одного проекта запрещены project lock.
+- Основные CLI-аргументы остаются `-game/-vmf_in/-vmf_out`; старые флаги принимаются только как deprecated с предупреждением.
+- Предпочтительный бюджет основного exe — до 16 MiB, размер свыше 64 MiB блокирует release build.
 - Архитектурная память хранится в этом документе, обязательные рабочие правила — в корневом `AGENTS.md`.

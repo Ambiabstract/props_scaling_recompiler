@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import tempfile
 import uuid
@@ -70,12 +71,21 @@ class CommitResult:
     vmf_sha256: str
 
 
+@dataclass(frozen=True, slots=True)
+class RecoveryResult:
+    """Outcome of rolling back one durable interrupted commit journal."""
+
+    recovered: bool
+    restored_targets: tuple[Path, ...] = ()
+
+
 @dataclass(slots=True)
 class _PreparedWrite:
     target: Path
     temporary: Path
     sha256: str
     backup: Path | None = None
+    original_existed: bool = False
     installed: bool = False
 
 
@@ -264,6 +274,7 @@ def apply_commit_plan(
     game_directory: Path,
     manifest_path: Path,
     vmf_output_path: Path,
+    recovery_journal_path: Path | None = None,
 ) -> CommitResult:
     """Publish every planned file with rollback if any replacement fails."""
     game_root = game_directory.resolve(strict=True)
@@ -309,7 +320,7 @@ def apply_commit_plan(
     try:
         for target, content, size, sha256 in writes:
             prepared.append(_prepare_write(target, content, size, sha256))
-        _install_prepared(prepared)
+        _install_prepared(prepared, recovery_journal_path=recovery_journal_path)
     except CommitError:
         _discard_temporaries(prepared)
         raise
@@ -327,6 +338,109 @@ def apply_commit_plan(
         vmf_output_path=vmf_target,
         vmf_sha256=plan.vmf_output.sha256,
     )
+
+
+def recover_interrupted_commit(
+    journal_path: Path,
+    *,
+    game_directory: Path,
+    manifest_path: Path,
+    vmf_output_path: Path,
+) -> RecoveryResult:
+    """Rollback an interrupted transaction after strictly validating its journal."""
+    journal = journal_path.resolve()
+    if not journal.exists():
+        return RecoveryResult(False)
+    try:
+        document = json.loads(journal.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise CommitError(
+            "commit_recovery_journal_invalid",
+            f"{type(exc).__name__}: {exc}",
+        ) from exc
+    if (
+        not isinstance(document, dict)
+        or set(document) != {"schema_version", "status", "writes"}
+        or document.get("schema_version") != 1
+        or document.get("status") != "installing"
+        or not isinstance(document.get("writes"), list)
+    ):
+        raise CommitError(
+            "commit_recovery_journal_invalid",
+            "journal structure or status is not recognised",
+        )
+
+    game_root = game_directory.resolve(strict=True)
+    manifest_target = manifest_path.resolve()
+    vmf_target = vmf_output_path.resolve()
+    records: list[tuple[Path, Path, Path | None, bool, str]] = []
+    for index, raw in enumerate(document["writes"]):
+        if not isinstance(raw, dict) or set(raw) != {
+            "target", "temporary", "backup", "original_existed", "sha256"
+        }:
+            raise CommitError(
+                "commit_recovery_journal_invalid",
+                f"writes[{index}] has unexpected fields",
+            )
+        target = _journal_path(raw["target"], f"writes[{index}].target")
+        temporary = _journal_path(raw["temporary"], f"writes[{index}].temporary")
+        backup_raw = raw["backup"]
+        backup = (
+            None
+            if backup_raw is None
+            else _journal_path(backup_raw, f"writes[{index}].backup")
+        )
+        original_existed = raw["original_existed"]
+        sha256 = raw["sha256"]
+        if not isinstance(original_existed, bool) or not _is_sha256(sha256):
+            raise CommitError(
+                "commit_recovery_journal_invalid",
+                f"writes[{index}] has invalid metadata",
+            )
+        _validate_recovery_target(
+            target,
+            game_root=game_root,
+            manifest_target=manifest_target,
+            vmf_target=vmf_target,
+        )
+        if temporary.parent != target.parent or not temporary.name.endswith(".psr-new"):
+            raise CommitError(
+                "commit_recovery_path_invalid",
+                str(temporary),
+            )
+        if backup is not None and (
+            backup.parent != target.parent
+            or not backup.name.endswith(".psr-backup")
+        ):
+            raise CommitError("commit_recovery_path_invalid", str(backup))
+        records.append((target, temporary, backup, original_existed, sha256))
+
+    restored: list[Path] = []
+    try:
+        for target, temporary, backup, original_existed, sha256 in reversed(records):
+            if backup is not None and backup.exists():
+                if target.exists():
+                    if not target.is_file():
+                        raise CommitError("commit_recovery_target_not_file", str(target))
+                    target.unlink()
+                _replace_path(backup, target)
+                restored.append(target)
+            elif not original_existed and target.exists():
+                if not target.is_file() or _file_sha256(target) != sha256:
+                    raise CommitError(
+                        "commit_recovery_unexpected_target",
+                        str(target),
+                    )
+                target.unlink()
+                restored.append(target)
+            temporary.unlink(missing_ok=True)
+        journal.unlink()
+    except OSError as exc:
+        raise CommitError(
+            "commit_recovery_failed",
+            f"{type(exc).__name__}: {exc}",
+        ) from exc
+    return RecoveryResult(True, tuple(reversed(restored)))
 
 
 def _accepted_material_outputs(
@@ -543,16 +657,27 @@ def _prepare_write(
         raise
 
 
-def _install_prepared(prepared: list[_PreparedWrite]) -> None:
+def _install_prepared(
+    prepared: list[_PreparedWrite],
+    *,
+    recovery_journal_path: Path | None,
+) -> None:
     token = uuid.uuid4().hex
+    for item in prepared:
+        item.original_existed = item.target.exists()
+        if item.original_existed:
+            item.backup = item.target.with_name(
+                f".{item.target.name}.{token}.psr-backup"
+            )
+            if item.backup.exists():
+                raise CommitError("commit_backup_conflict", str(item.backup))
+    journal = recovery_journal_path.resolve() if recovery_journal_path is not None else None
+    if journal is not None:
+        _write_recovery_journal(journal, prepared)
     try:
         for item in prepared:
-            if item.target.exists():
-                item.backup = item.target.with_name(
-                    f".{item.target.name}.{token}.psr-backup"
-                )
-                if item.backup.exists():
-                    raise CommitError("commit_backup_conflict", str(item.backup))
+            if item.original_existed:
+                assert item.backup is not None
                 _replace_path(item.target, item.backup)
             _replace_path(item.temporary, item.target)
             item.installed = True
@@ -575,10 +700,14 @@ def _install_prepared(prepared: list[_PreparedWrite]) -> None:
         detail = f"{type(exc).__name__}: {exc}"
         if rollback_errors:
             detail += "; rollback failures: " + "; ".join(rollback_errors)
+        if journal is not None and not rollback_errors:
+            journal.unlink(missing_ok=True)
         if isinstance(exc, CommitError) and not rollback_errors:
             raise
         raise CommitError("commit_transaction_failed", detail) from exc
     else:
+        if journal is not None:
+            journal.unlink(missing_ok=True)
         for item in prepared:
             if item.backup is not None:
                 try:
@@ -588,6 +717,79 @@ def _install_prepared(prepared: list[_PreparedWrite]) -> None:
                     # verified. A leftover uniquely named backup is safer than
                     # reporting a false failed commit after state changed.
                     pass
+
+
+def _write_recovery_journal(path: Path, prepared: list[_PreparedWrite]) -> None:
+    document = {
+        "schema_version": 1,
+        "status": "installing",
+        "writes": [
+            {
+                "target": str(item.target),
+                "temporary": str(item.temporary),
+                "backup": None if item.backup is None else str(item.backup),
+                "original_existed": item.original_existed,
+                "sha256": item.sha256,
+            }
+            for item in prepared
+        ],
+    }
+    content = (
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _journal_path(value: object, label: str) -> Path:
+    if not isinstance(value, str) or not value:
+        raise CommitError("commit_recovery_journal_invalid", f"{label} is not a path")
+    return Path(value).resolve()
+
+
+def _validate_recovery_target(
+    target: Path,
+    *,
+    game_root: Path,
+    manifest_target: Path,
+    vmf_target: Path,
+) -> None:
+    if target in {manifest_target, vmf_target}:
+        return
+    managed_roots = (
+        (game_root / "models" / "psr_scaled").resolve(),
+        (game_root / "materials" / "models" / "psr_scaled").resolve(),
+    )
+    if any(root in target.parents for root in managed_roots):
+        return
+    raise CommitError("commit_recovery_target_unmanaged", str(target))
+
+
+def _is_sha256(value: object) -> bool:
+    if not isinstance(value, str) or len(value) != 64:
+        return False
+    try:
+        bytes.fromhex(value)
+    except ValueError:
+        return False
+    return True
 
 
 def _discard_temporaries(prepared: list[_PreparedWrite]) -> None:
@@ -612,6 +814,8 @@ __all__ = [
     "CommitError",
     "CommitPlan",
     "CommitResult",
+    "RecoveryResult",
     "apply_commit_plan",
     "build_commit_plan",
+    "recover_interrupted_commit",
 ]

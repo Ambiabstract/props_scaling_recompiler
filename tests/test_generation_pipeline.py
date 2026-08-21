@@ -32,6 +32,7 @@ from psr.pipeline import (
     inspect_colored_material_sources,
     inspect_map_sources,
 )
+from psr.runtime import CompileRequest, DiagnosticReport, execute_compile_run
 from tests.mdl_fixture_builder import build_case_files
 
 
@@ -490,6 +491,71 @@ class GenerationPipelineTests(unittest.TestCase):
                 )
 
         self.assertEqual(raised.exception.code, "commit_reconciliation_incomplete")
+
+    def test_runtime_coordinator_executes_full_compile_run_with_local_appdata_state(self) -> None:
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1.5", "190 48 148")
+            + entity("2", model, "2", "255 255 255")
+        ).encode("ascii")
+        vmf_input = self.root / "maps" / "runtime.vmf"
+        vmf_output = self.root / "maps" / "psr_temp" / "runtime.vmf"
+        vmf_input.parent.mkdir()
+        vmf_input.write_bytes(source_vmf)
+        report = DiagnosticReport()
+
+        result = execute_compile_run(
+            CompileRequest(
+                game_directory=self.root,
+                vmf_input_path=vmf_input,
+                vmf_output_path=vmf_output,
+                engine_root=self.engine,
+                crowbar_command=(sys.executable, self.crowbar),
+                studiomdl_command=(sys.executable, self.studiomdl),
+                local_appdata=self.root / "localappdata",
+            ),
+            report,
+        )
+
+        self.assertTrue(result.success)
+        self.assertFalse(report.has_errors)
+        self.assertEqual(result.active_entities, 2)
+        self.assertEqual(result.generated_models, 2)
+        self.assertEqual(result.generated_materials, 2)
+        self.assertEqual(result.published_files, 14)
+        self.assertTrue(vmf_output.is_file())
+        self.assertTrue(result.state.manifest.is_file())
+        self.assertIn(
+            "PropsScalingRecompiler/projects",
+            result.state.root.as_posix(),
+        )
+        self.assertFalse(result.state.recovery_journal.exists())
+        self.assertEqual(list(result.state.staging.iterdir()), [])
+
+    def test_runtime_noop_writes_equivalent_vmf_without_external_tools(self) -> None:
+        vmf_input = self.root / "maps" / "noop.vmf"
+        vmf_output = self.root / "maps" / "psr_temp" / "noop.vmf"
+        vmf_input.parent.mkdir()
+        source = b'world\n{\n    "id" "1"\n}\n'
+        vmf_input.write_bytes(source)
+        report = DiagnosticReport()
+
+        result = execute_compile_run(
+            CompileRequest(
+                game_directory=self.root,
+                vmf_input_path=vmf_input,
+                vmf_output_path=vmf_output,
+                engine_root=self.engine,
+                crowbar_command=None,
+                studiomdl_command=None,
+                local_appdata=self.root / "localappdata",
+            ),
+            report,
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(vmf_output.read_bytes(), source)
+        self.assertEqual(result.published_files, 0)
 
     def test_capacity_fallback_does_not_generate_rejected_colored_materials(self) -> None:
         model = self.case["logical_model_path"]

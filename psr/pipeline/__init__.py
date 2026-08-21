@@ -61,8 +61,10 @@ from .commit import (
     CommitError,
     CommitPlan,
     CommitResult,
+    RecoveryResult,
     apply_commit_plan,
     build_commit_plan,
+    recover_interrupted_commit,
 )
 
 __all__ = [
@@ -71,6 +73,7 @@ __all__ = [
     "CommitError",
     "CommitPlan",
     "CommitResult",
+    "RecoveryResult",
     "ColoredMaterialOperationPlan",
     "ColoredMaterialPlan",
     "ColoredSkinMaterialPlan",
@@ -112,6 +115,7 @@ __all__ = [
     "inspect_map_sources",
     "generate_and_validate",
     "reconcile_generation_requirements",
+    "recover_interrupted_commit",
     "source_asset_fingerprint",
     "source_skin_families_fingerprint",
     "stage_qc_operation",
