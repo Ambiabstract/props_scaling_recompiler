@@ -31,6 +31,14 @@ from .vmt import (
     inspect_source_material,
     select_color_parameter,
 )
+from .qc import (
+    QCTransformError,
+    QCTransformResult,
+    SourceQCMetadata,
+    build_reference_qc,
+    build_scaled_qc,
+    inspect_qc,
+)
 
 __all__ = [
     "AssetProvenance",
@@ -39,6 +47,8 @@ __all__ = [
     "MaterialBlockMetadata",
     "MountedSearchPath",
     "OrderedAssetFileSystem",
+    "QCTransformError",
+    "QCTransformResult",
     "ResolvedAsset",
     "SearchPathDiagnostic",
     "SearchPathParseError",
@@ -50,9 +60,13 @@ __all__ = [
     "SourceMaterialFileMetadata",
     "SourceMaterialInspectionError",
     "SourceMaterialMetadata",
+    "SourceQCMetadata",
+    "build_reference_qc",
+    "build_scaled_qc",
     "colored_material_path",
     "inspect_source_material",
     "inspect_source_model",
+    "inspect_qc",
     "normalize_logical_path",
     "parse_gameinfo_search_paths",
     "parse_search_paths_text",

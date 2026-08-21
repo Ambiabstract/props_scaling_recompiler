@@ -33,6 +33,8 @@
 - Добавлена synthetic VMT matrix для отсутствующего/existing color-key, proxies, Patch, unsupported shader и folder/VPK provenance. Material phase ничего не записывает и не запускает Crowbar/studiomdl.
 - Добавлен project-scoped JSON manifest schema v1 в `psr.cache`: нормализованный абсолютный `GameInfo.txt` задаёт стабильный `project_id`, текущий SHA-256 GameInfo хранится отдельно, а SourceAsset/GeneratedModel/ColoredMaterial/SkinMapping/MapUsage являются раздельными строго валидируемыми таблицами. Поддержаны migration v0→v1, безопасный cold start/recovery повреждённого или несовместимого cache и атомарная запись temp+`os.replace`; путь хранения пока передаётся явно до CLI-интеграции.
 - Добавлен pure cache-backed `build_skin_layout_plan`: исходные skin indices сохраняются, валидные ранее назначенные colored mappings удерживают индексы, новые `(source skin, RGB)` сортируются и дописываются после них. Полный layout получает fingerprint; entity получает отдельный final skin assignment. `commit_skin_layout_plan` только строит manifest-кандидат и не пишет его: вызывать его разрешено после будущей проверки generated artifacts. При изменении исходной skin table старые mappings и связанные `MapUsage` других карт для модели инвалидируются.
+- Добавлен собственный байтовый `psr.assets.qc`: token-aware lexer валидирует quotes/comments/braces, различает top-level и вложенные команды и применяет только span-edits, не пересериализуя остальной QC. Reference transform сверяет исходный `$texturegroup "skinfamilies"` с таблицей MDL, добавляет `$staticprop` для dynamic source и устанавливает полный стабильный layout. Variant transform назначает managed `$modelname`, записывает канонический compile scale напрямую в `$scale` и умножает только top-level `$lod` distances; collision/bounds и остальные команды остаются побайтно нетронутыми до compile-validation.
+- Добавлен pure `build_qc_operation_plan`: один reference QC переиспользуется всеми scale variants исходной модели; каждый in-memory artifact имеет source/output SHA-256, список mutations и детерминированный staging-relative path. Отсутствующий QC, рассогласование static flag MDL/QC и stale skin table становятся diagnostics. Этап ничего не пишет и не запускает Crowbar/studiomdl.
 - Исследовательские скрипты `is_staticprop.py`, `skins_from_mdl.py` и `mdl_skins_and_cdmaterials*.py` подтверждают возможность чтения static flag, material table, `$cdmaterials` и skin families непосредственно из MDL.
 - Пользовательское незакоммиченное изменение в `props_scaling_recompiler.py`: версия `2.0.0 - dev 001` заменена на `2.0.0 - dev 002`.
 
@@ -86,6 +88,8 @@ Upstream и документация: `https://github.com/TeamSpen210/srctools`,
 - Семантика VMT Patch из библиотеки полезна как parser/evaluator, но реальный выбор `$color`/`$color2` и поведение `insert`/`replace` всё равно проверяются на SDK 2013 SP.
 
 Read-only probe на Antenna подтвердил применимость установленной версии и собственных ordered/MDL adapters: 35 исходных SearchPath leaves развёрнуты в 39 конкретных mounts без группировки VPK перед folder roots; `models/props_se/storage/book_2.mdl` разрешён через исходную строку `|gameinfo_path|.` из project folder. Production-адаптер определил MDL v48 как non-static, сохранил восемь skin families, разрешил первые четыре реально существующих VMT по `models/props_se/book/` и зафиксировал MDL, PHY, VVD и три VTX companions с размерами и SHA-256. Отсутствующие optional paths, numbered VPK chunks и отсутствующие VMT остаются явным состоянием/diagnostics, а не ломают discovery.
+
+Read-only QC inventory разобрал без structural errors все 392 найденных `.qc` в Antenna и сохранённом SDK temp: 355 static и 37 dynamic scripts, 147 со `$scale`, 7 scripts/15 commands с `$lod`, 257 с `$collisionmodel`, 10 с `$collisionjoints` и 8 со `skinfamilies`. Реальный Crowbar 0.68 QC `fsmit01.qc` подтвердил важную QC-лексему `$cdmaterials "models\apt\"`: обратный слеш перед закрывающей кавычкой является path separator, а не KeyValues-style escape. Его skin row точно совпал с MDL `models/apt/fsmit01.mdl`; reference transform при неизменном layout вернул исходные bytes без mutations. Внешние файлы не изменялись, Crowbar и studiomdl не запускались.
 
 `vpkeditcli.exe` пока остаётся в зафиксированном toolchain как baseline/fallback. Возможность исключить его из поставки рассматривается только после regression-проверки `srctools` на реальных VPK Antenna.
 
@@ -312,6 +316,16 @@ VMF reader/writer должен:
 - один VMT используется несколькими моделями;
 - исходные skin families меняются после заполнения кэша;
 - несколько новых цветов запрашиваются в разном порядке на разных картах.
+
+## QC generation
+
+- Декомпилированный QC рассматривается как staged input: оригинальный или внешний QC никогда не перезаписывается.
+- QC не является KeyValues. Parser учитывает line/block comments, quoted values, brace depth и top-level command boundaries; нетронутые bytes, encoding и newline style сохраняются.
+- До изменения `skinfamilies` исходные rows QC сравниваются со всеми rows MDL. Несовпадение блокирует generation, чтобы stale decompile не сдвинул skin indices.
+- Один reference QC содержит `$staticprop` и полный cache-backed skin layout; он сам не компилируется и служит источником для всех требуемых scale variants.
+- Каждый variant получает `$modelname` без префикса `models/`, но строго под `psr_scaled/`; `$scale` равен итоговому PSR compile scale, а не произведению со старым значением из decompile.
+- Top-level `$lod` distance умножается на compile scale. `$shadowlod`, collision blocks, explicit bounds, bones, sequences и прочие команды не изменяются неявными числовыми regex-заменами.
+- Надёжность `$scale` для render/collision и необходимость специальной обработки отдельных Crowbar-команд должны подтверждаться будущей staged compile-validation matrix; legacy `scale²` и массовое комментирование `$bbox`/`$definebone` не считаются утверждённым поведением 2.0.
 
 ## Cleanup и миграция
 
@@ -544,6 +558,7 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - допустимость параллельного запуска двух Hammer compile jobs для одного проекта;
 - место и lifecycle staging/temp каталогов;
 - точная политика cleanup для старых ревизий generated skin layout.
+- результат staged compile-validation QC matrix для static/dynamic, `$collisionmodel`/`$collisionjoints`, explicit bounds и pre-existing `$scale`.
 
 ## Принятые решения
 
@@ -559,5 +574,6 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - Legacy migration/cleanup является отдельной операцией.
 - Покраска предпочитает Patch с fallback на полную VMT-копию.
 - Project cache использует строго валидируемый versioned JSON manifest, изолированный нормализованной identity `GameInfo.txt`, и атомарный replace вместо pickle.
+- QC variants строятся из общего validated reference QC; `$scale` использует compile-scale identity напрямую, LOD distances масштабируются token-aware, collision и bounds пока сохраняются для отдельной compile-validation.
 - Первый 2.0 ограничен Source SDK 2013 SP.
 - Архитектурная память хранится в этом документе, обязательные рабочие правила — в корневом `AGENTS.md`.

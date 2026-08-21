@@ -32,6 +32,12 @@ from .skin_layout import (
     commit_skin_layout_plan,
     source_skin_families_fingerprint,
 )
+from .qc import (
+    QCOperationPlan,
+    ReferenceQCArtifactPlan,
+    ScaledQCArtifactPlan,
+    build_qc_operation_plan,
+)
 
 __all__ = [
     "ColoredSkinRequirement",
@@ -47,10 +53,14 @@ __all__ = [
     "ModelSkinLayoutPlan",
     "OperationPlan",
     "PipelineDiagnostic",
+    "QCOperationPlan",
+    "ReferenceQCArtifactPlan",
+    "ScaledQCArtifactPlan",
     "SkinLayoutOperationPlan",
     "VmfEntityRequest",
     "WHITE",
     "build_operation_plan",
+    "build_qc_operation_plan",
     "build_colored_material_plan",
     "build_skin_layout_plan",
     "commit_skin_layout_plan",

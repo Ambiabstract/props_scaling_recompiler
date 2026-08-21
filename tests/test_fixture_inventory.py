@@ -12,6 +12,8 @@ class FixtureInventoryTests(unittest.TestCase):
         expected = {
             FIXTURES / "gameinfo" / "ordered_searchpaths.txt",
             FIXTURES / "mdl" / "synthetic_mdl_cases.json",
+            FIXTURES / "qc" / "dynamic_physics.qc",
+            FIXTURES / "qc" / "static_formatting.qc",
             FIXTURES / "scale" / "hammerpp_scale_cases.json",
             FIXTURES / "vmf" / "active_and_hidden_psr.vmf",
             FIXTURES / "vmf" / "no_psr_entities.vmf",
