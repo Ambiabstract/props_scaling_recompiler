@@ -165,6 +165,7 @@ class DiscoveryPlanningTests(unittest.TestCase):
             dynamic["logical_model_path"],
         )
         self.assertTrue(plan.generated_models[0].requires_static_conversion)
+        self.assertEqual(plan.generated_models[0].geometry_scale, Decimal("0.01"))
         self.assertEqual(
             plan.generated_models[0].logical_output_model,
             "models/psr_scaled/props_fixture/dynamic_scaled_001.mdl",
@@ -193,6 +194,10 @@ class DiscoveryPlanningTests(unittest.TestCase):
         self.assertEqual(
             [(item.compile_scale, item.entity_ids) for item in plan.generated_models],
             [(Decimal("1"), ("2",)), (Decimal("2"), ("3", "4"))],
+        )
+        self.assertEqual(
+            [item.geometry_scale for item in plan.generated_models],
+            [Decimal("1"), Decimal("2")],
         )
         self.assertEqual(
             [item.logical_output_model for item in plan.generated_models],
@@ -226,6 +231,10 @@ class DiscoveryPlanningTests(unittest.TestCase):
         )
         self.assertEqual(
             [usage.compile_scale for usage in plan.usages],
+            [Decimal("1.10"), Decimal("1.10"), Decimal("1.10")],
+        )
+        self.assertEqual(
+            [usage.geometry_scale for usage in plan.usages],
             [Decimal("1.10"), Decimal("1.10"), Decimal("1.10")],
         )
         self.assertEqual(len(plan.generated_models), 1)
@@ -268,6 +277,44 @@ class DiscoveryPlanningTests(unittest.TestCase):
             ["13"],
         )
         self.assertEqual(plan.usages[0].compile_scale, Decimal("1"))
+
+    def test_geometry_scale_uses_one_bone_nonstatic_rule_not_physics_proxy(self) -> None:
+        one_bone = load_mdl_case("dynamic_v44")
+        one_bone["logical_model_path"] = "models/fixture/one_bone.mdl"
+        one_bone["internal_model_name"] = "fixture/one_bone.mdl"
+        one_bone["bone_count"] = 1
+        multi_bone = load_mdl_case("dynamic_v44")
+        multi_bone["logical_model_path"] = "models/fixture/multi_bone.mdl"
+        multi_bone["internal_model_name"] = "fixture/multi_bone.mdl"
+        multi_bone["bone_count"] = 3
+        self.install_case(one_bone)
+        self.install_case(multi_bone)
+        source = (
+            entity("20", one_bone["logical_model_path"], "2.0")
+            + entity("21", one_bone["logical_model_path"], "0.5")
+            + entity("22", multi_bone["logical_model_path"], "2.0")
+            + entity("23", multi_bone["logical_model_path"], "0.5")
+        ).encode("ascii")
+
+        plan = build_operation_plan(inspect_map_sources(
+            discover_vmf_requests(source, map_identity="maps/geometry.vmf"),
+            self.filesystem(),
+        ))
+
+        self.assertTrue(plan.is_valid)
+        self.assertEqual(
+            [usage.geometry_scale for usage in plan.usages],
+            [Decimal("4.0000"), Decimal("0.2500"), Decimal("2.00"), Decimal("0.50")],
+        )
+        self.assertEqual(
+            [usage.logical_output_model for usage in plan.usages],
+            [
+                "models/psr_scaled/fixture/one_bone_scaled_200.mdl",
+                "models/psr_scaled/fixture/one_bone_scaled_050.mdl",
+                "models/psr_scaled/fixture/multi_bone_scaled_200.mdl",
+                "models/psr_scaled/fixture/multi_bone_scaled_050.mdl",
+            ],
+        )
 
     def test_no_psr_entities_still_require_equivalent_vmf_output(self) -> None:
         discovery = discover_vmf_requests(

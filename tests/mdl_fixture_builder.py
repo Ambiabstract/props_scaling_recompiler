@@ -119,7 +119,14 @@ def build_mdl(case: Mapping[str, Any]) -> bytes:
         len(data),
     )
     struct.pack_into("<18f", data, 80, *([0.0] * 18))
-    struct.pack_into("<11I", data, 152, flags, *([0] * 10))
+    struct.pack_into(
+        "<11I",
+        data,
+        152,
+        flags,
+        case["bone_count"],
+        *([0] * 9),
+    )
     struct.pack_into(
         "<13i",
         data,

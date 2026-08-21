@@ -8,6 +8,7 @@
       "mdl_version": 48,
       "checksum_hex": "11223344",
       "static_prop": true,
+      "bone_count": 1,
       "surface_property": "default",
       "cdmaterials": [
         "models/fixture/primary/",
@@ -31,6 +32,7 @@
       "mdl_version": 44,
       "checksum_hex": "a1b2c3d4",
       "static_prop": false,
+      "bone_count": 3,
       "surface_property": "metal",
       "cdmaterials": ["models/fixture/dynamic/"],
       "skin_families": [["shell"]],

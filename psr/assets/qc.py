@@ -270,8 +270,9 @@ def build_scaled_qc(
     *,
     logical_output_model: str,
     compile_scale: Decimal,
+    geometry_scale: Decimal,
 ) -> QCTransformResult:
-    """Create one compile-ready scaled QC from the shared reference QC."""
+    """Create one compile-ready QC with separate identity and geometry scale."""
     source_sha256 = _sha256(reference_source)
     output_model = _validate_output_model(logical_output_model)
     try:
@@ -281,7 +282,12 @@ def build_scaled_qc(
             "noncanonical_compile_scale",
             f"compile scale must be a positive canonical hundredth: {compile_scale!r}",
         ) from exc
-    scale_text = format(compile_scale, ".2f")
+    if not geometry_scale.is_finite() or geometry_scale <= 0:
+        raise QCTransformError(
+            "invalid_geometry_scale",
+            f"geometry scale must be positive and finite: {geometry_scale!r}",
+        )
+    scale_text = _format_decimal(geometry_scale)
 
     metadata = inspect_qc(reference_source)
     if not metadata.is_static_prop:
@@ -344,7 +350,7 @@ def build_scaled_qc(
                 f"$lod distance is not finite: {raw_distance!r}",
                 argument.start,
             )
-        replacement = _format_decimal(distance * compile_scale).encode("ascii")
+        replacement = _format_decimal(distance * geometry_scale).encode("ascii")
         if replacement != argument.raw:
             lod_edits.append(_Edit(argument.start, argument.end, replacement))
     if lod_edits:

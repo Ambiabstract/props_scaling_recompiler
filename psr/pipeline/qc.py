@@ -41,6 +41,7 @@ class ScaledQCArtifactPlan:
     logical_source_model: str
     logical_output_model: str
     compile_scale: Decimal
+    geometry_scale: Decimal
     staging_relative_path: str
     reference_qc_sha256: str
     output_qc_sha256: str
@@ -165,6 +166,7 @@ def build_qc_operation_plan(
                     reference.content,
                     logical_output_model=requirement.logical_output_model,
                     compile_scale=requirement.compile_scale,
+                    geometry_scale=requirement.geometry_scale,
                 )
             except QCTransformError as exc:
                 diagnostics.append(_transform_error(
@@ -177,6 +179,7 @@ def build_qc_operation_plan(
                 logical_source_model=model,
                 logical_output_model=requirement.logical_output_model,
                 compile_scale=requirement.compile_scale,
+                geometry_scale=requirement.geometry_scale,
                 staging_relative_path=_variant_staging_path(
                     requirement.logical_output_model,
                 ),

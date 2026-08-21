@@ -10,6 +10,7 @@ from psr.domain import (
     canonical_scale_percent,
     format_scale_percent,
     resolve_compile_scale,
+    resolve_geometry_scale,
     scaled_model_path,
 )
 
@@ -30,32 +31,36 @@ class ScaleFixtureTests(unittest.TestCase):
     def setUp(self) -> None:
         self.fixture = load_scale_fixture()
         self.cases = self.fixture["cases"]
+        self.parsing_cases = self.cases[:self.fixture["source"]["parsing_entities"]]
 
     def test_fixture_has_expected_snapshot_metadata(self) -> None:
         source = self.fixture["source"]
-        self.assertEqual(self.fixture["schema_version"], 1)
+        self.assertEqual(self.fixture["schema_version"], 2)
         self.assertEqual(self.fixture["oracle_field"], "debug_string")
         self.assertEqual(self.fixture["oracle_prefix"], "effective_scale=")
-        self.assertEqual(source["active_entities"], 35)
-        self.assertEqual(source["bytes"], 45234)
+        self.assertEqual(source["active_entities"], 51)
+        self.assertEqual(source["parsing_entities"], 35)
+        self.assertEqual(source["bytes"], 63081)
         self.assertEqual(
             source["sha256"],
-            "af598164d2d04972a0a2d785fda6688e393ac4b24b177acb4d0919b08a7a12db",
+            "bb6766854efb6584a7a8bd37e64e24212490c702082eb2946b6b9790b20071ee",
         )
 
     def test_every_entity_has_one_numeric_test_oracle(self) -> None:
-        self.assertEqual(len(self.cases), 35)
+        self.assertEqual(len(self.cases), 51)
         entity_ids = [case["entity_id"] for case in self.cases]
         self.assertEqual(len(entity_ids), len(set(entity_ids)))
 
         for case in self.cases:
             expected = Decimal(case["effective_scale"])
             self.assertGreaterEqual(expected, Decimal("0.01"), case)
+            model = case.get("logical_model_path", self.fixture["source"]["default_model"])
+            self.assertIn(model, self.fixture["models"])
 
     def test_minimum_scale_clamp_is_explicit(self) -> None:
         clamp_cases = [
             case
-            for case in self.cases
+            for case in self.parsing_cases
             if case.get("reason") == "psr_minimum_scale_clamp"
         ]
         self.assertEqual(
@@ -73,7 +78,7 @@ class ScaleFixtureTests(unittest.TestCase):
     def test_known_hammer_compatibility_cases_are_preserved(self) -> None:
         by_raw = {
             case["raw_modelscale"]: case["effective_scale"]
-            for case in self.cases
+            for case in self.parsing_cases
         }
         expected = {
             "blablabla": "1.0",
@@ -89,12 +94,12 @@ class ScaleFixtureTests(unittest.TestCase):
             self.assertEqual(by_raw[raw_modelscale], effective_scale)
 
     def test_only_intentional_raw_values_are_repeated(self) -> None:
-        counts = Counter(case["raw_modelscale"] for case in self.cases)
+        counts = Counter(case["raw_modelscale"] for case in self.parsing_cases)
         repeated = {raw: count for raw, count in counts.items() if count > 1}
         self.assertEqual(repeated, {"''": 2, "'''": 2})
 
     def test_production_resolver_matches_every_confirmed_oracle(self) -> None:
-        for case in self.cases:
+        for case in self.parsing_cases:
             result = resolve_compile_scale(case["raw_modelscale"])
             self.assertEqual(
                 result.compile_scale,
@@ -103,6 +108,36 @@ class ScaleFixtureTests(unittest.TestCase):
             )
             self.assertEqual(result.raw_modelscale, case["raw_modelscale"])
             self.assertFalse(hasattr(result, "effective_scale"))
+
+    def test_model_dependent_geometry_matches_every_confirmed_oracle(self) -> None:
+        for case in self.cases:
+            model = case.get("logical_model_path", self.fixture["source"]["default_model"])
+            metadata = self.fixture["models"][model]
+            compile_scale = resolve_compile_scale(case["raw_modelscale"]).compile_scale
+            geometry = resolve_geometry_scale(
+                compile_scale,
+                bone_count=metadata["bone_count"],
+                is_static_prop=metadata["is_static_prop"],
+            )
+            self.assertEqual(
+                geometry.geometry_scale,
+                Decimal(case["effective_scale"]),
+                case,
+            )
+
+    def test_quadratic_geometry_has_a_separate_product_clamp(self) -> None:
+        result = resolve_geometry_scale(
+            Decimal("0.05"),
+            bone_count=1,
+            is_static_prop=False,
+        )
+
+        self.assertTrue(result.is_quadratic)
+        self.assertEqual(result.geometry_scale, Decimal("0.01"))
+        self.assertEqual(
+            [item.code for item in result.diagnostics],
+            ["psr_minimum_geometry_scale_clamp"],
+        )
 
     def test_resolver_reports_prefix_fallback_and_clamp_reasons(self) -> None:
         self.assertEqual(

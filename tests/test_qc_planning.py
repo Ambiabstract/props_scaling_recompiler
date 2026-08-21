@@ -6,6 +6,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from psr.assets import AssetProvenance, SourceAssetMetadata, inspect_qc
+from psr.domain import resolve_geometry_scale
 from psr.pipeline import (
     GeneratedModelRequirement,
     ModelSkinLayoutPlan,
@@ -38,6 +39,7 @@ def source_asset(*, is_static: bool = False) -> SourceAssetMetadata:
         mdl_header_checksum="11223344",
         mdl_flags=0,
         is_static_prop=is_static,
+        bone_count=1,
         surface_property="default",
         total_vertices=12,
         cdmaterials=("models/props/example/",),
@@ -59,6 +61,11 @@ def operation(asset: SourceAssetMetadata | None = None) -> OperationPlan:
                 else "models/psr_scaled/props/example_dynamic_scaled_150.mdl"
             ),
             compile_scale=scale,
+            geometry_scale=resolve_geometry_scale(
+                scale,
+                bone_count=asset.bone_count,
+                is_static_prop=asset.is_static_prop,
+            ).geometry_scale,
             requires_static_conversion=not asset.is_static_prop,
             entity_ids=(str(index),),
         )
@@ -119,6 +126,14 @@ class QCOperationPlanningTests(unittest.TestCase):
         self.assertEqual(
             [variant.compile_scale for variant in plan.variants],
             [Decimal("0.50"), Decimal("1.50")],
+        )
+        self.assertEqual(
+            [variant.geometry_scale for variant in plan.variants],
+            [Decimal("0.2500"), Decimal("2.2500")],
+        )
+        self.assertEqual(
+            [inspect_qc(variant.content).scale for variant in plan.variants],
+            ["0.25", "2.25"],
         )
         self.assertEqual(
             [variant.staging_relative_path for variant in plan.variants],

@@ -36,6 +36,15 @@ class ScaleResolution:
     diagnostics: tuple[ScaleDiagnostic, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class GeometryScaleResolution:
+    """Model-dependent QC geometry scale derived from compile identity."""
+
+    geometry_scale: Decimal
+    is_quadratic: bool
+    diagnostics: tuple[ScaleDiagnostic, ...]
+
+
 def resolve_compile_scale(raw_modelscale: str | None) -> ScaleResolution:
     """Resolve a raw Hammer value using the confirmed compatibility contract.
 
@@ -86,6 +95,47 @@ def resolve_compile_scale(raw_modelscale: str | None) -> ScaleResolution:
     return ScaleResolution(raw_modelscale, compile_scale, tuple(diagnostics))
 
 
+def resolve_geometry_scale(
+    compile_scale: Decimal,
+    *,
+    bone_count: int,
+    is_static_prop: bool,
+) -> GeometryScaleResolution:
+    """Resolve the actual QC scale required to match Hammer++ geometry.
+
+    Source applies model scale twice to one-bone models compiled without the
+    static-prop flag. Generated PSR models are static, so their QC must bake
+    that quadratic viewport size explicitly while retaining the linear
+    compile identity used by the managed filename.
+    """
+    canonical_scale_percent(compile_scale)
+    if not isinstance(bone_count, int) or isinstance(bone_count, bool):
+        raise TypeError("bone_count must be an integer")
+    if bone_count < 0:
+        raise ValueError(f"bone_count must be non-negative: {bone_count}")
+
+    is_quadratic = bone_count == 1 and not is_static_prop
+    if is_quadratic:
+        with localcontext() as context:
+            context.prec = _precision_for(compile_scale) * 2
+            geometry_scale = compile_scale * compile_scale
+    else:
+        geometry_scale = compile_scale
+
+    diagnostics: list[ScaleDiagnostic] = []
+    if geometry_scale < MINIMUM_COMPILE_SCALE:
+        diagnostics.append(ScaleDiagnostic(
+            "psr_minimum_geometry_scale_clamp",
+            f"geometry scale {geometry_scale} is compiled as {MINIMUM_COMPILE_SCALE}",
+        ))
+        geometry_scale = MINIMUM_COMPILE_SCALE
+    return GeometryScaleResolution(
+        geometry_scale,
+        is_quadratic,
+        tuple(diagnostics),
+    )
+
+
 def canonical_scale_percent(compile_scale: Decimal) -> int:
     """Return the exact integer-percent key for a canonical compile scale."""
     if not compile_scale.is_finite() or compile_scale < MINIMUM_COMPILE_SCALE:
@@ -134,10 +184,12 @@ __all__ = [
     "DEFAULT_COMPILE_SCALE",
     "COMPILE_SCALE_QUANTUM",
     "MINIMUM_COMPILE_SCALE",
+    "GeometryScaleResolution",
     "ScaleDiagnostic",
     "ScaleResolution",
     "canonical_scale_percent",
     "format_scale_percent",
     "resolve_compile_scale",
+    "resolve_geometry_scale",
     "scaled_model_path",
 ]

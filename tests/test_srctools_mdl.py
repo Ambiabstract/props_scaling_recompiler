@@ -100,6 +100,7 @@ class SourceModelInspectionTests(unittest.TestCase):
         self.assertEqual(metadata.mdl_version, 48)
         self.assertEqual(metadata.mdl_header_checksum, "11223344")
         self.assertTrue(metadata.is_static_prop)
+        self.assertEqual(metadata.bone_count, 1)
         self.assertEqual(metadata.mdl_flags, 16)
         self.assertEqual(metadata.surface_property, "default")
         self.assertEqual(metadata.total_vertices, 0)
@@ -152,6 +153,7 @@ class SourceModelInspectionTests(unittest.TestCase):
 
         self.assertEqual(metadata.mdl_version, 44)
         self.assertFalse(metadata.is_static_prop)
+        self.assertEqual(metadata.bone_count, 3)
         self.assertEqual(metadata.skin_families, (("shell",),))
         self.assertFalse(metadata.has_physics)
         self.assertTrue(all(file.provenance.kind == "vpk" for file in metadata.files))

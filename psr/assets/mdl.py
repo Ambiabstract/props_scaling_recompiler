@@ -22,6 +22,7 @@ _TEXTURE_STRUCT_SIZE = 64
 _BODYPART_STRUCT_SIZE = 16
 _MODEL_STRUCT_SIZE = 148
 _MESH_STRUCT_SIZE = 116
+_BONE_COUNT_OFFSET = 156
 
 
 class SourceAssetInspectionError(RuntimeError):
@@ -64,6 +65,7 @@ class SourceAssetMetadata:
     mdl_header_checksum: str
     mdl_flags: int
     is_static_prop: bool
+    bone_count: int
     surface_property: str
     total_vertices: int
     cdmaterials: tuple[str, ...]
@@ -105,6 +107,7 @@ def inspect_source_model(
     mdl_bytes = resolved_model.read_bytes()
     try:
         model = Model(filesystem.chain, resolved_model.file)
+        bone_count = _read_bone_count(mdl_bytes)
         stable_skins = _read_stable_skin_families(mdl_bytes)
         _validate_srctools_skins(model, stable_skins)
     except Exception as exc:
@@ -144,6 +147,7 @@ def inspect_source_model(
         mdl_header_checksum=model.checksum.hex(),
         mdl_flags=model.flags.value,
         is_static_prop=bool(model.flags & Flags.static_prop),
+        bone_count=bone_count,
         surface_property=model.surfaceprop,
         total_vertices=model.total_verts,
         cdmaterials=cdmaterials,
@@ -152,6 +156,17 @@ def inspect_source_model(
         materials=materials,
         files=files,
     )
+
+
+def _read_bone_count(mdl_bytes: bytes) -> int:
+    """Read the studiohdr_t bone count used by Source scaling policy."""
+    try:
+        bone_count = struct.unpack_from("<i", mdl_bytes, _BONE_COUNT_OFFSET)[0]
+    except struct.error as exc:
+        raise ValueError("MDL header is truncated before numbones") from exc
+    if bone_count < 0:
+        raise ValueError(f"MDL numbones is negative: {bone_count}")
+    return bone_count
 
 
 def _validate_source_model_path(logical_path: str) -> None:

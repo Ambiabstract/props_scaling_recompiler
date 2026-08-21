@@ -4,7 +4,7 @@ Fixtures должны быть маленькими, неизменяемыми 
 
 - `vmf/` содержит synthetic Valve KeyValues документы для будущего source-preserving parser/writer.
 - `gameinfo/` содержит synthetic ordered SearchPaths без зависимости от локальной установки Steam.
-- `scale/` содержит test-only oracle, извлечённый из вручную проверенной Hammer++ compatibility-карты.
+- `scale/` содержит test-only oracle, извлечённый из вручную проверенной Hammer++ compatibility-карты: отдельно фиксирует 35 parsing cases и model-dependent geometry cases для one-bone non-static, static и multi-bone non-static MDL.
 - `mdl/` содержит декларативные synthetic cases для MDL versions, flags, `$cdmaterials`, skins и companions. Минимальные MDL/PHY строятся из этих данных во время теста; бинарные fixtures и outputs в репозитории не хранятся.
 - `vmt/` содержит маленькую semantic matrix для обычного model material, существующего `$color2`, proxies, исходного Patch и неподдерживаемого shader. Те же байты используются folder- и synthetic VPK-тестами.
 - `cache/` содержит минимальный pre-release schema v0 для проверки миграции и намеренно повреждённый JSON для recovery-контракта.

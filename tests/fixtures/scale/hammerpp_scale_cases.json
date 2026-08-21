@@ -1,13 +1,23 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "oracle_field": "debug_string",
   "oracle_prefix": "effective_scale=",
   "source": {
     "map": "psr_scale_compatibility_01a.vmf",
-    "sha256": "af598164d2d04972a0a2d785fda6688e393ac4b24b177acb4d0919b08a7a12db",
-    "bytes": 45234,
-    "active_entities": 35,
-    "note": "Extracted read-only from the Antenna research map on 2026-08-21. The effective_scale oracle is test-only and includes PSR lower clamp and ROUND_HALF_UP hundredth quantisation."
+    "sha256": "bb6766854efb6584a7a8bd37e64e24212490c702082eb2946b6b9790b20071ee",
+    "bytes": 63081,
+    "active_entities": 51,
+    "parsing_entities": 35,
+    "default_model": "models/apt/fsmit01.mdl",
+    "note": "Extracted read-only from the Antenna research map on 2026-08-21. The effective_scale oracle is test-only and represents the final geometry scale expected from PSR, including product clamps."
+  },
+  "models": {
+    "models/apt/fsmit01.mdl": { "bone_count": 1, "is_static_prop": true },
+    "models/apt/monitor01.mdl": { "bone_count": 1, "is_static_prop": false },
+    "models/apt/monitor01_static.mdl": { "bone_count": 1, "is_static_prop": true },
+    "models/props_c17/doll01.mdl": { "bone_count": 1, "is_static_prop": false },
+    "models/props_c17/doll01_static.mdl": { "bone_count": 1, "is_static_prop": true },
+    "models/props_c17/door02_double.mdl": { "bone_count": 3, "is_static_prop": false }
   },
   "cases": [
     { "entity_id": "104", "raw_modelscale": "1", "effective_scale": "1.0" },
@@ -44,6 +54,22 @@
     { "entity_id": "2889", "raw_modelscale": "1.999", "effective_scale": "2.0", "reason": "psr_scale_rounding" },
     { "entity_id": "2893", "raw_modelscale": "2.001", "effective_scale": "2.0", "reason": "psr_scale_rounding" },
     { "entity_id": "2932", "raw_modelscale": "1.095", "effective_scale": "1.1", "reason": "psr_scale_rounding" },
-    { "entity_id": "2937", "raw_modelscale": "1.23", "effective_scale": "1.23" }
+    { "entity_id": "2937", "raw_modelscale": "1.23", "effective_scale": "1.23" },
+    { "entity_id": "3008", "raw_modelscale": "0.5", "effective_scale": "0.5" },
+    { "entity_id": "3014", "raw_modelscale": "2.0", "effective_scale": "2.0" },
+    { "entity_id": "3038", "logical_model_path": "models/apt/monitor01.mdl", "raw_modelscale": "2.0", "effective_scale": "4.0" },
+    { "entity_id": "3040", "logical_model_path": "models/apt/monitor01.mdl", "raw_modelscale": "0.5", "effective_scale": "0.25" },
+    { "entity_id": "3128", "logical_model_path": "models/apt/monitor01_static.mdl", "raw_modelscale": "4.0", "effective_scale": "4.0" },
+    { "entity_id": "3138", "logical_model_path": "models/apt/monitor01_static.mdl", "raw_modelscale": "0.25", "effective_scale": "0.25" },
+    { "entity_id": "3229", "logical_model_path": "models/props_c17/doll01_static.mdl", "raw_modelscale": "4.0", "effective_scale": "4.0" },
+    { "entity_id": "3235", "logical_model_path": "models/props_c17/doll01.mdl", "raw_modelscale": "2.0", "effective_scale": "4.0" },
+    { "entity_id": "3237", "logical_model_path": "models/props_c17/doll01_static.mdl", "raw_modelscale": "0.25", "effective_scale": "0.25" },
+    { "entity_id": "3239", "logical_model_path": "models/props_c17/doll01.mdl", "raw_modelscale": "0.5", "effective_scale": "0.25" },
+    { "entity_id": "3329", "logical_model_path": "models/props_c17/doll01_static.mdl", "raw_modelscale": "4.0", "effective_scale": "4.0" },
+    { "entity_id": "3331", "logical_model_path": "models/props_c17/doll01_static.mdl", "raw_modelscale": "0.25", "effective_scale": "0.25" },
+    { "entity_id": "3333", "logical_model_path": "models/props_c17/door02_double.mdl", "raw_modelscale": "0.5", "effective_scale": "0.5" },
+    { "entity_id": "3335", "logical_model_path": "models/props_c17/door02_double.mdl", "raw_modelscale": "2.0", "effective_scale": "2.0" },
+    { "entity_id": "3453", "logical_model_path": "models/props_c17/door02_double.mdl", "raw_modelscale": "1.0", "effective_scale": "1.0" },
+    { "entity_id": "3463", "logical_model_path": "models/props_c17/door02_double.mdl", "raw_modelscale": "1.0", "effective_scale": "1.0" }
   ]
 }

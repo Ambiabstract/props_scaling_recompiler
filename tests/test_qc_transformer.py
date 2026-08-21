@@ -163,11 +163,12 @@ class ScaledQCTransformTests(unittest.TestCase):
             reference.data,
             logical_output_model="models/psr_scaled/props/example_dynamic_scaled_150.mdl",
             compile_scale=Decimal("1.50"),
+            geometry_scale=Decimal("1.50"),
         )
         metadata = inspect_qc(result.data)
 
         self.assertEqual(metadata.model_name, "psr_scaled/props/example_dynamic_scaled_150.mdl")
-        self.assertEqual(metadata.scale, "1.50")
+        self.assertEqual(metadata.scale, "1.5")
         self.assertEqual(metadata.lod_distances, ("60", "180"))
         self.assertTrue(metadata.is_static_prop)
         self.assertEqual(
@@ -189,9 +190,10 @@ class ScaledQCTransformTests(unittest.TestCase):
             source,
             logical_output_model="models/psr_scaled/props/static_scaled_050.mdl",
             compile_scale=Decimal("0.50"),
+            geometry_scale=Decimal("0.50"),
         )
 
-        self.assertEqual(inspect_qc(result.data).scale, "0.50")
+        self.assertEqual(inspect_qc(result.data).scale, "0.5")
         self.assertEqual(inspect_qc(result.data).lod_distances, ("12.5",))
         self.assertIn(b'$collisionmodel "static_physics.smd"', result.data)
         self.assertEqual(
@@ -211,11 +213,39 @@ class ScaledQCTransformTests(unittest.TestCase):
             source,
             logical_output_model="models/psr_scaled/props/crlf_scaled_100.mdl",
             compile_scale=Decimal("1.00"),
+            geometry_scale=Decimal("1.00"),
         )
 
         self.assertIn(b'// cp1252:\x96\r\n', result.data)
-        self.assertIn(b' // tail\r\n$scale 1.00\r\n', result.data)
-        self.assertNotIn(b"\n$scale 1.00\n", result.data)
+        self.assertIn(b' // tail\r\n$scale 1\r\n', result.data)
+        self.assertNotIn(b"\n$scale 1\n", result.data)
+
+    def test_quadratic_geometry_does_not_change_managed_identity(self) -> None:
+        source = (FIXTURES / "dynamic_physics.qc").read_bytes()
+        reference = build_reference_qc(
+            source,
+            expected_source_families=(
+                ("body", "detail"),
+                ("body_alt", "detail_alt"),
+            ),
+            target_families=(
+                ("body", "detail"),
+                ("body_alt", "detail_alt"),
+            ),
+            require_staticprop=True,
+        )
+
+        result = build_scaled_qc(
+            reference.data,
+            logical_output_model="models/psr_scaled/props/example_dynamic_scaled_150.mdl",
+            compile_scale=Decimal("1.50"),
+            geometry_scale=Decimal("2.2500"),
+        )
+        metadata = inspect_qc(result.data)
+
+        self.assertEqual(metadata.model_name, "psr_scaled/props/example_dynamic_scaled_150.mdl")
+        self.assertEqual(metadata.scale, "2.25")
+        self.assertEqual(metadata.lod_distances, ("90", "270"))
 
     def test_unsafe_or_noncanonical_inputs_are_rejected(self) -> None:
         source = b'$modelname "props/a.mdl"\n$staticprop\n'
@@ -230,6 +260,7 @@ class ScaledQCTransformTests(unittest.TestCase):
                         source,
                         logical_output_model=model,
                         compile_scale=scale,
+                        geometry_scale=scale,
                     )
 
 

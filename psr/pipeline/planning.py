@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Literal, Mapping
 
 from psr.assets import SourceAssetMetadata
-from psr.domain import resolve_compile_scale, scaled_model_path
+from psr.domain import resolve_compile_scale, resolve_geometry_scale, scaled_model_path
 
 from .discovery import (
     InspectedMap,
@@ -25,6 +25,7 @@ class MapUsagePlan:
 
     request: VmfEntityRequest
     compile_scale: Decimal
+    geometry_scale: Decimal
     source_skin: int
     render_color: tuple[int, int, int]
     operation: Literal["reuse_original", "generate_model"]
@@ -38,6 +39,7 @@ class GeneratedModelRequirement:
     logical_source_model: str
     logical_output_model: str
     compile_scale: Decimal
+    geometry_scale: Decimal
     requires_static_conversion: bool
     entity_ids: tuple[str, ...]
 
@@ -96,6 +98,19 @@ def build_operation_plan(
                 request.source_line,
             ))
         compile_scale = scale.compile_scale
+        geometry = resolve_geometry_scale(
+            compile_scale,
+            bone_count=asset.bone_count,
+            is_static_prop=asset.is_static_prop,
+        )
+        for item in geometry.diagnostics:
+            diagnostics.append(PipelineDiagnostic(
+                "warning",
+                item.code,
+                item.detail,
+                request.entity_id,
+                request.source_line,
+            ))
         source_skin = _parse_skin(request, asset, diagnostics)
         render_color = _parse_color(request, diagnostics)
         if source_skin is None or render_color is None:
@@ -120,6 +135,7 @@ def build_operation_plan(
         usages.append(MapUsagePlan(
             request,
             compile_scale,
+            geometry.geometry_scale,
             source_skin,
             render_color,
             operation,
@@ -234,6 +250,11 @@ def _group_generated_models(
             logical_source_model=model,
             logical_output_model=scaled_model_path(model, scale),
             compile_scale=scale,
+            geometry_scale=resolve_geometry_scale(
+                scale,
+                bone_count=assets[model].bone_count,
+                is_static_prop=assets[model].is_static_prop,
+            ).geometry_scale,
             requires_static_conversion=not assets[model].is_static_prop,
             entity_ids=tuple(grouped[(model, scale)]),
         )

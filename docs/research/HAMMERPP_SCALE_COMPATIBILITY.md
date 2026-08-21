@@ -1,6 +1,6 @@
 # Hammer++ scale compatibility
 
-Статус: базовая матрица утверждена для resolver PSR 2.0; расширенное исследование продолжается.
+Статус: базовый parsing resolver и model-dependent geometry rule утверждены для PSR 2.0; расширенное исследование редких строк продолжается.
 
 Дата снимка: 2026-08-21.
 
@@ -8,14 +8,39 @@
 
 - Карта: `psr_scale_compatibility_01a.vmf`.
 - Внешний read-only источник: `antenna_sdk2013/maps/psr_scale_compatibility_01a.vmf`.
-- SHA-256 снимка: `af598164d2d04972a0a2d785fda6688e393ac4b24b177acb4d0919b08a7a12db`.
-- Размер: 45 234 байта.
+- SHA-256 снимка: `bb6766854efb6584a7a8bd37e64e24212490c702082eb2946b6b9790b20071ee`.
+- Размер: 63 081 байт.
 - Структурная проверка: VMF валиден.
-- Активные `prop_static_scalable`: 35.
+- Активные `prop_static_scalable`: 51.
 - Скрытые top-level блоки: 0.
-- Тестовая модель во всех запросах: `models/apt/fsmit01.mdl`.
+- Parsing-подматрица: 35 исходных запросов `models/apt/fsmit01.mdl`.
+- Geometry-подматрица: ещё 16 запросов для `fsmit01`, `monitor01`, `doll01`, `door02_double` и static-контролей.
 
-Во всех 35 сущностях поле `debug_string` имеет машинно-читаемый формат `effective_scale=<value>` и служит test oracle ожидаемого результата PSR для raw `modelscale`. Oracle уже включает два продуктовых преобразования: нижний clamp `0.01` и decimal `ROUND_HALF_UP` до сотых. Поле не является частью production/cache schema.
+Во всех 51 сущностях поле `debug_string` имеет машинно-читаемый формат `effective_scale=<value>` и служит test oracle фактического geometry scale ожидаемого результата PSR. Для первых 35 static cases он совпадает с compile identity после нижнего clamp `0.01` и decimal `ROUND_HALF_UP`; для one-bone non-static cases он отражает подтверждённый квадрат. Поле не является частью production/cache schema.
+
+## Model-dependent geometry scale
+
+Расширенная матрица отделяет имя/identity generated-модели от фактического масштаба, который должен быть записан в QC:
+
+| Исходная модель | Кости | Static flag | Raw `modelscale` | Compile identity | Geometry oracle |
+|---|---:|---:|---:|---:|---:|
+| `models/apt/fsmit01.mdl` | 1 | да | `0.5`, `2.0` | `0.50`, `2.00` | `0.5`, `2.0` |
+| `models/apt/monitor01.mdl` | 1 | нет | `0.5`, `2.0` | `0.50`, `2.00` | `0.25`, `4.0` |
+| `models/apt/monitor01_static.mdl` | 1 | да | `0.25`, `4.0` | `0.25`, `4.00` | `0.25`, `4.0` |
+| `models/props_c17/doll01.mdl` | 1 | нет | `0.5`, `2.0` | `0.50`, `2.00` | `0.25`, `4.0` |
+| `models/props_c17/doll01_static.mdl` | 1 | да | `0.25`, `4.0` | `0.25`, `4.00` | `0.25`, `4.0` |
+| `models/props_c17/door02_double.mdl` | 3 | нет | `0.5`, `1.0`, `2.0` | `0.50`, `1.00`, `2.00` | `0.5`, `1.0`, `2.0` |
+
+Подтверждённое правило:
+
+```text
+geometry_scale = compile_scale²  if bone_count == 1 and not static_prop
+geometry_scale = compile_scale   otherwise
+```
+
+`prop_data`, наличие PHY и принадлежность модели к бытовой категории physics props являются только исторически коррелировавшими признаками. Переключатель определяется MDL `numbones` и static-prop flag. Managed filename остаётся линейным: raw `2.0` создаёт `_scaled_200`, даже когда QC `$scale` равен `4`.
+
+После model-dependent преобразования geometry scale отдельно клампится до `0.01`, чтобы квадратичная ветка не обходила утверждённый продуктовый минимум. Такой clamp диагностируется как `psr_minimum_geometry_scale_clamp`.
 
 ## Подтверждённые наблюдения
 
@@ -96,7 +121,7 @@ Raw-строки `''` и `'''` представлены в карте дважд
 - `0,5 -> 1.0`;
 - `0,01 -> 1.0`.
 
-Правило реализовано в `psr.domain.resolve_compile_scale()` и покрыто всеми 35 oracle cases. Числовая identity вычисляется как точный целый `compile_scale * 100`, а в имени форматируется с минимальной шириной 3: `1 -> 001`, `50 -> 050`, `110 -> 110`, `1000 -> 1000`. Поэтому `1.095`, `1.1` и `1.104` дают одну identity `_scaled_110`, а `1.105` — `_scaled_111`. Формы `2,5`, `3,9`, `10,5`, `0,99`, знаки, exponent notation и экстремальные пределы остаются будущими regression-наблюдениями.
+Parsing-правило реализовано в `psr.domain.resolve_compile_scale()` и покрыто исходными 35 oracle cases. Model-dependent правило реализовано в `psr.domain.resolve_geometry_scale()` и покрыто всеми 51 cases обновлённого снимка. Числовая identity вычисляется как точный целый `compile_scale * 100`, а в имени форматируется с минимальной шириной 3: `1 -> 001`, `50 -> 050`, `110 -> 110`, `1000 -> 1000`. Поэтому `1.095`, `1.1` и `1.104` дают одну identity `_scaled_110`, а `1.105` — `_scaled_111`. Формы `2,5`, `3,9`, `10,5`, `0,99`, знаки, exponent notation и экстремальные пределы остаются будущими regression-наблюдениями.
 
 ## Что ещё нужно добавить в regression-матрицу
 
