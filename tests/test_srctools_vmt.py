@@ -9,11 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from srctools.vpk import VPK
+from srctools.vmt import Material
 
 from psr.assets import (
     OrderedAssetFileSystem,
     SourceMaterialInspectionError,
     colored_material_path,
+    generate_colored_material,
     inspect_source_material,
     parse_search_paths_text,
     plan_search_paths,
@@ -309,6 +311,114 @@ class ColoredMaterialPlanningTests(unittest.TestCase):
         self.assertFalse(plan.is_valid)
         self.assertIn("unsupported_color_shader", [item.code for item in plan.diagnostics])
         self.assertEqual(plan.colored_skins, ())
+
+    def test_planned_patch_is_rendered_deterministically_and_reparseable(self) -> None:
+        case = load_mdl_case("static_multi_material")
+        case["material_files"]["materials/models/fixture/primary/body.vmt"] = fixture_text(
+            "vertexlit_no_color.vmt"
+        )
+        case["material_files"]["materials/models/fixture/fallback/accent.vmt"] = fixture_text(
+            "vertexlit_color2_proxy.vmt"
+        )
+        operation = self.operation(case)
+        inspection = inspect_colored_material_sources(operation, self.filesystem())
+        plan = build_colored_material_plan(operation, inspection)
+        planned = next(
+            item for item in plan.colored_materials
+            if item.logical_source_material == "materials/models/fixture/primary/body.vmt"
+        )
+        metadata = next(
+            item for item in inspection.source_materials
+            if item.logical_material_path == planned.logical_source_material
+        )
+
+        first = generate_colored_material(
+            metadata,
+            logical_output_material=planned.logical_output_material,
+            render_color=planned.render_color,
+            color_parameter=planned.color_parameter,
+            color_assignment=planned.color_assignment,
+            generation_mode=planned.generation_mode,
+        )
+        second = generate_colored_material(
+            metadata,
+            logical_output_material=planned.logical_output_material,
+            render_color=planned.render_color,
+            color_parameter=planned.color_parameter,
+            color_assignment=planned.color_assignment,
+            generation_mode=planned.generation_mode,
+        )
+        parsed = Material.parse(
+            first.content.decode("utf-8").splitlines(keepends=True),
+            first.logical_output_material,
+        )
+
+        self.assertEqual(first, second)
+        self.assertEqual(first.sha256, hashlib.sha256(first.content).hexdigest())
+        self.assertEqual(parsed.shader, "Patch")
+        self.assertEqual(parsed["include"], metadata.logical_material_path)
+        self.assertEqual(parsed.blocks[0]["$color2"], "{190 48 148}")
+
+        replace_plan = next(
+            item for item in plan.colored_materials
+            if item.logical_source_material == "materials/models/fixture/fallback/accent.vmt"
+        )
+        replace_source = next(
+            item for item in inspection.source_materials
+            if item.logical_material_path == replace_plan.logical_source_material
+        )
+        replacement = generate_colored_material(
+            replace_source,
+            logical_output_material=replace_plan.logical_output_material,
+            render_color=replace_plan.render_color,
+            color_parameter=replace_plan.color_parameter,
+            color_assignment=replace_plan.color_assignment,
+            generation_mode=replace_plan.generation_mode,
+        )
+        parsed_replacement = Material.parse(
+            replacement.content.decode("utf-8").splitlines(keepends=True),
+            replacement.logical_output_material,
+        )
+        self.assertEqual(parsed_replacement.blocks[0].name, "replace")
+        self.assertEqual(parsed_replacement.blocks[0]["$color2"], "{190 48 148}")
+
+    def test_source_patch_full_copy_preserves_effective_proxy_and_overrides_color(self) -> None:
+        case = load_mdl_case("static_multi_material")
+        body_path = "materials/models/fixture/primary/body.vmt"
+        case["material_files"][body_path] = fixture_text("source_patch.vmt")
+        case["material_files"]["materials/models/fixture/base_for_patch.vmt"] = fixture_text(
+            "base_for_patch.vmt"
+        )
+        operation = self.operation(case)
+        inspection = inspect_colored_material_sources(operation, self.filesystem())
+        plan = build_colored_material_plan(operation, inspection)
+        planned = next(
+            item for item in plan.colored_materials
+            if item.logical_source_material == body_path
+        )
+        metadata = next(
+            item for item in inspection.source_materials
+            if item.logical_material_path == body_path
+        )
+
+        generated = generate_colored_material(
+            metadata,
+            logical_output_material=planned.logical_output_material,
+            render_color=planned.render_color,
+            color_parameter=planned.color_parameter,
+            color_assignment=planned.color_assignment,
+            generation_mode=planned.generation_mode,
+        )
+        parsed = Material.parse(
+            generated.content.decode("utf-8").splitlines(keepends=True),
+            generated.logical_output_material,
+        )
+
+        self.assertEqual(parsed.shader, "UnlitGeneric")
+        self.assertEqual(parsed["$basetexture"], "models/fixture/patched")
+        self.assertEqual(parsed["$color2"], "{190 48 148}")
+        self.assertEqual(len(parsed.proxies), 1)
+        self.assertEqual(parsed.proxies[0].real_name, "TextureScroll")
 
 
 if __name__ == "__main__":

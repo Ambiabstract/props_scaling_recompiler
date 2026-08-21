@@ -46,6 +46,13 @@ from .staging import (
     stage_qc_operation,
     stage_source_model,
 )
+from .generation import (
+    GenerationError,
+    GenerationResult,
+    ValidatedMaterialArtifact,
+    ValidatedModelArtifact,
+    generate_and_validate,
+)
 
 __all__ = [
     "ColoredSkinRequirement",
@@ -54,6 +61,8 @@ __all__ = [
     "ColoredSkinMaterialPlan",
     "EntitySkinAssignment",
     "GeneratedModelRequirement",
+    "GenerationError",
+    "GenerationResult",
     "InspectedMap",
     "MapDiscovery",
     "MapUsagePlan",
@@ -70,6 +79,8 @@ __all__ = [
     "StagingError",
     "StagingWorkspace",
     "VmfEntityRequest",
+    "ValidatedMaterialArtifact",
+    "ValidatedModelArtifact",
     "WHITE",
     "build_operation_plan",
     "build_qc_operation_plan",
@@ -79,6 +90,7 @@ __all__ = [
     "discover_vmf_requests",
     "inspect_colored_material_sources",
     "inspect_map_sources",
+    "generate_and_validate",
     "source_skin_families_fingerprint",
     "stage_qc_operation",
     "stage_source_model",

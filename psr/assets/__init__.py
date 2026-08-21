@@ -31,6 +31,13 @@ from .vmt import (
     inspect_source_material,
     select_color_parameter,
 )
+from .vmt_generation import (
+    ColorAssignment,
+    GeneratedMaterialContent,
+    MaterialGenerationError,
+    MaterialGenerationMode,
+    generate_colored_material,
+)
 from .qc import (
     QCTransformError,
     QCTransformResult,
@@ -54,12 +61,16 @@ from .toolchain import (
 __all__ = [
     "AssetProvenance",
     "ColorParameter",
+    "ColorAssignment",
     "CompiledFileMetadata",
     "CompiledModelValidation",
     "CompiledModelValidationError",
     "CrowbarDecompileResult",
+    "GeneratedMaterialContent",
     "MaterialReferenceMetadata",
     "MaterialBlockMetadata",
+    "MaterialGenerationError",
+    "MaterialGenerationMode",
     "MountedSearchPath",
     "OrderedAssetFileSystem",
     "QCTransformError",
@@ -81,6 +92,7 @@ __all__ = [
     "build_reference_qc",
     "build_scaled_qc",
     "colored_material_path",
+    "generate_colored_material",
     "inspect_source_material",
     "inspect_source_model",
     "inspect_qc",
