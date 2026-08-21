@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 
-from psr.assets import SourceAssetMetadata, colored_material_path
+from psr.assets import (
+    MAX_STUDIO_MATERIALS,
+    MAX_STUDIO_SKIN_FAMILIES,
+    SourceAssetMetadata,
+    colored_material_path,
+)
 from psr.cache import (
     MapUsageRecord,
     ProjectManifest,
@@ -16,7 +22,7 @@ from psr.cache import (
 from psr.domain import canonical_scale_percent
 
 from .discovery import PipelineDiagnostic
-from .materials import ColoredMaterialOperationPlan
+from .materials import ColoredMaterialOperationPlan, ColoredSkinMaterialPlan
 from .planning import OperationPlan, WHITE
 
 
@@ -31,6 +37,7 @@ class ModelSkinLayoutPlan:
     mappings: tuple[SkinMappingRecord, ...]
     layout_fingerprint: str
     cache_reset: bool
+    rebuild_cached_scales: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +50,7 @@ class EntitySkinAssignment:
     render_color: tuple[int, int, int]
     target_skin: int
     logical_output_model: str
+    used_color_fallback: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,7 +88,7 @@ def build_skin_layout_plan(
             item.logical_source_model,
             item.source_skin,
             item.render_color,
-        ): item.logical_colored_materials
+        ): item
         for item in materials.colored_skins
     }
     cached_by_model: dict[str, list[SkinMappingRecord]] = {}
@@ -91,6 +99,10 @@ def build_skin_layout_plan(
     mapping_by_identity: dict[
         tuple[str, int, tuple[int, int, int]],
         SkinMappingRecord,
+    ] = {}
+    rejected_keys_by_model: dict[
+        str,
+        set[tuple[int, tuple[int, int, int]]],
     ] = {}
     for model in sorted(usages_by_model):
         asset = assets[model]
@@ -106,22 +118,44 @@ def build_skin_layout_plan(
             source_family_count=source_count,
         )
         cache_reset = bool(cached and not valid_cached)
+        rebuild_cached_scales = False
         if cached and not valid_cached:
-            code = (
-                "source_skin_layout_changed"
-                if any(
-                    item.source_skin_families_fingerprint != source_fingerprint
-                    for item in cached
-                )
-                else "cached_skin_layout_invalid"
+            previous_source_count = _previous_source_family_count_for_increase(
+                cached,
+                source_fingerprint=source_fingerprint,
+                source_family_count=source_count,
             )
-            diagnostics.append(PipelineDiagnostic(
-                "warning",
-                code,
-                f"{model}: cached colored-skin mappings are rebuilt for the current "
-                "source skin-family table",
-            ))
-            cached = []
+            if previous_source_count is not None:
+                shift = source_count - previous_source_count
+                cached = [
+                    replace(item, target_skin=item.target_skin + shift)
+                    for item in cached
+                ]
+                rebuild_cached_scales = True
+                diagnostics.append(PipelineDiagnostic(
+                    "warning",
+                    "source_skin_count_increased",
+                    f"{model}: source skin-family count increased from "
+                    f"{previous_source_count} to {source_count}; cached colored-skin "
+                    f"mappings are shifted by {shift} and every cached scale must be "
+                    "rebuilt",
+                ))
+            else:
+                code = (
+                    "source_skin_layout_changed"
+                    if any(
+                        item.source_skin_families_fingerprint != source_fingerprint
+                        for item in cached
+                    )
+                    else "cached_skin_layout_invalid"
+                )
+                diagnostics.append(PipelineDiagnostic(
+                    "warning",
+                    code,
+                    f"{model}: cached colored-skin mappings are rebuilt for the current "
+                    "source skin-family table",
+                ))
+                cached = []
 
         target_by_key = {
             (item.source_skin, item.render_color): item.target_skin
@@ -132,11 +166,6 @@ def build_skin_layout_plan(
             for req_model, skin, color in requested_rows
             if req_model == model
         }
-        next_target = source_count + len(cached)
-        for key in sorted(requested_keys - set(target_by_key)):
-            target_by_key[key] = next_target
-            next_target += 1
-
         family_by_target: dict[int, tuple[str, ...]] = {
             index: family
             for index, family in enumerate(asset.skin_families)
@@ -145,9 +174,12 @@ def build_skin_layout_plan(
             target_by_key.items(),
             key=lambda item: item[1],
         ):
-            logical_materials = requested_rows.get((model, source_skin, color))
-            if logical_materials is None:
-                logical_materials = _derive_colored_family(asset, source_skin, color)
+            logical_materials = _colored_family(
+                asset,
+                source_skin,
+                color,
+                requested_rows.get((model, source_skin, color)),
+            )
             if logical_materials is None:
                 diagnostics.append(PipelineDiagnostic(
                     "error",
@@ -156,10 +188,73 @@ def build_skin_layout_plan(
                     f"{source_skin}, RGB {color}",
                 ))
                 continue
-            family_by_target[target_skin] = tuple(
-                _qc_material_name(path)
-                for path in logical_materials
+            family_by_target[target_skin] = logical_materials
+
+        rejected_keys: set[tuple[int, tuple[int, int, int]]] = set()
+        next_target = source_count + len(cached)
+        existing_materials = _family_materials(family_by_target.values())
+        if next_target > MAX_STUDIO_SKIN_FAMILIES:
+            diagnostics.append(PipelineDiagnostic(
+                "error",
+                "cached_skin_family_limit_exceeded",
+                f"{model}: existing source and cached colored rows require "
+                f"{next_target} skin families, limit is {MAX_STUDIO_SKIN_FAMILIES}; "
+                "an explicit colored-skin cleanup is required",
+            ))
+        if len(existing_materials) > MAX_STUDIO_MATERIALS:
+            diagnostics.append(PipelineDiagnostic(
+                "error",
+                "cached_model_material_limit_exceeded",
+                f"{model}: existing source and cached colored rows require "
+                f"{len(existing_materials)} unique materials, limit is "
+                f"{MAX_STUDIO_MATERIALS}; an explicit colored-skin cleanup is required",
+            ))
+
+        for source_skin, color in sorted(requested_keys - set(target_by_key)):
+            colored_plan = requested_rows[(model, source_skin, color)]
+            logical_materials = _colored_family(
+                asset,
+                source_skin,
+                color,
+                colored_plan,
             )
+            if logical_materials is None:
+                diagnostics.append(PipelineDiagnostic(
+                    "error",
+                    "skin_layout_material_missing",
+                    f"{model}: cannot derive colored material row for source skin "
+                    f"{source_skin}, RGB {color}",
+                ))
+                continue
+            proposed_materials = existing_materials | set(logical_materials)
+            if next_target >= MAX_STUDIO_SKIN_FAMILIES:
+                rejected_keys.add((source_skin, color))
+                diagnostics.append(_capacity_fallback_warning(
+                    model,
+                    source_skin,
+                    color,
+                    colored_plan.entity_ids,
+                    "skin_family_limit_reached",
+                    f"skin-family limit {MAX_STUDIO_SKIN_FAMILIES} is already reached",
+                ))
+                continue
+            if len(proposed_materials) > MAX_STUDIO_MATERIALS:
+                rejected_keys.add((source_skin, color))
+                diagnostics.append(_capacity_fallback_warning(
+                    model,
+                    source_skin,
+                    color,
+                    colored_plan.entity_ids,
+                    "model_material_limit_reached",
+                    f"colored row would require {len(proposed_materials)} unique "
+                    f"materials, limit is {MAX_STUDIO_MATERIALS}",
+                ))
+                continue
+            target_by_key[(source_skin, color)] = next_target
+            family_by_target[next_target] = logical_materials
+            existing_materials = proposed_materials
+            next_target += 1
+        rejected_keys_by_model[model] = rejected_keys
 
         expected_indexes = list(range(next_target))
         if sorted(family_by_target) != expected_indexes:
@@ -195,10 +290,12 @@ def build_skin_layout_plan(
             mappings=mappings,
             layout_fingerprint=layout_fingerprint,
             cache_reset=cache_reset,
+            rebuild_cached_scales=rebuild_cached_scales,
         ))
 
     assignments: list[EntitySkinAssignment] = []
     for usage in operation.usages:
+        used_color_fallback = False
         if usage.render_color == WHITE:
             target_skin = usage.source_skin
         else:
@@ -208,16 +305,24 @@ def build_skin_layout_plan(
                 usage.render_color,
             ))
             if mapping is None:
-                diagnostics.append(PipelineDiagnostic(
-                    "error",
-                    "skin_mapping_missing",
-                    f"no final skin mapping for model {usage.request.logical_model_path}, "
-                    f"source skin {usage.source_skin}, RGB {usage.render_color}",
-                    usage.request.entity_id,
-                    usage.request.source_line,
-                ))
-                continue
-            target_skin = mapping.target_skin
+                if (usage.source_skin, usage.render_color) in rejected_keys_by_model.get(
+                    usage.request.logical_model_path,
+                    set(),
+                ):
+                    target_skin = usage.source_skin
+                    used_color_fallback = True
+                else:
+                    diagnostics.append(PipelineDiagnostic(
+                        "error",
+                        "skin_mapping_missing",
+                        f"no final skin mapping for model {usage.request.logical_model_path}, "
+                        f"source skin {usage.source_skin}, RGB {usage.render_color}",
+                        usage.request.entity_id,
+                        usage.request.source_line,
+                    ))
+                    continue
+            else:
+                target_skin = mapping.target_skin
         assignments.append(EntitySkinAssignment(
             entity_id=usage.request.entity_id,
             logical_source_model=usage.request.logical_model_path,
@@ -225,6 +330,7 @@ def build_skin_layout_plan(
             render_color=usage.render_color,
             target_skin=target_skin,
             logical_output_model=usage.logical_output_model,
+            used_color_fallback=used_color_fallback,
         ))
 
     return SkinLayoutOperationPlan(
@@ -303,7 +409,7 @@ def commit_skin_layout_plan(
             continue
         source_assets.append(SourceAssetRecord(
             logical_model_path=asset.logical_model_path,
-            source_fingerprint=_source_asset_fingerprint(asset),
+            source_fingerprint=source_asset_fingerprint(asset),
             skin_families_fingerprint=layout.source_skin_families_fingerprint,
         ))
 
@@ -332,6 +438,7 @@ def source_skin_families_fingerprint(asset: SourceAssetMetadata) -> str:
     }
     payload = {
         "skin_families": [list(family) for family in asset.skin_families],
+        "used_material_slots": list(asset.used_material_slots),
         "material_paths": [
             [name, material_paths.get(name)]
             for name in sorted(material_paths)
@@ -359,6 +466,43 @@ def _valid_cached_mappings(
     return targets == list(range(source_family_count, source_family_count + len(mappings)))
 
 
+def _previous_source_family_count_for_increase(
+    mappings: list[SkinMappingRecord],
+    *,
+    source_fingerprint: str,
+    source_family_count: int,
+) -> int | None:
+    """Infer and validate a safe original-row count increase from cached mappings."""
+    if not mappings:
+        return None
+    previous_source_count = mappings[0].target_skin
+    if previous_source_count < 1 or source_family_count <= previous_source_count:
+        return None
+    if any(
+        item.source_skin_families_fingerprint == source_fingerprint
+        or item.source_skin < 0
+        or item.source_skin >= previous_source_count
+        or item.render_color == WHITE
+        for item in mappings
+    ):
+        return None
+    if len({item.source_skin_families_fingerprint for item in mappings}) != 1:
+        return None
+    if len({item.layout_fingerprint for item in mappings}) != 1:
+        return None
+    identities = {
+        (item.source_skin, item.render_color)
+        for item in mappings
+    }
+    if len(identities) != len(mappings):
+        return None
+    targets = [item.target_skin for item in mappings]
+    expected = list(range(previous_source_count, previous_source_count + len(mappings)))
+    if targets != expected:
+        return None
+    return previous_source_count
+
+
 def _derive_colored_family(
     asset: SourceAssetMetadata,
     source_skin: int,
@@ -370,12 +514,78 @@ def _derive_colored_family(
         item.material_name: item.logical_path
         for item in asset.materials
     }
-    result: list[str] = []
-    for material_name in asset.skin_families[source_skin]:
+    result = list(asset.skin_families[source_skin])
+    for slot in asset.used_material_slots:
+        material_name = result[slot]
         logical_path = material_paths.get(material_name)
         if logical_path is None:
             return None
-        result.append(colored_material_path(logical_path, color))
+        result[slot] = _qc_material_name(colored_material_path(logical_path, color))
+    return tuple(result)
+
+
+def _colored_family(
+    asset: SourceAssetMetadata,
+    source_skin: int,
+    color: tuple[int, int, int],
+    plan: ColoredSkinMaterialPlan | None,
+) -> tuple[str, ...] | None:
+    if plan is None:
+        return _derive_colored_family(asset, source_skin, color)
+    return _compose_colored_family(
+        asset,
+        source_skin,
+        plan.material_slots,
+        plan.logical_colored_materials,
+    )
+
+
+def _family_materials(
+    families: Iterable[tuple[str, ...]],
+) -> set[str]:
+    return {
+        material
+        for family in families
+        for material in family
+    }
+
+
+def _capacity_fallback_warning(
+    model: str,
+    source_skin: int,
+    color: tuple[int, int, int],
+    entity_ids: tuple[str, ...],
+    code: str,
+    reason: str,
+) -> PipelineDiagnostic:
+    entities = ", ".join(entity_ids) if entity_ids else "unknown"
+    return PipelineDiagnostic(
+        "warning",
+        code,
+        f"{model}: colored variation from source skin {source_skin}, RGB {color} "
+        f"is omitted because {reason}; entities {entities} fall back to original "
+        f"skin {source_skin}",
+        entity_ids[0] if entity_ids else None,
+    )
+
+
+def _compose_colored_family(
+    asset: SourceAssetMetadata,
+    source_skin: int,
+    material_slots: tuple[int, ...],
+    logical_colored_materials: tuple[str, ...],
+) -> tuple[str, ...] | None:
+    if (
+        not 0 <= source_skin < len(asset.skin_families)
+        or material_slots != asset.used_material_slots
+        or len(material_slots) != len(logical_colored_materials)
+    ):
+        return None
+    result = list(asset.skin_families[source_skin])
+    for slot, logical_path in zip(material_slots, logical_colored_materials):
+        if not 0 <= slot < len(result):
+            return None
+        result[slot] = _qc_material_name(logical_path)
     return tuple(result)
 
 
@@ -396,7 +606,7 @@ def _layout_fingerprint(
     })
 
 
-def _source_asset_fingerprint(asset: SourceAssetMetadata) -> str:
+def source_asset_fingerprint(asset: SourceAssetMetadata) -> str:
     return _canonical_fingerprint({
         "logical_model_path": asset.logical_model_path,
         "mdl_version": asset.mdl_version,
@@ -424,5 +634,6 @@ __all__ = [
     "SkinLayoutOperationPlan",
     "build_skin_layout_plan",
     "commit_skin_layout_plan",
+    "source_asset_fingerprint",
     "source_skin_families_fingerprint",
 ]

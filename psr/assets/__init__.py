@@ -1,5 +1,7 @@
 """Source asset discovery, resolution, inspection, and tool adapters."""
 
+from .limits import MAX_STUDIO_MATERIALS, MAX_STUDIO_SKIN_FAMILIES
+
 from .searchpaths import (
     AssetProvenance,
     MountedSearchPath,
@@ -71,6 +73,8 @@ __all__ = [
     "MaterialBlockMetadata",
     "MaterialGenerationError",
     "MaterialGenerationMode",
+    "MAX_STUDIO_MATERIALS",
+    "MAX_STUDIO_SKIN_FAMILIES",
     "MountedSearchPath",
     "OrderedAssetFileSystem",
     "QCTransformError",

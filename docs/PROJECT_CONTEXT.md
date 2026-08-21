@@ -23,7 +23,7 @@
 - Создан начальный проектный фундамент: `pyproject.toml`, пакет `psr` с архитектурными границами и автономные smoke/contract-тесты, совместимые с pytest и стандартным `unittest`.
 - Зафиксированы synthetic fixtures для VMF, GameInfo и VMT/Patch, а также test-only scale oracle из 51 сущности `psr_scale_compatibility_01a.vmf`: 35 parsing cases и model-dependent geometry matrix.
 - Добавлен первый `srctools` integration spike: ordered SearchPaths plan, ручная цепочка folder/VPK, точный logical-path lookup и provenance победившего источника. Synthetic VPK создаются только во временных каталогах тестов.
-- Добавлен production-адаптер `psr.assets.mdl`: он разрешает исходный MDL через ordered SearchPaths, читает MDL 44–49 посредством `srctools.mdl.Model` и возвращает immutable `SourceAssetMetadata` с provenance, SHA-256 MDL/companions, static flag, bone count, `$cdmaterials`, skin families и точными ссылками на найденные VMT. `models/psr_scaled/**` отклоняется до чтения как managed output.
+- Добавлен production-адаптер `psr.assets.mdl`: он разрешает исходный MDL через ordered SearchPaths, читает MDL 44–49 посредством `srctools.mdl.Model` и возвращает immutable `SourceAssetMetadata` с provenance, SHA-256 MDL/companions, static flag, bone count, `$cdmaterials`, полной skin-reference table, отдельными mesh-used material slots и точными ссылками на реально используемые VMT. `models/psr_scaled/**` отклоняется до чтения как managed output.
 - Добавлены детерминированные synthetic MDL v44/v48 fixtures и contract-тесты для folder/VPK, static/dynamic, нескольких материалов и skins, отсутствующего VMT и повреждённого offset. Бинарники fixtures строятся во временном каталоге и не коммитятся.
 - Добавлен байтовый source-preserving VMF parser `psr.keyvalues.vmf`: он сохраняет исходные bytes и spans, порядок и повторяющиеся свойства/блоки, различает direct и nested properties, понимает комментарии и не выполняет сериализацию при discovery.
 - Добавлен read-only pipeline `discover_vmf_requests -> inspect_map_sources -> build_operation_plan`. Он игнорирует entities внутри top-level `hidden`, связывает активные VMF requests с `SourceAssetMetadata`, агрегирует generated-model requirements независимо от color/skin и color requirements независимо от scale, но ничего не генерирует и не изменяет VMF.
@@ -41,6 +41,9 @@
 - Добавлен детерминированный generator цветных VMT `psr.assets.generate_colored_material`: planned direct VMT становится generated Patch, planned source Patch — раскрытой full-copy с effective shader/parameters/blocks/proxies; выбранный `$color`/`$color2` получает канонический integer RGB vector. Каждый output повторно парсится через `srctools.vmt.Material` и получает SHA-256. Это подтверждает структуру и semantic round-trip generated текста, но не заменяет отдельную runtime-проверку Patch `insert`/`replace` на SDK 2013 SP.
 - Добавлен staged coordinator `psr.pipeline.generate_and_validate`. Он принимает только валидные operation/material/skin plans, повторно проверяет VMT dependency graph и source MDL provenance/hash, генерирует VMT в staging game root, декомпилирует каждый уникальный source model один раз, строит reference/variant QC, размещает compile-ready variant рядом с Crowbar QC для сохранения относительных путей, запускает StudioMDL и валидирует каждый обязательный companion. Возвращаемый immutable `GenerationResult` ничего не публикует в реальный проект, manifest или VMF.
 - Добавлен synthetic subprocess end-to-end contract: два scale variants и два цветных материала проходят через одну fake-Crowbar декомпиляцию и две fake-StudioMDL компиляции; отдельный dynamic scale 1.0 получает static `_scaled_100`; no-op не запускает tools; изменение VMT после planning и отсутствие `.sw.vtx` останавливают операцию, после чего marker-protected staging удаляется, а внешний sentinel остаётся неизменным.
+- Реальная opt-in SDK VMT matrix на `book_2` подтвердила staged coordinator и compile-совместимость direct Patch `insert`, direct Patch `replace` и source-Patch full-copy: все три cases получили static managed MDL и полный набор из шести companions без `KeyValues Error`. Первая попытка выявила и исправила потерю unused MDL skin slots: production metadata теперь сохраняет полную QC-compatible таблицу 8×8 отдельно от единственного mesh-used slot, поэтому colored row создаёт один VMT и сохраняет остальные семь исходных значений. Протокол — `docs/research/SDK_VMT_GENERATION_VALIDATION.md`; визуальная runtime-семантика оттенка остаётся отдельной границей.
+- Добавлен pure `reconcile_generation_requirements`: если source fingerprint или skin-layout fingerprint модели изменился, map-local operation расширяется всеми совместимыми закэшированными scale identities. Это гарантирует, что общий физический `_scaled_XXX` path не останется с layout revision другой карты. Особый переход при увеличении числа оригинальных skin families восстанавливает прежнее число по началу contiguous-блока managed mappings, вставляет новые оригинальные rows перед ним, сдвигает все старые colored targets на разницу и обязательно перекомпилирует все закэшированные масштабы. `MapUsage` остальных карт при этом инвалидируется: до их повторной компиляции визуальный сдвиг в уже собранных уровнях считается ожидаемым следствием изменения исходного ассета. Изменение таблицы без доказуемого увеличения остаётся консервативным полным reset без переноса старых scales.
+- Проверены пределы skin layout на целевом SDK. Публичный `studio.h` задаёт 32-entry `MAXSTUDIOSKINS` для texture/material table, но установленный StudioMDL отвергает уже 32-е уникальное имя с `Too many materials used, max 32`; безопасный compile-limit равен 31 уникальному материалу. Отдельный isolated probe принимает 1024 skin-family rows, а на 1025 завершает процесс с `EXCEPTION_ACCESS_VIOLATION`. Planning теперь не добавляет colored mapping, который превысил бы любой предел: выдаёт warning, оставляет entity на исходном skin и не генерирует отклонённые VMT. MDL/QC adapters дополнительно отклоняют уже переполненные входы. Протокол — `docs/research/SDK_SKIN_LIMITS.md`.
 - Synthetic compile-validation matrix из 12 комбинаций перекрёстно покрывает static/dynamic source, отсутствие collision/`$collisionmodel`/`$collisionjoints` и отсутствие/наличие исходного `$scale`. Она подтверждает, что transformer добавляет `$staticprop` только при необходимости, заменяет исходный `$scale` итоговым geometry scale, сохраняет collision и explicit bounds побайтно и масштабирует только top-level LOD distance.
 - Реальная isolated SDK 2013 SP matrix успешно декомпилировала Crowbar 0.68 и скомпилировала StudioMDL четыре staged cases при compile scale 1.50: static `apt/fsmit01` с `$collisionmodel` и geometry 1.50; one-bone dynamic `apt/monitor01` и `props_se/doll01` с `$collisionmodel` и geometry 2.25; one-bone dynamic `props_vehicles/car_van1a_doors1a` с `$collisionjoints`, исходным `$scale 1` и geometry 2.25. Во всех случаях exit code равен 0, generated MDL имеет точный managed internal name и static flag, выпущены непустые `.mdl`, `.vvd`, `.dx80.vtx`, `.dx90.vtx`, `.sw.vtx` и `.phy`. Внешние Antenna/SDK assets не изменялись; компиляция выполнялась в отдельный staging game root. Протокол и границы результата зафиксированы в `docs/research/SDK_QC_COMPILE_VALIDATION.md`.
 - Исследовательские скрипты `is_staticprop.py`, `skins_from_mdl.py` и `mdl_skins_and_cdmaterials*.py` подтверждают возможность чтения static flag, material table, `$cdmaterials` и skin families непосредственно из MDL.
@@ -91,7 +94,7 @@ Upstream и документация: `https://github.com/TeamSpen210/srctools`,
 
 - `srctools.vmf.VMF.export()` не является source-preserving writer: он нормализует форматирование, удаляет обычные комментарии, меняет порядок/представление части данных, схлопывает повторяющиеся direct entity keys и по умолчанию увеличивает map version. Итоговый VMF поэтому редактируется собственным lossless span-editor; `srctools.vmf` допустим как semantic reader/validator.
 - `srctools.game.Game.get_filesystem()` нельзя использовать как resolver PSR. В версии 2.7.0 он группирует VPK раньше folder roots и автоматически добавляет некоторые DLC/update/platform paths, поэтому фактический порядок отличается от строк `SearchPaths`. PSR самостоятельно разбирает GameInfo и вручную собирает `FileSystemChain` строго в утверждённом порядке.
-- `srctools.mdl.Model` 2.7.0 отбрасывает неиспользуемые material slots, проходя по Python `set`. Чтобы этот неустойчивый порядок не стал частью skin-layout identity, адаптер PSR повторно читает только offsets таблиц texture/skin/bodypart/model/mesh, сортирует числовые material-slot indexes и сверяет результат с `srctools` без учёта порядка внутри family.
+- `srctools.mdl.Model` 2.7.0 отбрасывает неиспользуемые material slots, проходя по Python `set`. Адаптер PSR повторно читает offsets таблиц texture/skin/bodypart/model/mesh, сохраняет полную numeric skin-reference table для QC round-trip, отдельно сортирует mesh-used slot indexes для VMT resolution/покраски и сверяет их проекцию с `srctools` без зависимости от set order.
 - QC библиотекой не поддерживается; для него остаётся собственный token-aware transformer.
 - Семантика VMT Patch из библиотеки полезна как parser/evaluator, но реальный выбор `$color`/`$color2` и поведение `insert`/`replace` всё равно проверяются на SDK 2013 SP.
 
@@ -261,6 +264,8 @@ validate inputs
 
 Нельзя записывать VMF, указывающий на неподтверждённый артефакт. Частично успешная генерация должна либо сохранить корректные ранее существовавшие артефакты, либо завершиться до commit-этапа с понятным отчётом.
 
+Каждый compile-run, включая no-op и завершение с ошибкой, заканчивается единым сводным отчётом. В конце консольного вывода отдельно группируются и дедуплицируются все ошибки, предупреждения и рекомендации, накопленные всеми стадиями; пользователь не должен искать диагностику по промежуточному логу. Warning-секции и отдельные warning-сообщения выводятся жёлтым цветом, если консоль поддерживает цвет. Итоговый exit code вычисляется после печати отчёта.
+
 ## GameInfo и разрешение ассетов
 
 Реальный Antenna `GameInfo.txt` содержит:
@@ -313,6 +318,8 @@ VMF reader/writer должен:
 7. Скомпилировать все необходимые масштабы с одинаковым детерминированным layout.
 8. Записать в VMF итоговый skin index вместо исходной пары skin/color.
 
+Для Source SDK 2013 SP действуют два независимых предела: не более 31 уникального material name в компилируемом QC и не более 1024 rows в `skinfamilies`. Перед добавлением каждого нового colored mapping planner считает оба будущих значения. Если хотя бы один предел превышается, mapping и его VMT не входят в operation batch, создаётся warning с моделью/source skin/RGB/entity ids, а VMF assignment использует исходный skin. Это fail-soft поведение не отменяет остальные варианты той же модели.
+
 Обязательная test matrix:
 
 - VertexLitGeneric и другие реально встречающиеся model shaders;
@@ -345,6 +352,8 @@ materials/models/psr_scaled/
 ```
 
 Эти каталоги считаются managed-пространством PSR. Агрессивная актуализация допустима только после построения полного плана, проверки cache/manifest и успешного разрешения источников.
+
+Удаление больше не используемых colored mappings и уплотнение их индексов не выполняется обычным compile-run: частая смена цвета на одной карте не должна постоянно сдвигать layout остальных карт. В будущем это обязательная часть явного cleanup-режима (с dry-run): он строит project-wide usage set по manifest и известным картам, находит mappings без единого `MapUsage`, предлагает их удаление только когда требуется освободить capacity либо пользователь явно запросил compaction, вычисляет новую непрерывную таблицу и список всех затронутых карт/масштабов. До commit cleanup обязан предупредить, что эти карты нужно перекомпилировать; все managed scale variants модели пересобираются одной layout revision. Без полного project-wide доказательства отсутствия ссылок colored row не удаляется.
 
 Legacy-контент хранится в многочисленных `scaled` подпапках рядом с оригиналами. В Antenna обнаружено:
 
@@ -565,7 +574,7 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - обработка частичного успеха, когда одна из моделей карты не компилируется;
 - допустимость параллельного запуска двух Hammer compile jobs для одного проекта;
 - окончательное CLI-место staging parent и retention policy для failed runs;
-- точная политика cleanup для старых ревизий generated skin layout.
+- UX и CLI-флаг явного project-wide colored-layout cleanup/compaction; базовая safety-policy и требование dry-run уже утверждены.
 
 ## Принятые решения
 
@@ -581,6 +590,9 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - Normal cleanup управляет только новыми managed roots.
 - Legacy migration/cleanup является отдельной операцией.
 - Покраска предпочитает Patch с fallback на полную VMT-копию.
+- Compile-safe skin layout ограничен 31 уникальным material name и 1024 skin-family rows. Превышающая предел новая цветная вариация пропускается с warning, а entity использует исходный skin; отклонённый VMT не генерируется.
+- Неиспользуемые colored mappings сохраняют стабильные индексы при обычных compile-run. Их удаление/сдвиг разрешены только явному project-wide cleanup с dry-run, предупреждением и перечнем карт/масштабов для обязательной перекомпиляции.
+- В конце каждого compile-run печатается единый дедуплицированный отчёт со всеми errors, warnings и recommendations; warning выводится жёлтым при поддержке цвета.
 - Project cache использует строго валидируемый versioned JSON manifest, изолированный нормализованной identity `GameInfo.txt`, и атомарный replace вместо pickle.
 - QC variants строятся из общего validated reference QC; generated filename использует compile-scale identity, `$scale` и LOD distances используют model-dependent geometry scale, collision и bounds сохраняются без числового переписывания. Compile compatibility этого правила подтверждена текущей staged SDK matrix; viewport regression остаётся отдельным более широким уровнем проверки.
 - Staging является operation-scoped и caller-owned: уникальный marker-protected root создаётся под явно заданным parent, source content повторно проверяется перед materialization, обычный cleanup не выходит за этот root. Неудачный run может явно сохранить staging для диагностики.

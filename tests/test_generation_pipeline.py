@@ -258,6 +258,54 @@ class GenerationPipelineTests(unittest.TestCase):
         assert staging_root is not None
         self.assertFalse(staging_root.exists())
 
+    def test_capacity_fallback_does_not_generate_rejected_colored_materials(self) -> None:
+        model = self.case["logical_model_path"]
+        vmf = "".join(
+            entity(str(index), model, "1.5", f"0 0 {index}")
+            for index in range(1, 16)
+        ).encode("ascii")
+        filesystem = self.filesystem()
+        discovery = discover_vmf_requests(vmf, map_identity="maps/material-limit.vmf")
+        operation = build_operation_plan(inspect_map_sources(discovery, filesystem))
+        materials = build_colored_material_plan(
+            operation,
+            inspect_colored_material_sources(operation, filesystem),
+        )
+        skin_layout = build_skin_layout_plan(
+            operation,
+            materials,
+            empty_manifest(build_project_identity(self.gameinfo)),
+        )
+
+        self.assertEqual(len(materials.colored_materials), 30)
+        self.assertEqual(len(skin_layout.layouts[0].mappings), 13)
+        with StagingWorkspace.create(
+            self.staging,
+            operation_identity=operation.map_identity,
+        ) as workspace:
+            result = generate_and_validate(
+                workspace,
+                filesystem,
+                operation,
+                materials,
+                skin_layout,
+                crowbar_command=(sys.executable, self.crowbar),
+                studiomdl_command=(sys.executable, self.studiomdl),
+            )
+
+            self.assertEqual(len(result.materials), 26)
+            rejected_outputs = {
+                path
+                for colored_skin in materials.colored_skins
+                if colored_skin.render_color in {(0, 0, 14), (0, 0, 15)}
+                for path in colored_skin.logical_colored_materials
+            }
+            self.assertTrue(rejected_outputs)
+            self.assertTrue(rejected_outputs.isdisjoint(
+                item.generated.logical_output_material
+                for item in result.materials
+            ))
+
     def test_missing_companion_aborts_inside_staging_and_preserves_external_files(self) -> None:
         filesystem, operation, materials, skin_layout = self.plans()
         sentinel = self.root / "project-owned.txt"

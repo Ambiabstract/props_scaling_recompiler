@@ -30,6 +30,7 @@ from .skin_layout import (
     SkinLayoutOperationPlan,
     build_skin_layout_plan,
     commit_skin_layout_plan,
+    source_asset_fingerprint,
     source_skin_families_fingerprint,
 )
 from .qc import (
@@ -53,6 +54,7 @@ from .generation import (
     ValidatedModelArtifact,
     generate_and_validate,
 )
+from .reconciliation import reconcile_generation_requirements
 
 __all__ = [
     "ColoredSkinRequirement",
@@ -91,6 +93,8 @@ __all__ = [
     "inspect_colored_material_sources",
     "inspect_map_sources",
     "generate_and_validate",
+    "reconcile_generation_requirements",
+    "source_asset_fingerprint",
     "source_skin_families_fingerprint",
     "stage_qc_operation",
     "stage_source_model",

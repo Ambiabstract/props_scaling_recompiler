@@ -51,6 +51,7 @@ class ColoredSkinRequirement:
     logical_source_model: str
     source_skin: int
     render_color: tuple[int, int, int]
+    material_slots: tuple[int, ...]
     source_materials: tuple[str, ...]
     entity_ids: tuple[str, ...]
 
@@ -221,9 +222,9 @@ def _materials_available(
         for material in asset.materials
     }
     missing = tuple(
-        material
-        for material in asset.skin_families[source_skin]
-        if not available.get(material, False)
+        asset.skin_families[source_skin][slot]
+        for slot in asset.used_material_slots
+        if not available.get(asset.skin_families[source_skin][slot], False)
     )
     if not missing:
         return True
@@ -281,7 +282,11 @@ def _group_colored_skins(
             logical_source_model=model,
             source_skin=skin,
             render_color=color,
-            source_materials=assets[model].skin_families[skin],
+            material_slots=assets[model].used_material_slots,
+            source_materials=tuple(
+                assets[model].skin_families[skin][slot]
+                for slot in assets[model].used_material_slots
+            ),
             entity_ids=tuple(grouped[(model, skin, color)]),
         )
         for model, skin, color in sorted(grouped)

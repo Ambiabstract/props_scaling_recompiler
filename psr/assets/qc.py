@@ -15,6 +15,8 @@ from typing import Literal
 
 from psr.domain import canonical_scale_percent
 
+from .limits import MAX_STUDIO_MATERIALS, MAX_STUDIO_SKIN_FAMILIES
+
 
 TokenKind = Literal["word", "string", "lbrace", "rbrace"]
 
@@ -175,6 +177,8 @@ def build_reference_qc(
     source_sha256 = _sha256(source)
     expected = _normalise_families(expected_source_families, "expected_source_families")
     target = _normalise_families(target_families, "target_families")
+    _validate_family_capacity(expected, "source")
+    _validate_family_capacity(target, "target")
     if target[:len(expected)] != expected or len(target) < len(expected):
         raise QCTransformError(
             "target_skinfamilies_invalid",
@@ -619,6 +623,29 @@ def _normalise_families(
             f"{label} rows do not have one stable material count",
         )
     return result
+
+
+def _validate_family_capacity(
+    families: tuple[tuple[str, ...], ...],
+    label: str,
+) -> None:
+    if len(families) > MAX_STUDIO_SKIN_FAMILIES:
+        raise QCTransformError(
+            f"{label}_skinfamilies_limit",
+            f"{label} skin table has {len(families)} rows, Source SDK 2013 SP "
+            f"limit is {MAX_STUDIO_SKIN_FAMILIES}",
+        )
+    material_count = len({
+        material
+        for family in families
+        for material in family
+    })
+    if material_count > MAX_STUDIO_MATERIALS:
+        raise QCTransformError(
+            f"{label}_materials_limit",
+            f"{label} skin table has {material_count} unique materials, Source SDK "
+            f"2013 SP limit is {MAX_STUDIO_MATERIALS}",
+        )
 
 
 def _normalise_material(value: str) -> str:

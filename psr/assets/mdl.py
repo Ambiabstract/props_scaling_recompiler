@@ -10,6 +10,7 @@ from pathlib import PurePosixPath
 
 from srctools.mdl import MDL_EXTS, Flags, Model
 
+from .limits import MAX_STUDIO_MATERIALS, MAX_STUDIO_SKIN_FAMILIES
 from .searchpaths import (
     AssetProvenance,
     OrderedAssetFileSystem,
@@ -70,6 +71,7 @@ class SourceAssetMetadata:
     total_vertices: int
     cdmaterials: tuple[str, ...]
     skin_families: tuple[tuple[str, ...], ...]
+    used_material_slots: tuple[int, ...]
     material_names: tuple[str, ...]
     materials: tuple[MaterialReferenceMetadata, ...]
     files: tuple[SourceFileMetadata, ...]
@@ -108,8 +110,9 @@ def inspect_source_model(
     try:
         model = Model(filesystem.chain, resolved_model.file)
         bone_count = _read_bone_count(mdl_bytes)
-        stable_skins = _read_stable_skin_families(mdl_bytes)
-        _validate_srctools_skins(model, stable_skins)
+        stable_skins, used_material_slots = _read_stable_skin_table(mdl_bytes)
+        _validate_srctools_skins(model, stable_skins, used_material_slots)
+        _validate_studio_capacity(stable_skins)
     except Exception as exc:
         raise SourceAssetInspectionError(
             "invalid_mdl",
@@ -123,9 +126,9 @@ def inspect_source_model(
         for family in stable_skins
     )
     material_names = _unique_in_order(
-        material
+        family[slot]
         for family in skin_families
-        for material in family
+        for slot in used_material_slots
     )
 
     files = _inspect_model_files(
@@ -152,6 +155,7 @@ def inspect_source_model(
         total_vertices=model.total_verts,
         cdmaterials=cdmaterials,
         skin_families=skin_families,
+        used_material_slots=used_material_slots,
         material_names=material_names,
         materials=materials,
         files=files,
@@ -167,6 +171,26 @@ def _read_bone_count(mdl_bytes: bytes) -> int:
     if bone_count < 0:
         raise ValueError(f"MDL numbones is negative: {bone_count}")
     return bone_count
+
+
+def _validate_studio_capacity(
+    skin_families: tuple[tuple[str, ...], ...],
+) -> None:
+    if len(skin_families) > MAX_STUDIO_SKIN_FAMILIES:
+        raise ValueError(
+            f"MDL has {len(skin_families)} skin families, Source SDK 2013 SP "
+            f"limit is {MAX_STUDIO_SKIN_FAMILIES}"
+        )
+    material_count = len({
+        material
+        for family in skin_families
+        for material in family
+    })
+    if material_count > MAX_STUDIO_MATERIALS:
+        raise ValueError(
+            f"MDL has {material_count} unique materials, Source SDK 2013 SP "
+            f"limit is {MAX_STUDIO_MATERIALS}"
+        )
 
 
 def _validate_source_model_path(logical_path: str) -> None:
@@ -283,12 +307,15 @@ def _unique_in_order(values: Iterable[str]) -> tuple[str, ...]:
     return tuple(result)
 
 
-def _read_stable_skin_families(data: bytes) -> tuple[tuple[str, ...], ...]:
-    """Read skin slots in numeric mesh-material order.
+def _read_stable_skin_table(
+    data: bytes,
+) -> tuple[tuple[tuple[str, ...], ...], tuple[int, ...]]:
+    """Read the full QC-compatible skin table and mesh-used slot indexes.
 
     ``srctools.mdl.Model`` 2.7.0 culls unused slots by iterating a set. PSR
-    reparses only the necessary offsets and sorts the numeric slot indexes so
-    set iteration can never become part of the generated skin layout format.
+    preserves the complete numeric MDL skin-reference table for lossless QC
+    round-tripping, while separately sorting mesh-used slot indexes so only
+    visible materials need VMT resolution and colored variants.
     """
     if len(data) < 392:
         raise ValueError("MDL header is truncated")
@@ -347,20 +374,21 @@ def _read_stable_skin_families(data: bytes) -> tuple[tuple[str, ...], ...]:
                     )
                 used_slots.add(material_slot)
 
-    ordered_slots = sorted(used_slots)
+    ordered_slots = tuple(sorted(used_slots))
     families: list[tuple[str, ...]] = []
     for family_index in range(skin_count):
         row_start = family_index * skinref_count
         families.append(tuple(
             textures[raw_skin_indices[row_start + slot]]
-            for slot in ordered_slots
+            for slot in range(skinref_count)
         ))
-    return tuple(families)
+    return tuple(families), ordered_slots
 
 
 def _validate_srctools_skins(
     model: Model,
     stable_skins: tuple[tuple[str, ...], ...],
+    used_material_slots: tuple[int, ...],
 ) -> None:
     srctools_skins = tuple(
         tuple(material.replace("\\", "/").lstrip("/") for material in family)
@@ -368,7 +396,8 @@ def _validate_srctools_skins(
     )
     if len(srctools_skins) != len(stable_skins):
         raise ValueError("srctools and stable reader disagree on skin family count")
-    for index, (actual, stable) in enumerate(zip(srctools_skins, stable_skins)):
+    for index, (actual, full_stable) in enumerate(zip(srctools_skins, stable_skins)):
+        stable = tuple(full_stable[slot] for slot in used_material_slots)
         if sorted(actual) != sorted(stable):
             raise ValueError(
                 f"srctools and stable reader disagree on skin family {index}"

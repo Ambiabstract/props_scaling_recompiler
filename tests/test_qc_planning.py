@@ -44,6 +44,7 @@ def source_asset(*, is_static: bool = False) -> SourceAssetMetadata:
         total_vertices=12,
         cdmaterials=("models/props/example/",),
         skin_families=(("body", "detail"), ("body_alt", "detail_alt")),
+        used_material_slots=(0, 1),
         material_names=("body", "detail", "body_alt", "detail_alt"),
         materials=(),
         files=(),
@@ -95,6 +96,7 @@ def skin_layout() -> SkinLayoutOperationPlan:
         mappings=(),
         layout_fingerprint="c" * 64,
         cache_reset=False,
+        rebuild_cached_scales=False,
     )
     return SkinLayoutOperationPlan(
         map_identity="maps/qc_test.vmf",

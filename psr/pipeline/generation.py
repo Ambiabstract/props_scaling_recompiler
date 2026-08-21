@@ -110,7 +110,12 @@ def generate_and_validate(
     workspace, whose context-manager policy decides whether to preserve it.
     """
     _validate_inputs(workspace, operation, materials, skin_layout)
-    material_results = _generate_materials(workspace, filesystem, materials)
+    material_results = _generate_materials(
+        workspace,
+        filesystem,
+        materials,
+        skin_layout,
+    )
 
     assets = {
         item.logical_model_path: item
@@ -289,13 +294,35 @@ def _generate_materials(
     workspace: StagingWorkspace,
     filesystem: OrderedAssetFileSystem,
     plan: ColoredMaterialOperationPlan,
+    skin_layout: SkinLayoutOperationPlan,
 ) -> tuple[ValidatedMaterialArtifact, ...]:
+    accepted_skin_identities = {
+        (
+            mapping.logical_source_model,
+            mapping.source_skin,
+            mapping.render_color,
+        )
+        for layout in skin_layout.layouts
+        for mapping in layout.mappings
+    }
+    required_outputs = {
+        logical_path
+        for colored_skin in plan.colored_skins
+        if (
+            colored_skin.logical_source_model,
+            colored_skin.source_skin,
+            colored_skin.render_color,
+        ) in accepted_skin_identities
+        for logical_path in colored_skin.logical_colored_materials
+    }
     metadata = {
         item.logical_material_path: item
         for item in plan.source_materials
     }
     generated: list[ValidatedMaterialArtifact] = []
     for item in plan.colored_materials:
+        if item.logical_output_material not in required_outputs:
+            continue
         planned_source = metadata.get(item.logical_source_material)
         if planned_source is None:
             raise GenerationError(

@@ -79,9 +79,19 @@ def build_mdl(case: Mapping[str, Any]) -> bytes:
     skin_offset = append(struct.pack(f"<{len(skin_values)}H", *skin_values), alignment=2)
     surface_offset = append(case["surface_property"].encode("ascii") + b"\0", alignment=1)
 
+    used_material_slots = tuple(case.get(
+        "used_material_slots",
+        range(skinref_count),
+    ))
+    if len(set(used_material_slots)) != len(used_material_slots) or any(
+        isinstance(slot, bool) or not isinstance(slot, int) or not 0 <= slot < skinref_count
+        for slot in used_material_slots
+    ):
+        raise ValueError("used_material_slots must be unique indexes within the skin row")
+
     bodypart_offset = append(b"\0" * _BODYPART_SIZE)
     model_offset = append(b"\0" * _MODEL_SIZE)
-    mesh_offset = append(b"\0" * (_MESH_SIZE * skinref_count))
+    mesh_offset = append(b"\0" * (_MESH_SIZE * len(used_material_slots)))
     struct.pack_into("<4i", data, bodypart_offset, 0, 1, 0, model_offset - bodypart_offset)
     model_name = _fixed_ascii(case["internal_model_name"], 64)
     struct.pack_into(
@@ -91,7 +101,7 @@ def build_mdl(case: Mapping[str, Any]) -> bytes:
         model_name,
         0,
         1.0,
-        skinref_count,
+        len(used_material_slots),
         mesh_offset - model_offset,
         0,
         0,
@@ -101,8 +111,8 @@ def build_mdl(case: Mapping[str, Any]) -> bytes:
         0,
         0,
     )
-    for material_slot in range(skinref_count):
-        struct.pack_into("<i", data, mesh_offset + material_slot * _MESH_SIZE, material_slot)
+    for mesh_index, material_slot in enumerate(used_material_slots):
+        struct.pack_into("<i", data, mesh_offset + mesh_index * _MESH_SIZE, material_slot)
 
     flags = 16 if case["static_prop"] else 0
     checksum = bytes.fromhex(case["checksum_hex"])

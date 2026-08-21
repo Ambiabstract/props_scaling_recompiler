@@ -21,9 +21,11 @@ from psr.assets import (
     plan_search_paths,
     select_color_parameter,
 )
+from psr.cache import ProjectIdentity, empty_manifest
 from psr.pipeline import (
     build_colored_material_plan,
     build_operation_plan,
+    build_skin_layout_plan,
     discover_vmf_requests,
     inspect_colored_material_sources,
     inspect_map_sources,
@@ -268,6 +270,7 @@ class ColoredMaterialPlanningTests(unittest.TestCase):
         self.assertEqual(body.generation_mode, "patch")
         self.assertEqual(accent.generation_mode, "patch")
         self.assertEqual(len(plan.colored_skins), 1)
+        self.assertEqual(plan.colored_skins[0].material_slots, (0, 1))
         self.assertEqual(plan.colored_skins[0].entity_ids, ("1", "2"))
         self.assertEqual(
             plan.colored_skins[0].logical_colored_materials,
@@ -297,6 +300,30 @@ class ColoredMaterialPlanningTests(unittest.TestCase):
         self.assertEqual(
             body.generation_reason,
             "source_is_patch_pending_sdk_patch_chain_validation",
+        )
+
+    def test_unused_skin_slots_are_preserved_but_do_not_require_colored_vmt(self) -> None:
+        case = load_mdl_case("static_unused_material_slot")
+        operation = self.operation(case)
+        requirement = operation.colored_skins[0]
+
+        self.assertEqual(requirement.material_slots, (0,))
+        self.assertEqual(requirement.source_materials, ("body",))
+        inspection = inspect_colored_material_sources(operation, self.filesystem())
+        materials = build_colored_material_plan(operation, inspection)
+        self.assertTrue(materials.is_valid)
+        self.assertEqual(len(materials.colored_materials), 1)
+        self.assertEqual(materials.colored_skins[0].material_slots, (0,))
+
+        project = ProjectIdentity("a" * 64, "C:/fixture/GameInfo.txt", "b" * 64)
+        layout = build_skin_layout_plan(operation, materials, empty_manifest(project))
+        self.assertTrue(layout.is_valid)
+        self.assertEqual(
+            layout.layouts[0].families[-1],
+            (
+                "models/psr_scaled/fixture/unused/body_col_190_048_148",
+                "unused_accent",
+            ),
         )
 
     def test_unsupported_shader_is_an_explicit_planning_error(self) -> None:

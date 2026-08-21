@@ -5,16 +5,20 @@ import json
 import tempfile
 import unittest
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from psr.assets import OrderedAssetFileSystem, parse_search_paths_text, plan_search_paths
 from psr.cache import (
+    GeneratedModelRecord,
     build_project_identity,
     empty_manifest,
     load_manifest,
     save_manifest_atomic,
 )
+from psr.domain import scaled_model_path
 from psr.pipeline import (
     build_colored_material_plan,
     build_operation_plan,
@@ -23,6 +27,7 @@ from psr.pipeline import (
     discover_vmf_requests,
     inspect_colored_material_sources,
     inspect_map_sources,
+    reconcile_generation_requirements,
 )
 from tests.mdl_fixture_builder import build_case_files
 
@@ -144,8 +149,99 @@ class StableSkinLayoutTests(unittest.TestCase):
         )
         self.assertEqual(len(layout.families), 4)
         self.assertFalse(layout.cache_reset)
+        self.assertFalse(layout.rebuild_cached_scales)
         assignments = {item.entity_id: item.target_skin for item in plan.assignments}
         self.assertEqual(assignments, {"1": 3, "2": 2, "3": 1})
+
+    def test_material_limit_omits_color_and_falls_back_to_original_skin(self) -> None:
+        model = self.case["logical_model_path"]
+        operation, materials = self.plans("material-limit", [
+            entity(str(index), model, color=(0, 0, index))
+            for index in range(1, 16)
+        ])
+
+        plan = build_skin_layout_plan(
+            operation,
+            materials,
+            empty_manifest(self.project),
+        )
+
+        self.assertTrue(plan.is_valid)
+        self.assertEqual(len(materials.colored_materials), 30)
+        layout = plan.layouts[0]
+        self.assertEqual(len(layout.families), 15)
+        self.assertEqual(len(layout.mappings), 13)
+        self.assertEqual(
+            len({material for family in layout.families for material in family}),
+            30,
+        )
+        warnings = [
+            item
+            for item in plan.diagnostics
+            if item.code == "model_material_limit_reached"
+        ]
+        self.assertEqual(len(warnings), 2)
+        self.assertEqual(
+            [item.entity_id for item in warnings],
+            ["14", "15"],
+        )
+        assignments = {item.entity_id: item for item in plan.assignments}
+        self.assertEqual(assignments["14"].target_skin, 0)
+        self.assertTrue(assignments["14"].used_color_fallback)
+        self.assertEqual(assignments["15"].target_skin, 0)
+        self.assertTrue(assignments["15"].used_color_fallback)
+        self.assertTrue(all(
+            not assignments[str(index)].used_color_fallback
+            for index in range(1, 14)
+        ))
+
+        committed = commit_skin_layout_plan(
+            empty_manifest(self.project),
+            operation,
+            plan,
+        )
+        fallback_usage = next(
+            item for item in committed.map_usages if item.entity_id == "15"
+        )
+        self.assertEqual(fallback_usage.target_skin, 0)
+        self.assertEqual(fallback_usage.render_color, (0, 0, 15))
+
+    def test_skin_family_limit_omits_only_overflow_color(self) -> None:
+        model = self.case["logical_model_path"]
+        operation, materials = self.plans("family-limit", [
+            entity(
+                str(index),
+                model,
+                color=(index // 256, index % 256, 1),
+            )
+            for index in range(1, 1024)
+        ])
+
+        # This isolates the independent row limit. Real models normally reach
+        # the stricter unique-material limit first.
+        with patch("psr.pipeline.skin_layout.MAX_STUDIO_MATERIALS", 10_000):
+            plan = build_skin_layout_plan(
+                operation,
+                materials,
+                empty_manifest(self.project),
+            )
+
+        self.assertTrue(plan.is_valid)
+        layout = plan.layouts[0]
+        self.assertEqual(len(layout.families), 1024)
+        self.assertEqual(len(layout.mappings), 1022)
+        warnings = [
+            item
+            for item in plan.diagnostics
+            if item.code == "skin_family_limit_reached"
+        ]
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0].entity_id, "1023")
+        assignment = next(
+            item for item in plan.assignments if item.entity_id == "1023"
+        )
+        self.assertEqual(assignment.target_skin, 0)
+        self.assertTrue(assignment.used_color_fallback)
 
     def test_warm_layout_retains_unrequested_rows_and_appends_new_color(self) -> None:
         model = self.case["logical_model_path"]
@@ -195,6 +291,72 @@ class StableSkinLayoutTests(unittest.TestCase):
         self.assertEqual(loaded.status, "loaded")
         self.assertEqual(loaded.manifest, committed)
 
+    def test_new_layout_rebuilds_cached_scales_from_other_maps(self) -> None:
+        model = self.case["logical_model_path"]
+        cold_operation, cold_materials = self.plans("cold-reconcile", [
+            entity("1", model, scale="1.5", color=(190, 48, 148)),
+        ])
+        cold_layout = build_skin_layout_plan(
+            cold_operation,
+            cold_materials,
+            empty_manifest(self.project),
+        )
+        manifest = commit_skin_layout_plan(
+            empty_manifest(self.project),
+            cold_operation,
+            cold_layout,
+        )
+        old_fingerprint = cold_layout.layouts[0].layout_fingerprint
+        cached_models = tuple(
+            GeneratedModelRecord(
+                logical_source_model=model,
+                compile_scale_percent=percent,
+                logical_output_model=scaled_model_path(
+                    model,
+                    Decimal(percent) / Decimal(100),
+                ),
+                requires_static_conversion=False,
+                skin_layout_fingerprint=old_fingerprint,
+                expected_files=(scaled_model_path(
+                    model,
+                    Decimal(percent) / Decimal(100),
+                ),),
+                artifact_fingerprint=hex_digit * 64,
+            )
+            for percent, hex_digit in ((150, "a"), (200, "b"))
+        )
+        manifest = replace(manifest, generated_models=cached_models)
+
+        warm_operation, warm_materials = self.plans("warm-reconcile", [
+            entity("2", model, scale="3", color=(86, 202, 181)),
+        ])
+        warm_layout = build_skin_layout_plan(
+            warm_operation,
+            warm_materials,
+            manifest,
+        )
+        self.assertFalse(warm_layout.layouts[0].cache_reset)
+        self.assertNotEqual(
+            warm_layout.layouts[0].layout_fingerprint,
+            old_fingerprint,
+        )
+
+        reconciled = reconcile_generation_requirements(
+            warm_operation,
+            warm_layout,
+            manifest,
+        )
+
+        self.assertTrue(reconciled.is_valid)
+        self.assertEqual(
+            [item.compile_scale for item in reconciled.generated_models],
+            [Decimal("1.5"), Decimal("2"), Decimal("3.00")],
+        )
+        self.assertEqual(
+            [item.entity_ids for item in reconciled.generated_models],
+            [(), (), ("2",)],
+        )
+
     def test_artifact_layout_is_independent_of_entity_request_order(self) -> None:
         model = self.case["logical_model_path"]
         forward_operation, forward_materials = self.plans("forward", [
@@ -221,7 +383,7 @@ class StableSkinLayoutTests(unittest.TestCase):
         self.assertEqual(forward.mappings, reverse.mappings)
         self.assertEqual(forward.layout_fingerprint, reverse.layout_fingerprint)
 
-    def test_changed_source_skin_table_invalidates_cached_mapping_layout(self) -> None:
+    def test_same_count_source_skin_change_invalidates_cached_mapping_layout(self) -> None:
         model = self.case["logical_model_path"]
         operation, materials = self.plans("first", [
             entity("1", model, color=(190, 48, 148)),
@@ -236,30 +398,128 @@ class StableSkinLayoutTests(unittest.TestCase):
             operation,
             first_plan,
         )
+        self.case["skin_families"][1] = ["body", "accent"]
+        write_files(self.content, build_case_files(self.case))
         second_operation, second_materials = self.plans("second", [
             entity("2", model, color=(190, 48, 148)),
         ])
-        asset = second_operation.source_assets[0]
-        changed_asset = replace(
-            asset,
-            skin_families=asset.skin_families + (("body", "accent"),) * 2,
-        )
-        changed_operation = replace(second_operation, source_assets=(changed_asset,))
-
-        changed = build_skin_layout_plan(changed_operation, second_materials, manifest)
+        changed = build_skin_layout_plan(second_operation, second_materials, manifest)
 
         self.assertIn(
             "source_skin_layout_changed",
             [item.code for item in changed.diagnostics],
         )
-        self.assertEqual(changed.layouts[0].source_family_count, 4)
+        self.assertEqual(changed.layouts[0].source_family_count, 2)
         self.assertEqual(len(changed.layouts[0].mappings), 1)
-        self.assertEqual(changed.layouts[0].mappings[0].target_skin, 4)
+        self.assertEqual(changed.layouts[0].mappings[0].target_skin, 2)
         self.assertTrue(changed.layouts[0].cache_reset)
-        committed = commit_skin_layout_plan(manifest, changed_operation, changed)
+        self.assertFalse(changed.layouts[0].rebuild_cached_scales)
+        committed = commit_skin_layout_plan(manifest, second_operation, changed)
         self.assertEqual(
             [(item.map_identity, item.entity_id) for item in committed.map_usages],
             [("maps/second.vmf", "2")],
+        )
+
+    def test_source_skin_count_increase_rebases_six_cached_colored_rows(self) -> None:
+        model = self.case["logical_model_path"]
+        self.case["skin_families"].append(["body", "accent"])
+        self.case["material_files"][
+            "materials/models/fixture/fallback/accent_alt.vmt"
+        ] = (VMT_FIXTURES / "vertexlit_no_color.vmt").read_text(encoding="utf-8")
+        write_files(self.content, build_case_files(self.case))
+        colors = ((86, 202, 181), (190, 48, 148))
+        cold_requests = [
+            entity(str(skin * 2 + color_index + 1), model, skin=skin, color=color)
+            for skin in range(3)
+            for color_index, color in enumerate(colors)
+        ]
+        cold_operation, cold_materials = self.plans("three-skins", cold_requests)
+        cold_layout = build_skin_layout_plan(
+            cold_operation,
+            cold_materials,
+            empty_manifest(self.project),
+        )
+        self.assertEqual(
+            [item.target_skin for item in cold_layout.layouts[0].mappings],
+            list(range(3, 9)),
+        )
+        manifest = commit_skin_layout_plan(
+            empty_manifest(self.project),
+            cold_operation,
+            cold_layout,
+        )
+        old_layout_fingerprint = cold_layout.layouts[0].layout_fingerprint
+        manifest = replace(
+            manifest,
+            generated_models=tuple(
+                GeneratedModelRecord(
+                    logical_source_model=model,
+                    compile_scale_percent=percent,
+                    logical_output_model=scaled_model_path(
+                        model,
+                        Decimal(percent) / Decimal(100),
+                    ),
+                    requires_static_conversion=False,
+                    skin_layout_fingerprint=old_layout_fingerprint,
+                    expected_files=(scaled_model_path(
+                        model,
+                        Decimal(percent) / Decimal(100),
+                    ),),
+                    artifact_fingerprint=hex_digit * 64,
+                )
+                for percent, hex_digit in ((100, "a"), (150, "b"))
+            ),
+        )
+
+        self.case["skin_families"].append(["body_alt", "accent"])
+        write_files(self.content, build_case_files(self.case))
+        warm_operation, warm_materials = self.plans("four-skins", [
+            entity("10", model, scale="2", skin=1, color=colors[0]),
+        ])
+        warm_plan = build_skin_layout_plan(warm_operation, warm_materials, manifest)
+        layout = warm_plan.layouts[0]
+
+        self.assertTrue(warm_plan.is_valid)
+        self.assertIn(
+            "source_skin_count_increased",
+            [item.code for item in warm_plan.diagnostics],
+        )
+        self.assertEqual(layout.source_family_count, 4)
+        self.assertEqual(len(layout.families), 10)
+        self.assertEqual(
+            [(item.source_skin, item.render_color) for item in layout.mappings],
+            [(skin, color) for skin in range(3) for color in colors],
+        )
+        self.assertEqual(
+            [item.target_skin for item in layout.mappings],
+            list(range(4, 10)),
+        )
+        self.assertEqual(warm_plan.assignments[0].target_skin, 6)
+        self.assertTrue(layout.cache_reset)
+        self.assertTrue(layout.rebuild_cached_scales)
+
+        reconciled = reconcile_generation_requirements(
+            warm_operation,
+            warm_plan,
+            manifest,
+        )
+        self.assertEqual(
+            [item.compile_scale for item in reconciled.generated_models],
+            [Decimal("1"), Decimal("1.5"), Decimal("2.00")],
+        )
+        self.assertEqual(
+            [item.entity_ids for item in reconciled.generated_models],
+            [(), (), ("10",)],
+        )
+
+        committed = commit_skin_layout_plan(manifest, warm_operation, warm_plan)
+        self.assertEqual(
+            [(item.map_identity, item.entity_id) for item in committed.map_usages],
+            [("maps/four-skins.vmf", "10")],
+        )
+        self.assertEqual(
+            [item.target_skin for item in committed.skin_mappings],
+            list(range(4, 10)),
         )
 
     def test_committed_map_usage_contains_raw_and_compile_scale_but_no_effective_scale(self) -> None:

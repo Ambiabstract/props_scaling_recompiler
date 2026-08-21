@@ -142,6 +142,29 @@ class ReferenceQCTransformTests(unittest.TestCase):
                 require_staticprop=True,
             )
 
+    def test_source_sdk_skin_and_material_capacity_are_defensive_limits(self) -> None:
+        source = b'$modelname "props/single.mdl"\n$body "b" "b.smd"\n'
+        with self.assertRaises(QCTransformError) as families_error:
+            build_reference_qc(
+                source,
+                expected_source_families=(("body",),),
+                target_families=(("body",),) * 1025,
+                require_staticprop=True,
+            )
+        self.assertEqual(families_error.exception.code, "target_skinfamilies_limit")
+
+        with self.assertRaises(QCTransformError) as materials_error:
+            build_reference_qc(
+                source,
+                expected_source_families=(("body",),),
+                target_families=tuple(
+                    (f"material_{index}",)
+                    for index in range(32)
+                ),
+                require_staticprop=True,
+            )
+        self.assertEqual(materials_error.exception.code, "target_materials_limit")
+
 
 class ScaledQCTransformTests(unittest.TestCase):
     def test_scaled_variant_changes_identity_scale_and_lod_only(self) -> None:

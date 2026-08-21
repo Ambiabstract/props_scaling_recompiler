@@ -48,6 +48,7 @@ class ColoredSkinMaterialPlan:
     logical_source_model: str
     source_skin: int
     render_color: tuple[int, int, int]
+    material_slots: tuple[int, ...]
     logical_source_materials: tuple[str, ...]
     logical_colored_materials: tuple[str, ...]
     entity_ids: tuple[str, ...]
@@ -169,6 +170,7 @@ def build_colored_material_plan(
                 logical_source_model=requirement.logical_source_model,
                 source_skin=requirement.source_skin,
                 render_color=requirement.render_color,
+                material_slots=requirement.material_slots,
                 logical_source_materials=tuple(logical_sources),
                 logical_colored_materials=tuple(logical_outputs),
                 entity_ids=requirement.entity_ids,

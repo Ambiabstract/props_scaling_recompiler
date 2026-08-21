@@ -112,6 +112,7 @@ class SourceModelInspectionTests(unittest.TestCase):
             metadata.skin_families,
             (("body", "accent"), ("body_alt", "accent_alt")),
         )
+        self.assertEqual(metadata.used_material_slots, (0, 1))
         self.assertEqual(
             metadata.material_names,
             ("body", "accent", "body_alt", "accent_alt"),
@@ -159,6 +160,30 @@ class SourceModelInspectionTests(unittest.TestCase):
         self.assertTrue(all(file.provenance.kind == "vpk" for file in metadata.files))
         self.assertEqual(metadata.materials[0].provenance.kind, "vpk")
         self.assertEqual(metadata.model_provenance.container_path, vpk_path.resolve())
+
+    def test_full_skin_table_preserves_unused_slots_without_resolving_their_vmt(self) -> None:
+        case = self.cases["static_unused_material_slot"]
+        content = self.root / "content"
+        write_folder_files(content, build_case_files(case))
+
+        metadata = inspect_source_model(
+            self.filesystem("|gameinfo_path|content"),
+            case["logical_model_path"],
+        )
+
+        self.assertEqual(
+            metadata.skin_families,
+            (("body", "unused_accent"), ("body_alt", "unused_accent")),
+        )
+        self.assertEqual(metadata.used_material_slots, (0,))
+        self.assertEqual(metadata.material_names, ("body", "body_alt"))
+        self.assertEqual(
+            [item.logical_path for item in metadata.materials],
+            [
+                "materials/models/fixture/unused/body.vmt",
+                "materials/models/fixture/unused/body_alt.vmt",
+            ],
+        )
 
     def test_corrupt_texture_offset_is_a_categorised_error(self) -> None:
         case = self.cases["dynamic_v44"]

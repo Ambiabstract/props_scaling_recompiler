@@ -40,6 +40,27 @@
         "materials/models/fixture/dynamic/shell.vmt": "VertexLitGeneric {}"
       },
       "companions": [".vvd"]
+    },
+    {
+      "name": "static_unused_material_slot",
+      "logical_model_path": "models/fixture/static_unused.mdl",
+      "internal_model_name": "fixture/static_unused.mdl",
+      "mdl_version": 48,
+      "checksum_hex": "55667788",
+      "static_prop": true,
+      "bone_count": 1,
+      "surface_property": "paper",
+      "cdmaterials": ["models/fixture/unused/"],
+      "skin_families": [
+        ["body", "unused_accent"],
+        ["body_alt", "unused_accent"]
+      ],
+      "used_material_slots": [0],
+      "material_files": {
+        "materials/models/fixture/unused/body.vmt": "VertexLitGeneric {}",
+        "materials/models/fixture/unused/body_alt.vmt": "VertexLitGeneric {}"
+      },
+      "companions": [".vvd"]
     }
   ]
 }
