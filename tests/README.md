@@ -19,7 +19,7 @@ python -m pytest
 python -m unittest discover -s tests -v
 ```
 
-VMT/Patch fixtures и SDK-эксперименты намеренно отложены до этапа реализации покраски.
+`test_srctools_vmt.py` проверяет semantic metadata обычных VMT, существующего color-key, proxies и Patch dependencies в folder/VPK. Material phase остаётся read-only: он назначает generated VMT paths и режим `patch`/`full_copy`, но не пишет материалы и не назначает skin index до появления стабильного cache-backed layout.
 
 `test_srctools_searchpaths.py` создаёт маленькие folder/VPK деревья только внутри системного temporary directory. Он проверяет строгий source order, exact logical path, provenance, `_dir.vpk` resolution и детерминированное раскрытие wildcard без обращения к SDK или пользовательскому проекту.
 

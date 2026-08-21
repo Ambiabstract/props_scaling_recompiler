@@ -1,0 +1,14 @@
+VertexLitGeneric
+{
+    "$basetexture" "models/fixture/accent"
+    "$color2" "{255 255 255}"
+
+    Proxies
+    {
+        Sine
+        {
+            "sinePeriod" "2"
+            "resultVar" "$alpha"
+        }
+    }
+}

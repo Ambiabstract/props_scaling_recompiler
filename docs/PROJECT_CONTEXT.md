@@ -21,13 +21,16 @@
 - `props_scaling_recompiler.py` — незавершённый архитектурный прототип 2.0.
 - Прототип 2.0 синтаксически корректен, но функционально не завершает pipeline: содержит интерактивные остановки, заглушки генерации QC/компиляции, не сохраняет новый кэш и не пишет `vmf_out`.
 - Создан начальный проектный фундамент: `pyproject.toml`, пакет `psr` с архитектурными границами и автономные smoke/contract-тесты, совместимые с pytest и стандартным `unittest`.
-- Зафиксированы первые synthetic fixtures для VMF и GameInfo, а также test-only scale oracle из 35 сущностей `psr_scale_compatibility_01a.vmf`; VMT/Patch fixtures намеренно отложены до этапа покраски.
+- Зафиксированы synthetic fixtures для VMF, GameInfo и VMT/Patch, а также test-only scale oracle из 35 сущностей `psr_scale_compatibility_01a.vmf`.
 - Добавлен первый `srctools` integration spike: ordered SearchPaths plan, ручная цепочка folder/VPK, точный logical-path lookup и provenance победившего источника. Synthetic VPK создаются только во временных каталогах тестов.
 - Добавлен production-адаптер `psr.assets.mdl`: он разрешает исходный MDL через ordered SearchPaths, читает MDL 44–49 посредством `srctools.mdl.Model` и возвращает immutable `SourceAssetMetadata` с provenance, SHA-256 MDL/companions, static flag, `$cdmaterials`, skin families и точными ссылками на найденные VMT. `models/psr_scaled/**` отклоняется до чтения как managed output.
 - Добавлены детерминированные synthetic MDL v44/v48 fixtures и contract-тесты для folder/VPK, static/dynamic, нескольких материалов и skins, отсутствующего VMT и повреждённого offset. Бинарники fixtures строятся во временном каталоге и не коммитятся.
 - Добавлен байтовый source-preserving VMF parser `psr.keyvalues.vmf`: он сохраняет исходные bytes и spans, порядок и повторяющиеся свойства/блоки, различает direct и nested properties, понимает комментарии и не выполняет сериализацию при discovery.
 - Добавлен read-only pipeline `discover_vmf_requests -> inspect_map_sources -> build_operation_plan`. Он игнорирует entities внутри top-level `hidden`, связывает активные VMF requests с `SourceAssetMetadata`, агрегирует generated-model requirements независимо от color/skin и color requirements независимо от scale, но ничего не генерирует и не изменяет VMF.
 - Добавлен pure resolver `psr.domain.resolve_compile_scale`, совпадающий со всеми 35 подтверждёнными Hammer++ cases. Он читает беззнаковый десятичный prefix, использует fallback `1.0`, применяет PSR clamp `0.01` и decimal `ROUND_HALF_UP` до сотых; prefix/fallback/clamp/rounding становятся явными warnings `OperationPlan`. `scaled_model_path()` детерминированно назначает managed `_scaled_XXX` path из целого процента, форматируя его с минимальной шириной 3.
+- Добавлен production-адаптер `psr.assets.vmt` поверх `srctools.vmt.Material`: он разрешает исходный VMT через ordered SearchPaths, раскрывает Patch, нормализует shader/parameters/blocks/proxies, сохраняет provenance и SHA-256 каждого VMT в dependency graph и вычисляет единый dependency fingerprint. Managed input `materials/models/psr_scaled/**` отклоняется до чтения.
+- Добавлена отдельная read-only material phase `inspect_colored_material_sources -> build_colored_material_plan`. Она дедуплицирует identity по полному source VMT path и canonical RGB, назначает managed VMT paths, выбирает существующий `$color`/`$color2` либо `$color2` для подтверждённых `VertexLitGeneric`/`UnlitGeneric`, а неподтверждённые shader'ы превращает в явную ошибку. Прямой VMT планируется как generated Patch; исходный Patch консервативно планируется как `full_copy` до SDK-проверки Patch-chain. Итоговый skin index намеренно остаётся следующему cache-backed skin-layout этапу.
+- Добавлена synthetic VMT matrix для отсутствующего/existing color-key, proxies, Patch, unsupported shader и folder/VPK provenance. Material phase ничего не записывает и не запускает Crowbar/studiomdl.
 - Исследовательские скрипты `is_staticprop.py`, `skins_from_mdl.py` и `mdl_skins_and_cdmaterials*.py` подтверждают возможность чтения static flag, material table, `$cdmaterials` и skin families непосредственно из MDL.
 - Пользовательское незакоммиченное изменение в `props_scaling_recompiler.py`: версия `2.0.0 - dev 001` заменена на `2.0.0 - dev 002`.
 
@@ -449,6 +452,8 @@ debug_logs/psr_big_map_test_02a_props_scaling_recompiler_log.txt
 
 Read-only проверка нового VMF discovery воспроизвела зафиксированные counts и SHA-256 всех трёх приоритетных карт: 27/118/49 активных PSR entities, ноль hidden и ноль structural diagnostics. Для `aa_models_color_tint_test_01a.vmf` все восемь уникальных моделей дополнительно разрешены и прочитаны через production MDL adapter без diagnostics. После подключения scale resolver полный pre-generation plan этой карты также валиден: 27 usages агрегированы в 17 generated-model requirements и 8 color/skin requirements без diagnostics.
 
+Read-only material inventory той же `aa_models_color_tint_test_01a.vmf` при неизменном SHA-256 `18AEDE35A65477A3CECD00B6E063DE3E5807F5FB7388DD77C37F80958F57B69D` нашёл четыре уникальных реально требуемых VMT и восемь `(source VMT, RGB)` generated identities. Все четыре VMT разрешены из folder SearchPath, используют прямой `VertexLitGeneric`, не содержат `$color`/`$color2`, proxies или Patch dependencies. Текущий консервативный план для всех восьми identities валиден и выбирает `$color2` + `insert` + `patch`; внешние файлы не изменялись.
+
 Обновлённая `psr_scale_compatibility_01a.vmf` структурно валидна: 35 active requests, 45 234 байта, SHA-256 `af598164d2d04972a0a2d785fda6688e393ac4b24b177acb4d0919b08a7a12db`. Read-only plan разрешил одну исходную модель и все 35 usages, агрегировав их в 10 generated paths от `_scaled_001` до `_scaled_5500`; ожидаемые prefix/fallback/clamp/rounding warnings не делают plan невалидным.
 
 Отдельная исследовательская карта `psr_scale_compatibility_01a.vmf` используется для эмпирического определения Hammer++-совместимого scale. В её `prop_static_scalable` поле `debug_string` хранит test oracle в формате `effective_scale=<value>` для каждого raw `modelscale`. Oracle соответствует ожидаемому PSR compile scale: обычно он совпадает с viewport Hammer++, но уже учитывает утверждённый clamp значений ниже `0.01`. Это тестовая аннотация, а не поле production/cache schema. Актуальный структурно проверенный снимок и список незакрытых случаев находятся в `docs/research/HAMMERPP_SCALE_COMPATIBILITY.md`. Карта является источником наблюдений, но не должна изменяться автоматическими тестами PSR.
@@ -527,8 +532,8 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 ## Открытые решения
 
 - расширение Hammer++ regression-матрицы редкими формами и верхними пределами;
-- выбор `$color` или `$color2` по shader и поведение для неподдерживаемых shader'ов;
-- точная семантика Patch `insert`/`replace` на SDK 2013 SP;
+- расширение подтверждённой SDK-матрицы `$color`/`$color2` за пределы `VertexLitGeneric`/`UnlitGeneric` и материалов с уже существующим color-key;
+- точная runtime-семантика generated Patch `insert`/`replace` и Patch-chain на SDK 2013 SP;
 - способ fingerprint зависимостей для Patch из VPK;
 - политика переноса legacy-generated модели, выбранной как новый original;
 - формат cache/manifest: вероятный JSON или другая явная схема вместо pickle;

@@ -1,0 +1,5 @@
+Refract
+{
+    "$normalmap" "models/fixture/refract_normal"
+    "$refractamount" "0.05"
+}

@@ -21,10 +21,22 @@ from .mdl import (
     SourceFileMetadata,
     inspect_source_model,
 )
+from .vmt import (
+    ColorParameter,
+    MaterialBlockMetadata,
+    SourceMaterialFileMetadata,
+    SourceMaterialInspectionError,
+    SourceMaterialMetadata,
+    colored_material_path,
+    inspect_source_material,
+    select_color_parameter,
+)
 
 __all__ = [
     "AssetProvenance",
+    "ColorParameter",
     "MaterialReferenceMetadata",
+    "MaterialBlockMetadata",
     "MountedSearchPath",
     "OrderedAssetFileSystem",
     "ResolvedAsset",
@@ -35,9 +47,15 @@ __all__ = [
     "SourceAssetInspectionError",
     "SourceAssetMetadata",
     "SourceFileMetadata",
+    "SourceMaterialFileMetadata",
+    "SourceMaterialInspectionError",
+    "SourceMaterialMetadata",
+    "colored_material_path",
+    "inspect_source_material",
     "inspect_source_model",
     "normalize_logical_path",
     "parse_gameinfo_search_paths",
     "parse_search_paths_text",
     "plan_search_paths",
+    "select_color_parameter",
 ]
