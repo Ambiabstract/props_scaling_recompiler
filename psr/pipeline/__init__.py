@@ -55,9 +55,22 @@ from .generation import (
     generate_and_validate,
 )
 from .reconciliation import reconcile_generation_requirements
+from .vmf_output import VmfOutput, VmfOutputError, build_vmf_output
+from .commit import (
+    CommitArtifact,
+    CommitError,
+    CommitPlan,
+    CommitResult,
+    apply_commit_plan,
+    build_commit_plan,
+)
 
 __all__ = [
     "ColoredSkinRequirement",
+    "CommitArtifact",
+    "CommitError",
+    "CommitPlan",
+    "CommitResult",
     "ColoredMaterialOperationPlan",
     "ColoredMaterialPlan",
     "ColoredSkinMaterialPlan",
@@ -83,11 +96,16 @@ __all__ = [
     "VmfEntityRequest",
     "ValidatedMaterialArtifact",
     "ValidatedModelArtifact",
+    "VmfOutput",
+    "VmfOutputError",
     "WHITE",
     "build_operation_plan",
     "build_qc_operation_plan",
     "build_colored_material_plan",
+    "build_commit_plan",
     "build_skin_layout_plan",
+    "build_vmf_output",
+    "apply_commit_plan",
     "commit_skin_layout_plan",
     "discover_vmf_requests",
     "inspect_colored_material_sources",

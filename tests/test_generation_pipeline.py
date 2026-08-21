@@ -2,18 +2,29 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from psr.assets import OrderedAssetFileSystem, parse_search_paths_text, plan_search_paths
-from psr.cache import build_project_identity, empty_manifest
+from psr.cache import (
+    GeneratedModelRecord,
+    build_project_identity,
+    empty_manifest,
+    load_manifest,
+)
 from psr.pipeline import (
+    CommitError,
     GenerationError,
     StagingWorkspace,
+    apply_commit_plan,
     build_colored_material_plan,
+    build_commit_plan,
     build_operation_plan,
     build_skin_layout_plan,
     discover_vmf_requests,
@@ -257,6 +268,228 @@ class GenerationPipelineTests(unittest.TestCase):
             ))
         assert staging_root is not None
         self.assertFalse(staging_root.exists())
+
+    def test_validated_generation_commits_assets_manifest_and_vmf_together(self) -> None:
+        filesystem, operation, materials, skin_layout = self.plans()
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1.5", "190 48 148")
+            + entity("2", model, "2", "255 255 255")
+        ).encode("ascii")
+        project = build_project_identity(self.gameinfo)
+        manifest = empty_manifest(project)
+        game_output = self.root / "project-game"
+        game_output.mkdir()
+        cache_path = self.root / "cache" / "manifest.json"
+        vmf_output_path = self.root / "maps" / "generation_out.vmf"
+
+        with StagingWorkspace.create(
+            self.staging,
+            operation_identity=operation.map_identity,
+        ) as workspace:
+            generation = generate_and_validate(
+                workspace,
+                filesystem,
+                operation,
+                materials,
+                skin_layout,
+                crowbar_command=(sys.executable, self.crowbar),
+                studiomdl_command=(sys.executable, self.studiomdl),
+            )
+            commit_plan = build_commit_plan(
+                source_vmf,
+                manifest,
+                operation,
+                materials,
+                skin_layout,
+                generation,
+            )
+            result = apply_commit_plan(
+                commit_plan,
+                game_directory=game_output,
+                manifest_path=cache_path,
+                vmf_output_path=vmf_output_path,
+            )
+
+        self.assertEqual(len(result.published_artifacts), 14)
+        self.assertTrue(all(path.is_file() for path in result.published_artifacts))
+        loaded = load_manifest(cache_path, project)
+        self.assertEqual(loaded.status, "loaded")
+        self.assertEqual(len(loaded.manifest.generated_models), 2)
+        self.assertEqual(len(loaded.manifest.colored_materials), 2)
+        self.assertEqual(len(loaded.manifest.skin_mappings), 1)
+        self.assertEqual(len(loaded.manifest.map_usages), 2)
+        output = vmf_output_path.read_bytes()
+        self.assertEqual(output.count(b'"classname" "prop_static"'), 2)
+        self.assertNotIn(b'"modelscale"', output)
+        self.assertNotIn(b'"rendercolor"', output)
+        self.assertIn(b'"skin" "2"', output)
+        self.assertIn(b'"skin" "0"', output)
+        self.assertFalse((self.content / "models/psr_scaled").exists())
+        self.assertFalse((self.content / "materials/models/psr_scaled").exists())
+
+    def test_changed_staged_artifact_aborts_commit_before_project_writes(self) -> None:
+        filesystem, operation, materials, skin_layout = self.plans()
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1.5", "190 48 148")
+            + entity("2", model, "2", "255 255 255")
+        ).encode("ascii")
+        game_output = self.root / "project-game"
+        game_output.mkdir()
+        cache_path = self.root / "cache.json"
+        vmf_output_path = self.root / "output.vmf"
+
+        with StagingWorkspace.create(
+            self.staging,
+            operation_identity=operation.map_identity,
+        ) as workspace:
+            generation = generate_and_validate(
+                workspace,
+                filesystem,
+                operation,
+                materials,
+                skin_layout,
+                crowbar_command=(sys.executable, self.crowbar),
+                studiomdl_command=(sys.executable, self.studiomdl),
+            )
+            generation.models[0].validation.files[0].physical_path.write_bytes(b"changed")
+
+            with self.assertRaises(CommitError) as raised:
+                build_commit_plan(
+                    source_vmf,
+                    empty_manifest(build_project_identity(self.gameinfo)),
+                    operation,
+                    materials,
+                    skin_layout,
+                    generation,
+                )
+
+        self.assertEqual(raised.exception.code, "commit_artifact_changed")
+        self.assertEqual(list(game_output.rglob("*")), [])
+        self.assertFalse(cache_path.exists())
+        self.assertFalse(vmf_output_path.exists())
+
+    def test_mid_transaction_failure_restores_every_previous_target(self) -> None:
+        filesystem, operation, materials, skin_layout = self.plans()
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1.5", "190 48 148")
+            + entity("2", model, "2", "255 255 255")
+        ).encode("ascii")
+        game_output = self.root / "project-game"
+        game_output.mkdir()
+        cache_path = self.root / "cache.json"
+        vmf_output_path = self.root / "output.vmf"
+        cache_path.write_bytes(b"old-cache")
+        vmf_output_path.write_bytes(b"old-vmf")
+
+        with StagingWorkspace.create(
+            self.staging,
+            operation_identity=operation.map_identity,
+        ) as workspace:
+            generation = generate_and_validate(
+                workspace,
+                filesystem,
+                operation,
+                materials,
+                skin_layout,
+                crowbar_command=(sys.executable, self.crowbar),
+                studiomdl_command=(sys.executable, self.studiomdl),
+            )
+            commit_plan = build_commit_plan(
+                source_vmf,
+                empty_manifest(build_project_identity(self.gameinfo)),
+                operation,
+                materials,
+                skin_layout,
+                generation,
+            )
+            first = commit_plan.artifacts[0]
+            old_artifact = game_output.joinpath(
+                *Path(first.logical_path).parts
+            )
+            old_artifact.parent.mkdir(parents=True, exist_ok=True)
+            old_artifact.write_bytes(b"old-artifact")
+            real_replace = os.replace
+
+            def fail_vmf_install(source: Path, destination: Path) -> None:
+                if (
+                    Path(destination).resolve() == vmf_output_path.resolve()
+                    and str(source).endswith(".psr-new")
+                ):
+                    raise OSError("synthetic VMF install failure")
+                real_replace(source, destination)
+
+            with patch("psr.pipeline.commit._replace_path", side_effect=fail_vmf_install):
+                with self.assertRaises(CommitError) as raised:
+                    apply_commit_plan(
+                        commit_plan,
+                        game_directory=game_output,
+                        manifest_path=cache_path,
+                        vmf_output_path=vmf_output_path,
+                    )
+
+        self.assertEqual(raised.exception.code, "commit_transaction_failed")
+        self.assertEqual(old_artifact.read_bytes(), b"old-artifact")
+        self.assertEqual(cache_path.read_bytes(), b"old-cache")
+        self.assertEqual(vmf_output_path.read_bytes(), b"old-vmf")
+        remaining_files = {
+            path.resolve()
+            for path in game_output.rglob("*")
+            if path.is_file()
+        }
+        self.assertEqual(remaining_files, {old_artifact.resolve()})
+        self.assertFalse(any(self.root.rglob("*.psr-new")))
+        self.assertFalse(any(self.root.rglob("*.psr-backup")))
+
+    def test_commit_rejects_cached_scale_omitted_from_required_reconciliation(self) -> None:
+        filesystem, operation, materials, skin_layout = self.plans()
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1.5", "190 48 148")
+            + entity("2", model, "2", "255 255 255")
+        ).encode("ascii")
+        manifest = empty_manifest(build_project_identity(self.gameinfo))
+        manifest = replace(manifest, generated_models=(GeneratedModelRecord(
+            logical_source_model=model,
+            compile_scale_percent=300,
+            logical_output_model=(
+                "models/psr_scaled/fixture/static_multi_scaled_300.mdl"
+            ),
+            requires_static_conversion=False,
+            skin_layout_fingerprint="a" * 64,
+            expected_files=(
+                "models/psr_scaled/fixture/static_multi_scaled_300.mdl",
+            ),
+            artifact_fingerprint="b" * 64,
+        ),))
+
+        with StagingWorkspace.create(
+            self.staging,
+            operation_identity=operation.map_identity,
+        ) as workspace:
+            generation = generate_and_validate(
+                workspace,
+                filesystem,
+                operation,
+                materials,
+                skin_layout,
+                crowbar_command=(sys.executable, self.crowbar),
+                studiomdl_command=(sys.executable, self.studiomdl),
+            )
+
+            with self.assertRaises(CommitError) as raised:
+                build_commit_plan(
+                    source_vmf,
+                    manifest,
+                    operation,
+                    materials,
+                    skin_layout,
+                    generation,
+                )
+
+        self.assertEqual(raised.exception.code, "commit_reconciliation_incomplete")
 
     def test_capacity_fallback_does_not_generate_rejected_colored_materials(self) -> None:
         model = self.case["logical_model_path"]
