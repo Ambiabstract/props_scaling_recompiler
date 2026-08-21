@@ -1,0 +1,18 @@
+{
+  "schema_version": 0,
+  "project": {
+    "project_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "normalized_gameinfo_path": "c:/fixture/gameinfo.txt",
+    "gameinfo_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "skin_mappings": [
+    {
+      "logical_source_model": "models/fixture/item.mdl",
+      "source_skin": 0,
+      "render_color": [190, 48, 148],
+      "final_skin_index": 1,
+      "source_skin_families_fingerprint": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "layout_fingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ]
+}

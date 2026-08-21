@@ -31,6 +31,8 @@
 - Добавлен production-адаптер `psr.assets.vmt` поверх `srctools.vmt.Material`: он разрешает исходный VMT через ordered SearchPaths, раскрывает Patch, нормализует shader/parameters/blocks/proxies, сохраняет provenance и SHA-256 каждого VMT в dependency graph и вычисляет единый dependency fingerprint. Managed input `materials/models/psr_scaled/**` отклоняется до чтения.
 - Добавлена отдельная read-only material phase `inspect_colored_material_sources -> build_colored_material_plan`. Она дедуплицирует identity по полному source VMT path и canonical RGB, назначает managed VMT paths, выбирает существующий `$color`/`$color2` либо `$color2` для подтверждённых `VertexLitGeneric`/`UnlitGeneric`, а неподтверждённые shader'ы превращает в явную ошибку. Прямой VMT планируется как generated Patch; исходный Patch консервативно планируется как `full_copy` до SDK-проверки Patch-chain. Итоговый skin index намеренно остаётся следующему cache-backed skin-layout этапу.
 - Добавлена synthetic VMT matrix для отсутствующего/existing color-key, proxies, Patch, unsupported shader и folder/VPK provenance. Material phase ничего не записывает и не запускает Crowbar/studiomdl.
+- Добавлен project-scoped JSON manifest schema v1 в `psr.cache`: нормализованный абсолютный `GameInfo.txt` задаёт стабильный `project_id`, текущий SHA-256 GameInfo хранится отдельно, а SourceAsset/GeneratedModel/ColoredMaterial/SkinMapping/MapUsage являются раздельными строго валидируемыми таблицами. Поддержаны migration v0→v1, безопасный cold start/recovery повреждённого или несовместимого cache и атомарная запись temp+`os.replace`; путь хранения пока передаётся явно до CLI-интеграции.
+- Добавлен pure cache-backed `build_skin_layout_plan`: исходные skin indices сохраняются, валидные ранее назначенные colored mappings удерживают индексы, новые `(source skin, RGB)` сортируются и дописываются после них. Полный layout получает fingerprint; entity получает отдельный final skin assignment. `commit_skin_layout_plan` только строит manifest-кандидат и не пишет его: вызывать его разрешено после будущей проверки generated artifacts. При изменении исходной skin table старые mappings и связанные `MapUsage` других карт для модели инвалидируются.
 - Исследовательские скрипты `is_staticprop.py`, `skins_from_mdl.py` и `mdl_skins_and_cdmaterials*.py` подтверждают возможность чтения static flag, material table, `$cdmaterials` и skin families непосредственно из MDL.
 - Пользовательское незакоммиченное изменение в `props_scaling_recompiler.py`: версия `2.0.0 - dev 001` заменена на `2.0.0 - dev 002`.
 
@@ -454,6 +456,8 @@ Read-only проверка нового VMF discovery воспроизвела �
 
 Read-only material inventory той же `aa_models_color_tint_test_01a.vmf` при неизменном SHA-256 `18AEDE35A65477A3CECD00B6E063DE3E5807F5FB7388DD77C37F80958F57B69D` нашёл четыре уникальных реально требуемых VMT и восемь `(source VMT, RGB)` generated identities. Все четыре VMT разрешены из folder SearchPath, используют прямой `VertexLitGeneric`, не содержат `$color`/`$color2`, proxies или Patch dependencies. Текущий консервативный план для всех восьми identities валиден и выбирает `$color2` + `insert` + `patch`; внешние файлы не изменялись.
 
+Cold-cache skin-layout inventory этой карты построил восемь model layouts и 27 final entity assignments без ошибок. Восемь colored mappings распределены между `airplane_funal_parachute` (исходный skin 0, цветной index 1) и `book_2` (восемь исходных rows 0–7, семь цветных rows 8–14). Для `book_2` mappings отсортированы по `(source skin, RGB)`, поэтому skins 0/1/2 и все запрошенные цвета получают воспроизводимые индексы; Antenna и manifest при inventory не изменялись.
+
 Обновлённая `psr_scale_compatibility_01a.vmf` структурно валидна: 35 active requests, 45 234 байта, SHA-256 `af598164d2d04972a0a2d785fda6688e393ac4b24b177acb4d0919b08a7a12db`. Read-only plan разрешил одну исходную модель и все 35 usages, агрегировав их в 10 generated paths от `_scaled_001` до `_scaled_5500`; ожидаемые prefix/fallback/clamp/rounding warnings не делают plan невалидным.
 
 Отдельная исследовательская карта `psr_scale_compatibility_01a.vmf` используется для эмпирического определения Hammer++-совместимого scale. В её `prop_static_scalable` поле `debug_string` хранит test oracle в формате `effective_scale=<value>` для каждого raw `modelscale`. Oracle соответствует ожидаемому PSR compile scale: обычно он совпадает с viewport Hammer++, но уже учитывает утверждённый clamp значений ниже `0.01`. Это тестовая аннотация, а не поле production/cache schema. Актуальный структурно проверенный снимок и список незакрытых случаев находятся в `docs/research/HAMMERPP_SCALE_COMPATIBILITY.md`. Карта является источником наблюдений, но не должна изменяться автоматическими тестами PSR.
@@ -536,7 +540,6 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - точная runtime-семантика generated Patch `insert`/`replace` и Patch-chain на SDK 2013 SP;
 - способ fingerprint зависимостей для Patch из VPK;
 - политика переноса legacy-generated модели, выбранной как новый original;
-- формат cache/manifest: вероятный JSON или другая явная схема вместо pickle;
 - обработка частичного успеха, когда одна из моделей карты не компилируется;
 - допустимость параллельного запуска двух Hammer compile jobs для одного проекта;
 - место и lifecycle staging/temp каталогов;
@@ -555,5 +558,6 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - Normal cleanup управляет только новыми managed roots.
 - Legacy migration/cleanup является отдельной операцией.
 - Покраска предпочитает Patch с fallback на полную VMT-копию.
+- Project cache использует строго валидируемый versioned JSON manifest, изолированный нормализованной identity `GameInfo.txt`, и атомарный replace вместо pickle.
 - Первый 2.0 ограничен Source SDK 2013 SP.
 - Архитектурная память хранится в этом документе, обязательные рабочие правила — в корневом `AGENTS.md`.

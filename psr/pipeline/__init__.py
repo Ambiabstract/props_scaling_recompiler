@@ -24,24 +24,38 @@ from .materials import (
     build_colored_material_plan,
     inspect_colored_material_sources,
 )
+from .skin_layout import (
+    EntitySkinAssignment,
+    ModelSkinLayoutPlan,
+    SkinLayoutOperationPlan,
+    build_skin_layout_plan,
+    commit_skin_layout_plan,
+    source_skin_families_fingerprint,
+)
 
 __all__ = [
     "ColoredSkinRequirement",
     "ColoredMaterialOperationPlan",
     "ColoredMaterialPlan",
     "ColoredSkinMaterialPlan",
+    "EntitySkinAssignment",
     "GeneratedModelRequirement",
     "InspectedMap",
     "MapDiscovery",
     "MapUsagePlan",
     "MaterialInspection",
+    "ModelSkinLayoutPlan",
     "OperationPlan",
     "PipelineDiagnostic",
+    "SkinLayoutOperationPlan",
     "VmfEntityRequest",
     "WHITE",
     "build_operation_plan",
     "build_colored_material_plan",
+    "build_skin_layout_plan",
+    "commit_skin_layout_plan",
     "discover_vmf_requests",
     "inspect_colored_material_sources",
     "inspect_map_sources",
+    "source_skin_families_fingerprint",
 ]
