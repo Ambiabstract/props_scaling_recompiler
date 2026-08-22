@@ -26,6 +26,9 @@ from .materials import ColoredMaterialOperationPlan, ColoredSkinMaterialPlan
 from .planning import OperationPlan, WHITE
 
 
+_QC_MATERIAL_BINDING_VERSION = 2
+
+
 @dataclass(frozen=True, slots=True)
 class ModelSkinLayoutPlan:
     """Complete source and generated skin-family table for one model."""
@@ -78,6 +81,8 @@ def build_skin_layout_plan(
     diagnostics = list(materials.diagnostics)
     usages_by_model: dict[str, list] = {}
     for usage in operation.usages:
+        if usage.operation == "reuse_dynamic":
+            continue
         usages_by_model.setdefault(usage.request.logical_model_path, []).append(usage)
     assets = {
         asset.logical_model_path: asset
@@ -296,7 +301,7 @@ def build_skin_layout_plan(
     assignments: list[EntitySkinAssignment] = []
     for usage in operation.usages:
         used_color_fallback = False
-        if usage.render_color == WHITE:
+        if usage.operation == "reuse_dynamic" or usage.render_color == WHITE:
             target_skin = usage.source_skin
         else:
             mapping = mapping_by_identity.get((
@@ -603,6 +608,10 @@ def _layout_fingerprint(
     return _canonical_fingerprint({
         "logical_source_model": logical_source_model,
         "families": [list(family) for family in families],
+        # v2 binds managed texture names relative to models/psr_scaled/ via a
+        # dedicated $cdmaterials entry. Bumping this value invalidates models
+        # compiled with the former duplicated runtime path.
+        "qc_material_binding_version": _QC_MATERIAL_BINDING_VERSION,
     })
 
 

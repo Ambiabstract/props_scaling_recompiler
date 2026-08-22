@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import unittest
 from decimal import Decimal
 from pathlib import Path
@@ -9,9 +8,7 @@ from psr.assets.qc import (
     QCTransformError,
     build_reference_qc,
     build_scaled_qc,
-    first_body_reference_smd,
     inspect_qc,
-    static_bodygroup_empty_smd_name,
 )
 
 
@@ -58,27 +55,18 @@ class QCInspectionTests(unittest.TestCase):
 
 
 class ReferenceQCTransformTests(unittest.TestCase):
-    def test_dynamic_static_conversion_replaces_bodygroup_blank_with_empty_smd(self) -> None:
+    def test_dynamic_static_conversion_rejects_blank_bodygroup(self) -> None:
         source = (FIXTURES / "dynamic_bodygroup_blank.qc").read_bytes()
-        expected_name = static_bodygroup_empty_smd_name(
-            hashlib.sha256(source).hexdigest()
-        )
 
-        result = build_reference_qc(
-            source,
-            expected_source_families=(("body",),),
-            target_families=(("body",),),
-            require_staticprop=True,
-        )
+        with self.assertRaises(QCTransformError) as raised:
+            build_reference_qc(
+                source,
+                expected_source_families=(("body",),),
+                target_families=(("body",),),
+                require_staticprop=True,
+            )
 
-        self.assertIn(b"$staticprop", result.data)
-        self.assertIn(f'studio "{expected_name}"'.encode("ascii"), result.data)
-        self.assertNotIn(b"\n    blank", result.data)
-        self.assertEqual(first_body_reference_smd(source), "door_reference.smd")
-        self.assertEqual(
-            result.mutations,
-            ("insert_staticprop", "replace_bodygroup_blanks"),
-        )
+        self.assertEqual(raised.exception.code, "empty_bodygroup_static_conversion")
 
     def test_existing_static_bodygroup_blank_is_not_rewritten(self) -> None:
         source = (
@@ -124,7 +112,7 @@ class ReferenceQCTransformTests(unittest.TestCase):
         target_families = (
             ("body", "detail"),
             ("body_alt", "detail_alt"),
-            ("models/psr_scaled/body_col_ff0000", "detail"),
+            ("models/psr_scaled/props/example/body_col_ff0000", "detail"),
         )
 
         result = build_reference_qc(
@@ -137,10 +125,26 @@ class ReferenceQCTransformTests(unittest.TestCase):
 
         self.assertEqual(
             result.mutations,
-            ("insert_staticprop", "replace_skinfamilies"),
+            (
+                "insert_staticprop",
+                "insert_managed_cdmaterials",
+                "replace_skinfamilies",
+            ),
         )
         self.assertTrue(metadata.is_static_prop)
-        self.assertEqual(metadata.skin_families, target_families)
+        self.assertEqual(
+            metadata.skin_families,
+            (
+                ("body", "detail"),
+                ("body_alt", "detail_alt"),
+                ("props/example/body_col_ff0000", "detail"),
+            ),
+        )
+        self.assertIn(b'$cdmaterials "models/psr_scaled/"', result.data)
+        self.assertNotIn(
+            b'"models/psr_scaled/props/example/body_col_ff0000"',
+            result.data,
+        )
         self.assertIn(b'$modelname "props/example_dynamic.mdl" // keep this comment', result.data)
         collision = source[source.index(b"$collisionjoints"):source.index(b"$sequence")]
         self.assertIn(collision, result.data)

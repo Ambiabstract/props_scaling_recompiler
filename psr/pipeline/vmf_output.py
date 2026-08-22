@@ -11,11 +11,12 @@ from .planning import MapUsagePlan, OperationPlan
 from .skin_layout import EntitySkinAssignment, SkinLayoutOperationPlan
 
 
-_PSR_ONLY_KEYS = {
+_STATIC_PSR_ONLY_KEYS = {
     b"modelscale",
     b"rendercolor",
     b"convert_prop_to_static",
 }
+_DYNAMIC_PSR_ONLY_KEYS = {b"convert_prop_to_static"}
 
 
 class VmfOutputError(RuntimeError):
@@ -115,6 +116,7 @@ def build_vmf_output(
         )
 
     edits: list[_Edit] = []
+    preserved_dynamic: dict[str, dict[bytes, tuple[bytes, ...]]] = {}
     for entity_id in sorted(usage_by_id, key=int):
         usage = usage_by_id[entity_id]
         assignment = assignment_by_id[entity_id]
@@ -148,22 +150,28 @@ def build_vmf_output(
                 f"entity {entity_id}: duplicate direct 'skin' properties",
             )
 
-        edits.append(_replace_value(classname, "prop_static", value_encoding))
-        edits.append(_replace_value(
-            model,
-            assignment.logical_output_model,
-            value_encoding,
-        ))
-        if skin_values:
+        edits.append(_replace_value(classname, usage.output_classname, value_encoding))
+        if usage.operation == "reuse_dynamic":
+            preserved_dynamic[entity_id] = {
+                key: block.direct_values(key)
+                for key in (b"model", b"modelscale", b"rendercolor", b"skin")
+            }
+        else:
             edits.append(_replace_value(
-                skin_values[0],
-                str(assignment.target_skin),
+                model,
+                assignment.logical_output_model,
                 value_encoding,
             ))
-        else:
-            edits.append(_insert_skin(source, block, assignment.target_skin))
+            if skin_values:
+                edits.append(_replace_value(
+                    skin_values[0],
+                    str(assignment.target_skin),
+                    value_encoding,
+                ))
+            else:
+                edits.append(_insert_skin(source, block, assignment.target_skin))
 
-        for key in _PSR_ONLY_KEYS:
+        for key in _removed_keys(usage):
             for prop in properties.get(key, []):
                 start, end = _property_removal_span(source, prop)
                 edits.append(_Edit(start, end, b""))
@@ -174,6 +182,7 @@ def build_vmf_output(
         result.blocks,
         usage_by_id,
         assignment_by_id,
+        preserved_dynamic,
         value_encoding=value_encoding,
     )
     ids = tuple(sorted(usage_by_id, key=int))
@@ -301,6 +310,7 @@ def _validate_result(
     blocks: tuple[Block, ...],
     usages: dict[str, MapUsagePlan],
     assignments: dict[str, EntitySkinAssignment],
+    preserved_dynamic: dict[str, dict[bytes, tuple[bytes, ...]]],
     *,
     value_encoding: str,
 ) -> None:
@@ -325,10 +335,13 @@ def _validate_result(
         found.add(entity_id)
         assignment = assignments[entity_id]
         expected = {
-            b"classname": b"prop_static",
-            b"model": assignment.logical_output_model.encode(value_encoding),
-            b"skin": str(assignment.target_skin).encode("ascii"),
+            b"classname": usages[entity_id].output_classname.encode("ascii"),
         }
+        if usages[entity_id].operation != "reuse_dynamic":
+            expected.update({
+                b"model": assignment.logical_output_model.encode(value_encoding),
+                b"skin": str(assignment.target_skin).encode("ascii"),
+            })
         for key, value in expected.items():
             actual = block.direct_values(key)
             if actual != (value,):
@@ -338,7 +351,7 @@ def _validate_result(
                 )
         remaining = sorted(
             key.decode("ascii")
-            for key in _PSR_ONLY_KEYS
+            for key in _removed_keys(usages[entity_id])
             if block.direct_values(key)
         )
         if remaining:
@@ -346,12 +359,27 @@ def _validate_result(
                 "vmf_output_psr_key_retained",
                 f"entity {entity_id}: retained PSR-only keys {remaining!r}",
             )
+        if usages[entity_id].operation == "reuse_dynamic":
+            for key, value in preserved_dynamic[entity_id].items():
+                actual = block.direct_values(key)
+                if actual != value:
+                    raise VmfOutputError(
+                        "vmf_output_dynamic_property_changed",
+                        f"entity {entity_id}: {key!r} is {actual!r}, "
+                        f"expected preserved value {value!r}",
+                    )
     if found != set(usages):
         missing = sorted(set(usages) - found, key=int)
         raise VmfOutputError(
             "vmf_output_target_missing",
             f"transformed entity IDs missing after editing: {missing!r}",
         )
+
+
+def _removed_keys(usage: MapUsagePlan) -> set[bytes]:
+    if usage.operation == "reuse_dynamic":
+        return _DYNAMIC_PSR_ONLY_KEYS
+    return _STATIC_PSR_ONLY_KEYS
 
 
 __all__ = [

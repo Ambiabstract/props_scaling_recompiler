@@ -22,8 +22,8 @@
 
 - Единственный суффикс производной модели — `_scaled_XXX`, где `XXX` — итоговый compile scale, округлённый через decimal `ROUND_HALF_UP` до сотых и точно преобразованный в целый процент с минимальной шириной 3. Значения короче дополняются ведущими нулями (`1 -> 001`, `50 -> 050`), значения длиннее не ограничиваются (`1000`, `5500`).
 - Не интерпретировать существующий `_static` в имени оригинала: `foo_static.mdl` при масштабе 1.5 превращается в `foo_static_scaled_150.mdl`.
-- Оригинальную модель разрешено использовать напрямую только если она уже static prop, итоговый PSR compile scale равен 1.0 и цвет равен `255 255 255`.
-- Во всех остальных случаях, включая dynamic при масштабе 1.0 и покрашенный static при масштабе 1.0, создавать `_scaled_100`.
+- Оригинальную модель разрешено использовать напрямую, если она уже static prop, итоговый PSR compile scale равен 1.0 и цвет равен `255 255 255`, либо если сработал утверждённый для 2.0 dynamic fallback пустого bodygroup option.
+- Во всех остальных случаях, включая обычный dynamic при масштабе 1.0 и покрашенный static при масштабе 1.0, создавать `_scaled_100`.
 - Источник истины для effective scale — видимое поведение Hammer++: `blablabla -> 1.0`, `1,0 -> 1.0`, `3,0 -> 3.0`.
 - Единственное утверждённое исключение: Hammer-visible effective scale ниже `0.01` клампить для компиляции до `0.01`. Например, `0.001` визуально остаётся `0.001`, но PSR compile scale равен `0.01`. Это намеренное ограничение ради практической полезности и производительности; его нужно явно диагностировать.
 - В production-модели и кэше хранить только raw `modelscale` для provenance/диагностики и итоговый PSR compile scale для identity. Hammer-compatible effective scale использовать только как oracle в исследованиях и тестах; не включать его в cache schema и не сохранять как состояние проекта. Разные raw-значения могут намеренно схлопываться в один generated artifact после Hammer-совместимой нормализации или нижнего clamp.
@@ -36,7 +36,7 @@
 - Не редактировать VMF регулярными выражениями через блоки и фигурные скобки.
 - Парсер и writer должны сохранять порядок, повторяющиеся ключи/блоки, комментарии, переносы строк, кодировку и нетронутые байты настолько, насколько это возможно.
 - Перед изменением VMF валидировать вход; после изменения валидировать результат и проверять количество/идентичность затронутых сущностей.
-- В итоговом `prop_static` удалять PSR-only keys, включая raw `modelscale`, `rendercolor` и legacy `convert_prop_to_static`. Обычные properties `prop_static` сохранять; `skin` записывать как итоговый mapped skin index, а не удалять вместе с PSR-only полями.
+- В итоговом `prop_static` удалять PSR-only keys, включая raw `modelscale`, `rendercolor` и legacy `convert_prop_to_static`; `skin` записывать как итоговый mapped index. В утверждённом dynamic fallback сохранять исходные `model`, `modelscale`, `rendercolor` и `skin`, потому что их применяет `prop_dynamic`; удалять только `convert_prop_to_static` и будущие служебные PSR keys, не являющиеся runtime properties динамической сущности.
 - Скрытые сущности не обрабатывать, но при отсутствии активных PSR-сущностей всё равно корректно создавать `vmf_out` как эквивалент входа.
 - SearchPaths разрешать строго по порядку из GameInfo: первый существующий точный логический путь побеждает. Не продолжать поиск после успешного разрешения.
 - Поддерживать `|gameinfo_path|`, `|all_source_engine_paths|`, `.`, `*`, явные VPK и относительные engine-пути. Не путать логический Hammer-путь с физическим источником в папке или VPK.
@@ -68,6 +68,9 @@
 
 - Сначала добавлять небольшие fixtures и тесты для VMF, GameInfo/SearchPaths, QC, VMT/Patch, MDL metadata и cache schema; затем менять поведение.
 - Для интеграционных проверок использовать копии/выделенные fixtures. Не запускать force-cleanup или массовую рекомпиляцию Antenna без явного разрешения пользователя.
+- Перед любым автоматизированным запуском Hammer/игры снять точный snapshot всех пользовательских настроек, которые могут изменить launch arguments или сам процесс: как минимум Source registry `ScreenWidth`, `ScreenHeight`, `ScreenWindowed`, `ScreenNoBorder`, а также затрагиваемые CFG/video files. Не передавать `-w`, `-h`, `-windowed`, `-fullscreen`, `-noborder` без необходимости. Восстанавливать snapshot в `finally` после любого исхода — штатного завершения, принудительной остановки, timeout или crash — и повторно читать значения для доказательства восстановления.
+- Игровой runtime-тест считается пройденным только на fully compiled `VBSP -> VVIS -> VRAD` BSP и после достаточного окна наблюдения. Достижение sign-on, отсутствие нового dump в коротком запуске или успешный VBSP сами по себе не доказывают runtime-безопасность generated MDL/VMT.
+- Zero-triangle SMD нельзя использовать как production bodygroup placeholder. Полевой тест `door02_double` доказал, что StudioMDL принимает такой MDL, но `shaderapidx9.dll` падает при его runtime-отрисовке. Для версии 2.0 dynamic source MDL с пустым option многовариантного bodygroup определяется по `studiohdr` (`nummodels > 1`, один option имеет `nummeshes == 0`) и вообще не передаётся Crowbar/StudioMDL: исходные `model`, `modelscale`, `rendercolor` и `skin` сохраняются, меняется только classname на `prop_dynamic` и удаляются нерелевантные служебные PSR keys. Полноценная static-конвертация таких моделей остаётся будущей SMD-aware задачей и не должна возвращать zero-triangle placeholder.
 - Приоритетные read-only integration-карты Antenna: `aa_models_color_tint_test_01a.vmf`, `aa_models_static_convert_test_01a.vmf`, `psr_test_01a.vmf`. Их назначение и контрольные показатели описаны в `docs/PROJECT_CONTEXT.md`.
 - Не считать всё содержимое integration-карт обычным happy-path input. Static-convert-map намеренно содержит legacy и Hammer++ compatibility-сценарии, включая необычные raw scale strings.
 - После изменения проверять синтаксис, целевые unit-тесты, структурную валидность выходных файлов и итоговый diff.

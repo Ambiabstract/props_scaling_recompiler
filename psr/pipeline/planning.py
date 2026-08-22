@@ -28,8 +28,9 @@ class MapUsagePlan:
     geometry_scale: Decimal
     source_skin: int
     render_color: tuple[int, int, int]
-    operation: Literal["reuse_original", "generate_model"]
+    operation: Literal["reuse_original", "reuse_dynamic", "generate_model"]
     logical_output_model: str
+    output_classname: Literal["prop_static", "prop_dynamic"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,15 +117,23 @@ def build_operation_plan(
         render_color = _parse_color(request, diagnostics)
         if source_skin is None or render_color is None:
             continue
-        if render_color != WHITE and not _materials_available(
-            request,
-            asset,
-            source_skin,
-            diagnostics,
+        dynamic_fallback = _requires_dynamic_fallback(asset)
+        if (
+            not dynamic_fallback
+            and render_color != WHITE
+            and not _materials_available(
+                request,
+                asset,
+                source_skin,
+                diagnostics,
+            )
         ):
             continue
-        operation: Literal["reuse_original", "generate_model"]
-        if asset.is_static_prop and compile_scale == 1 and render_color == WHITE:
+        operation: Literal["reuse_original", "reuse_dynamic", "generate_model"]
+        if dynamic_fallback:
+            operation = "reuse_dynamic"
+            logical_output_model = request.logical_model_path
+        elif asset.is_static_prop and compile_scale == 1 and render_color == WHITE:
             operation = "reuse_original"
             logical_output_model = request.logical_model_path
         else:
@@ -141,7 +150,20 @@ def build_operation_plan(
             render_color,
             operation,
             logical_output_model,
+            "prop_dynamic" if dynamic_fallback else "prop_static",
         ))
+        if dynamic_fallback:
+            diagnostics.append(PipelineDiagnostic(
+                "warning",
+                "dynamic_bodygroup_fallback",
+                (
+                    f"{request.logical_model_path} contains an empty bodygroup option; "
+                    "the original model is retained as prop_dynamic with runtime scale, "
+                    "skin, and render color; no PSR assets are generated"
+                ),
+                request.entity_id,
+                request.source_line,
+            ))
 
     generated_models = _group_generated_models(usages, assets)
     colored_skins = _group_colored_skins(usages, assets)
@@ -263,13 +285,17 @@ def _group_generated_models(
     )
 
 
+def _requires_dynamic_fallback(asset: SourceAssetMetadata) -> bool:
+    return not asset.is_static_prop and asset.has_empty_bodygroup_option
+
+
 def _group_colored_skins(
     usages: list[MapUsagePlan],
     assets: Mapping[str, SourceAssetMetadata],
 ) -> tuple[ColoredSkinRequirement, ...]:
     grouped: dict[tuple[str, int, tuple[int, int, int]], list[str]] = {}
     for usage in usages:
-        if usage.render_color == WHITE:
+        if usage.operation == "reuse_dynamic" or usage.render_color == WHITE:
             continue
         key = (
             usage.request.logical_model_path,

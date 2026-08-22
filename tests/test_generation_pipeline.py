@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from psr.assets import (
     OrderedAssetFileSystem,
-    build_empty_bodygroup_smd,
+    inspect_qc,
     parse_search_paths_text,
     plan_search_paths,
 )
@@ -110,11 +110,6 @@ $bodygroup "body"
 {
     studio "body.smd"
 }
-$bodygroup "optional"
-{
-    blank
-    studio "body.smd"
-}
 $cdmaterials "models/fixture/dynamic/"
 $texturegroup "skinfamilies"
 {
@@ -122,6 +117,12 @@ $texturegroup "skinfamilies"
 }
 $sequence "idle" "body.smd"
 '''
+
+SOURCE_DYNAMIC_BLANK_QC = SOURCE_DYNAMIC_QC.replace(
+    b'$modelname "fixture/dynamic_v44.mdl"\n',
+    b'$modelname "fixture/dynamic_blank.mdl"\n'
+    b'$bodygroup "optional"\n{\n    blank\n    studio "body.smd"\n}\n',
+)
 
 SOURCE_REFERENCE_SMD = b'''version 1
 nodes
@@ -153,6 +154,8 @@ model = pathlib.Path(args[args.index("-p") + 1])
 output.mkdir(parents=True, exist_ok=True)
 if model.stem == "dynamic_v44":
     (output / "dynamic_v44.qc").write_bytes({SOURCE_DYNAMIC_QC!r})
+elif model.stem == "dynamic_blank":
+    (output / "dynamic_blank.qc").write_bytes({SOURCE_DYNAMIC_BLANK_QC!r})
 else:
     (output / "static_multi.qc").write_bytes({SOURCE_QC!r})
 (output / "body.smd").write_bytes({SOURCE_REFERENCE_SMD!r})
@@ -182,7 +185,7 @@ target.parent.mkdir(parents=True, exist_ok=True)
 data = bytearray(156)
 encoded = name.encode("ascii")
 struct.pack_into("<4si4s64s", data, 0, b"IDST", 48, b"ABCD", encoded)
-struct.pack_into("<I", data, 152, 0x10)
+struct.pack_into("<I", data, 152, 0x10 if "$staticprop" in text else 0)
 target.write_bytes(data)
 target.with_suffix(".vvd").write_bytes(b"vvd")
 target.with_suffix(".dx80.vtx").write_bytes(b"vtx80")
@@ -971,22 +974,58 @@ class GenerationPipelineTests(unittest.TestCase):
                 "models/psr_scaled/fixture/dynamic_v44_scaled_100.mdl",
             )
             self.assertIn("insert_staticprop", result.qc_plan.references[0].mutations)
-            reference = result.qc_plan.references[0]
-            self.assertIn("replace_bodygroup_blanks", reference.mutations)
-            self.assertIsNotNone(reference.empty_bodygroup_smd_name)
-            placeholder = (
-                result.decompilations[0].qc_path.parent
-                / reference.empty_bodygroup_smd_name
-            )
-            self.assertEqual(
-                placeholder.read_bytes(),
-                build_empty_bodygroup_smd(SOURCE_REFERENCE_SMD),
-            )
-            self.assertIn(
-                f'studio "{reference.empty_bodygroup_smd_name}"'.encode("ascii"),
-                model.qc_artifact.content,
-            )
+            self.assertNotIn("replace_bodygroup_blanks", result.qc_plan.references[0].mutations)
             self.assertEqual(len(model.validation.files), 5)
+
+    def test_empty_bodygroup_model_bypasses_all_asset_generation(self) -> None:
+        case = load_case("dynamic_v44")
+        case["logical_model_path"] = "models/fixture/dynamic_blank.mdl"
+        case["internal_model_name"] = "fixture/dynamic_blank.mdl"
+        case["bodyparts"] = [[[0]], [[], [0]]]
+        write_files(self.content, build_case_files(case))
+        filesystem = self.filesystem()
+        operation = build_operation_plan(inspect_map_sources(
+            discover_vmf_requests(
+                entity("11", case["logical_model_path"], "1", "255 255 255").encode("ascii"),
+                map_identity="maps/dynamic_blank.vmf",
+            ),
+            filesystem,
+        ))
+        materials = build_colored_material_plan(
+            operation,
+            inspect_colored_material_sources(operation, filesystem),
+        )
+        skin_layout = build_skin_layout_plan(
+            operation,
+            materials,
+            empty_manifest(build_project_identity(self.gameinfo)),
+        )
+
+        with StagingWorkspace.create(
+            self.staging,
+            operation_identity=operation.map_identity,
+        ) as workspace:
+            result = generate_and_validate(
+                workspace,
+                filesystem,
+                operation,
+                materials,
+                skin_layout,
+                crowbar_command=("must-not-run-crowbar",),
+                studiomdl_command=("must-not-run-studiomdl",),
+            )
+
+            self.assertEqual(operation.usages[0].operation, "reuse_dynamic")
+            self.assertEqual(operation.generated_models, ())
+            self.assertEqual(operation.colored_skins, ())
+            self.assertEqual(materials.colored_materials, ())
+            self.assertEqual(materials.colored_skins, ())
+            self.assertEqual(skin_layout.layouts, ())
+            self.assertEqual(skin_layout.assignments[0].target_skin, 0)
+            self.assertEqual(result.models, ())
+            self.assertEqual(result.materials, ())
+            self.assertEqual(result.qc_plan.references, ())
+            self.assertEqual(result.qc_plan.variants, ())
 
     def test_material_change_after_planning_aborts_before_tool_execution(self) -> None:
         filesystem, operation, materials, skin_layout = self.plans()

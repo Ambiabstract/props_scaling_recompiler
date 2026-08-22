@@ -100,6 +100,7 @@ class SourceModelInspectionTests(unittest.TestCase):
         self.assertEqual(metadata.mdl_version, 48)
         self.assertEqual(metadata.mdl_header_checksum, "11223344")
         self.assertTrue(metadata.is_static_prop)
+        self.assertFalse(metadata.has_empty_bodygroup_option)
         self.assertEqual(metadata.bone_count, 1)
         self.assertEqual(metadata.mdl_flags, 16)
         self.assertEqual(metadata.surface_property, "default")
@@ -154,12 +155,27 @@ class SourceModelInspectionTests(unittest.TestCase):
 
         self.assertEqual(metadata.mdl_version, 44)
         self.assertFalse(metadata.is_static_prop)
+        self.assertFalse(metadata.has_empty_bodygroup_option)
         self.assertEqual(metadata.bone_count, 3)
         self.assertEqual(metadata.skin_families, (("shell",),))
         self.assertFalse(metadata.has_physics)
         self.assertTrue(all(file.provenance.kind == "vpk" for file in metadata.files))
         self.assertEqual(metadata.materials[0].provenance.kind, "vpk")
         self.assertEqual(metadata.model_provenance.container_path, vpk_path.resolve())
+
+    def test_empty_option_in_multi_model_bodypart_is_detected(self) -> None:
+        case = dict(self.cases["dynamic_v44"])
+        case["bodyparts"] = [[[], [0]]]
+        content = self.root / "content"
+        write_folder_files(content, build_case_files(case))
+
+        metadata = inspect_source_model(
+            self.filesystem("|gameinfo_path|content"),
+            case["logical_model_path"],
+        )
+
+        self.assertFalse(metadata.is_static_prop)
+        self.assertTrue(metadata.has_empty_bodygroup_option)
 
     def test_full_skin_table_preserves_unused_slots_without_resolving_their_vmt(self) -> None:
         case = self.cases["static_unused_material_slot"]

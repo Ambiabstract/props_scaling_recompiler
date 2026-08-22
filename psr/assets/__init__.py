@@ -46,11 +46,8 @@ from .qc import (
     SourceQCMetadata,
     build_reference_qc,
     build_scaled_qc,
-    first_body_reference_smd,
     inspect_qc,
-    static_bodygroup_empty_smd_name,
 )
-from .smd import SMDTransformError, build_empty_bodygroup_smd
 from .toolchain import (
     CompiledFileMetadata,
     CompiledModelValidation,
@@ -87,7 +84,6 @@ __all__ = [
     "SearchPathParseError",
     "SearchPathPlan",
     "SearchPathSpec",
-    "SMDTransformError",
     "SourceAssetInspectionError",
     "SourceAssetMetadata",
     "SourceFileMetadata",
@@ -99,10 +95,8 @@ __all__ = [
     "ToolInvocation",
     "build_reference_qc",
     "build_scaled_qc",
-    "build_empty_bodygroup_smd",
     "colored_material_path",
     "generate_colored_material",
-    "first_body_reference_smd",
     "inspect_source_material",
     "inspect_source_model",
     "inspect_qc",
@@ -113,6 +107,5 @@ __all__ = [
     "run_crowbar_decompile",
     "run_studiomdl_compile",
     "select_color_parameter",
-    "static_bodygroup_empty_smd_name",
     "validate_compiled_model",
 ]

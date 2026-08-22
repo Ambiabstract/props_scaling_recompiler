@@ -248,6 +248,32 @@ class DiscoveryPlanningTests(unittest.TestCase):
             ["psr_scale_rounding", "psr_scale_rounding"],
         )
 
+    def test_dynamic_model_with_empty_bodygroup_uses_dynamic_fallback(self) -> None:
+        dynamic = load_mdl_case("dynamic_v44")
+        dynamic["bodyparts"] = [[[0]], [[], [0], [0]]]
+        model = dynamic["logical_model_path"]
+        self.install_case(dynamic)
+
+        plan = build_operation_plan(inspect_map_sources(
+            discover_vmf_requests(
+                entity("8", model, "1.5", color="190 48 148").encode("ascii"),
+                map_identity="maps/dynamic_fallback.vmf",
+            ),
+            self.filesystem(),
+        ))
+
+        self.assertTrue(plan.is_valid)
+        self.assertTrue(plan.source_assets[0].has_empty_bodygroup_option)
+        self.assertEqual(plan.usages[0].operation, "reuse_dynamic")
+        self.assertEqual(plan.usages[0].output_classname, "prop_dynamic")
+        self.assertEqual(plan.usages[0].logical_output_model, model)
+        self.assertEqual(plan.generated_models, ())
+        self.assertEqual(plan.colored_skins, ())
+        self.assertEqual(
+            [item.code for item in plan.diagnostics],
+            ["dynamic_bodygroup_fallback"],
+        )
+
     def test_invalid_inputs_are_aggregated_as_plan_diagnostics(self) -> None:
         static = load_mdl_case("static_multi_material")
         model = static["logical_model_path"]

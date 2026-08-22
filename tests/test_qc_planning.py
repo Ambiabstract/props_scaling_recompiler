@@ -39,6 +39,7 @@ def source_asset(*, is_static: bool = False) -> SourceAssetMetadata:
         mdl_header_checksum="11223344",
         mdl_flags=0,
         is_static_prop=is_static,
+        has_empty_bodygroup_option=False,
         bone_count=1,
         surface_property="default",
         total_vertices=12,
@@ -123,8 +124,13 @@ class QCOperationPlanningTests(unittest.TestCase):
         self.assertEqual(reference.staging_relative_path, "reference/props/example_dynamic.qc")
         self.assertEqual(
             inspect_qc(reference.content).skin_families,
-            skin_layout().layouts[0].families,
+            (
+                ("body", "detail"),
+                ("body_alt", "detail_alt"),
+                ("body_col_ff0000", "detail"),
+            ),
         )
+        self.assertIn(b'$cdmaterials "models/psr_scaled/"', reference.content)
         self.assertEqual(
             [variant.compile_scale for variant in plan.variants],
             [Decimal("0.50"), Decimal("1.50")],

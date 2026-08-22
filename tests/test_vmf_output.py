@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from decimal import Decimal
 
 from psr.keyvalues import parse_vmf
@@ -29,6 +30,7 @@ def plans(source: bytes) -> tuple[OperationPlan, SkinLayoutOperationPlan]:
         render_color=(190, 48, 148),
         operation="generate_model",
         logical_output_model="models/psr_scaled/fixture/source_scaled_150.mdl",
+        output_classname="prop_static",
     )
     operation = OperationPlan(
         map_identity=discovery.map_identity,
@@ -91,6 +93,79 @@ class VmfOutputTests(unittest.TestCase):
         result = build_vmf_output(source, operation, skin_layout)
 
         self.assertIn(b'\t"skin" "7" // keep this comment\r\n', result.content)
+
+    def test_dynamic_fallback_writes_prop_dynamic(self) -> None:
+        source = ACTIVE_AND_HIDDEN.replace(
+            b'"model" "models/fixture/source.mdl"',
+            b'"model" "Models/Fixture/Source.mdl"',
+        )
+        operation, skin_layout = plans(source)
+        source_model = operation.usages[0].request.logical_model_path
+        operation = OperationPlan(
+            map_identity=operation.map_identity,
+            vmf_sha256=operation.vmf_sha256,
+            source_assets=operation.source_assets,
+            usages=(replace(
+                operation.usages[0],
+                operation="reuse_dynamic",
+                logical_output_model=source_model,
+                output_classname="prop_dynamic",
+            ),),
+            generated_models=operation.generated_models,
+            colored_skins=operation.colored_skins,
+            diagnostics=operation.diagnostics,
+        )
+        skin_layout = replace(
+            skin_layout,
+            assignments=(replace(
+                skin_layout.assignments[0],
+                target_skin=0,
+                logical_output_model=source_model,
+            ),),
+        )
+
+        result = build_vmf_output(source, operation, skin_layout)
+
+        active = parse_vmf(result.content).blocks[0]
+        self.assertEqual(active.direct_values(b"classname"), (b"prop_dynamic",))
+        self.assertEqual(
+            active.direct_values(b"model"),
+            (b"Models/Fixture/Source.mdl",),
+        )
+        self.assertEqual(active.direct_values(b"modelscale"), (b"1.5",))
+        self.assertEqual(active.direct_values(b"rendercolor"), (b"190 48 148",))
+        self.assertEqual(active.direct_values(b"skin"), ())
+        self.assertEqual(active.direct_values(b"convert_prop_to_static"), ())
+
+    def test_dynamic_fallback_preserves_existing_skin_bytes(self) -> None:
+        source = ACTIVE_AND_HIDDEN.replace(
+            b'\t"rendercolor" "190 48 148"\r\n',
+            b'\t"skin" "00" // preserve exactly\r\n'
+            b'\t"rendercolor" "190 48 148"\r\n',
+        )
+        operation, skin_layout = plans(source)
+        source_model = operation.usages[0].request.logical_model_path
+        operation = replace(
+            operation,
+            usages=(replace(
+                operation.usages[0],
+                operation="reuse_dynamic",
+                logical_output_model=source_model,
+                output_classname="prop_dynamic",
+            ),),
+        )
+        skin_layout = replace(
+            skin_layout,
+            assignments=(replace(
+                skin_layout.assignments[0],
+                target_skin=0,
+                logical_output_model=source_model,
+            ),),
+        )
+
+        result = build_vmf_output(source, operation, skin_layout)
+
+        self.assertIn(b'\t"skin" "00" // preserve exactly\r\n', result.content)
 
     def test_noop_output_is_byte_identical(self) -> None:
         source = b'world\n{\n\t"id" "1"\n}\n'

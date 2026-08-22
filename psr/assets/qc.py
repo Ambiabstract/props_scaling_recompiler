@@ -19,7 +19,8 @@ from .limits import MAX_STUDIO_MATERIALS, MAX_STUDIO_SKIN_FAMILIES
 
 
 TokenKind = Literal["word", "string", "lbrace", "rbrace"]
-_EMPTY_BODYGROUP_SMD_PREFIX = "_psr_empty_bodygroup_"
+_MANAGED_MATERIAL_PREFIX = "models/psr_scaled/"
+_MANAGED_CDMATERIALS = "models/psr_scaled/"
 
 
 class QCTransformError(ValueError):
@@ -178,8 +179,10 @@ def build_reference_qc(
     source_sha256 = _sha256(source)
     expected = _normalise_families(expected_source_families, "expected_source_families")
     target = _normalise_families(target_families, "target_families")
+    compiled_target = _compile_skinfamilies(target)
     _validate_family_capacity(expected, "source")
     _validate_family_capacity(target, "target")
+    _validate_family_capacity(compiled_target, "compiled_target")
     if target[:len(expected)] != expected or len(target) < len(expected):
         raise QCTransformError(
             "target_skinfamilies_invalid",
@@ -224,16 +227,40 @@ def build_reference_qc(
         document = _parse_document(data)
         blank_tokens = _bodygroup_blank_tokens(document)
         if blank_tokens:
-            # Validate that generation can derive the placeholder skeleton before
-            # committing the deterministic QC rewrite.
-            first_body_reference_smd(source)
-            empty_name = static_bodygroup_empty_smd_name(source_sha256)
-            replacement = b'studio "' + empty_name.encode("ascii") + b'"'
-            data = _apply_edits(data, [
-                _Edit(token.start, token.end, replacement)
-                for token in blank_tokens
-            ])
-            mutations.append("replace_bodygroup_blanks")
+            raise QCTransformError(
+                "empty_bodygroup_static_conversion",
+                "dynamic QC contains a blank bodygroup option; it must use the "
+                "dynamic fallback instead of $staticprop conversion",
+                blank_tokens[0].start,
+            )
+
+    if compiled_target != target:
+        document = _parse_document(data)
+        cdmaterials = _commands_named(document, "$cdmaterials")
+        existing_cdmaterials = {
+            _normalise_cdmaterials(_optional_argument(document, command, 0))
+            for command in cdmaterials
+        }
+        if _MANAGED_CDMATERIALS not in existing_cdmaterials:
+            anchors = cdmaterials or _commands_named(document, "$staticprop")
+            if not anchors:
+                anchors = _commands_named(document, "$modelname")
+            anchor = anchors[-1]
+            insertion_at, prefix = _line_insertion_after(
+                data,
+                anchor.end,
+                metadata.newline,
+            )
+            rendered = (
+                _indent_at(data, anchor.start)
+                + b'$cdmaterials "models/psr_scaled/"'
+                + metadata.newline
+            )
+            data = _apply_edits(
+                data,
+                [_Edit(insertion_at, insertion_at, prefix + rendered)],
+            )
+            mutations.append("insert_managed_cdmaterials")
 
     current = inspect_qc(data)
     current_families = (
@@ -241,14 +268,14 @@ def build_reference_qc(
         if current.skin_families is None
         else _normalise_families(current.skin_families, "source_qc_families")
     )
-    if current_families != target and not (
-        current_families is None and len(target) == 1
+    if current_families != compiled_target and not (
+        current_families is None and len(compiled_target) == 1
     ):
         document = _parse_document(data)
         group = _find_skinfamilies_command(document)
         if group is not None:
             indent = _indent_at(data, group.start)
-            replacement = _render_skinfamilies(target, indent, current.newline)
+            replacement = _render_skinfamilies(compiled_target, indent, current.newline)
             data = _apply_edits(data, [_Edit(group.start, group.end, replacement)])
             mutations.append("replace_skinfamilies")
         else:
@@ -260,7 +287,7 @@ def build_reference_qc(
             anchor = anchors[-1]
             insertion_at, prefix = _line_insertion_after(data, anchor.end, current.newline)
             rendered = _render_skinfamilies(
-                target,
+                compiled_target,
                 _indent_at(data, anchor.start),
                 current.newline,
             ) + current.newline
@@ -278,41 +305,12 @@ def build_reference_qc(
         if final.skin_families is None
         else _normalise_families(final.skin_families, "generated_families")
     )
-    if len(target) > 1 and final_families != target:
+    if len(compiled_target) > 1 and final_families != compiled_target:
         raise QCTransformError(
             "generated_skinfamilies_mismatch",
             "generated reference QC does not contain the requested complete skin table",
         )
     return QCTransformResult(data, source_sha256, _sha256(data), tuple(mutations))
-
-
-def static_bodygroup_empty_smd_name(source_qc_sha256: str) -> str:
-    """Return the deterministic staging-only SMD name used instead of ``blank``."""
-    value = source_qc_sha256.casefold()
-    if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
-        raise QCTransformError(
-            "invalid_source_qc_sha256",
-            f"expected 64 lowercase hexadecimal characters, got {source_qc_sha256!r}",
-        )
-    return f"{_EMPTY_BODYGROUP_SMD_PREFIX}{value[:16]}.smd"
-
-
-def first_body_reference_smd(source: bytes) -> str:
-    """Return the first mesh SMD referenced by a top-level body command."""
-    document = _parse_document(source)
-    for command in document.commands:
-        if command.name in {"$body", "$model"}:
-            candidate = _optional_argument(document, command, 1)
-            if candidate:
-                return _validate_relative_smd(candidate)
-        if command.name == "$bodygroup":
-            candidate = _first_bodygroup_studio(document, command)
-            if candidate is not None:
-                return _validate_relative_smd(candidate)
-    raise QCTransformError(
-        "body_reference_smd_missing",
-        "QC has no mesh SMD in a top-level $body, $model, or $bodygroup command",
-    )
 
 
 def build_scaled_qc(
@@ -594,47 +592,6 @@ def _is_standalone_line_token(source: bytes, token: _Token) -> bool:
     return not before and (not after or after.startswith(b"//"))
 
 
-def _first_bodygroup_studio(
-    document: _Document,
-    command: _Command,
-) -> str | None:
-    if command.block_open_index is None or command.block_close_index is None:
-        return None
-    child_depth = document.tokens[command.block_open_index].depth + 1
-    start = command.block_open_index + 1
-    stop = command.block_close_index
-    for index in range(start, stop):
-        token = document.tokens[index]
-        if not (
-            token.depth == child_depth
-            and token.kind == "word"
-            and token.raw.lower() == b"studio"
-        ):
-            continue
-        for argument in document.tokens[index + 1:stop]:
-            if argument.depth < child_depth:
-                break
-            if argument.depth == child_depth and argument.kind in {"word", "string"}:
-                return _token_value(argument)
-        return None
-    return None
-
-
-def _validate_relative_smd(value: str) -> str:
-    normalised = value.strip().replace("\\", "/")
-    parts = normalised.split("/")
-    if (
-        not normalised.casefold().endswith(".smd")
-        or any(part in {"", ".", ".."} for part in parts)
-        or ":" in parts[0]
-    ):
-        raise QCTransformError(
-            "body_reference_smd_invalid",
-            f"body mesh must be a safe relative .smd path, got {value!r}",
-        )
-    return str(PurePosixPath(*parts))
-
-
 def _argument_token(
     document: _Document,
     command: _Command,
@@ -780,6 +737,26 @@ def _normalise_material(value: str) -> str:
     return item
 
 
+def _compile_skinfamilies(
+    families: tuple[tuple[str, ...], ...],
+) -> tuple[tuple[str, ...], ...]:
+    """Make managed names relative to PSR's dedicated material search root."""
+    return tuple(
+        tuple(
+            material.removeprefix(_MANAGED_MATERIAL_PREFIX)
+            if material.startswith(_MANAGED_MATERIAL_PREFIX)
+            else material
+            for material in family
+        )
+        for family in families
+    )
+
+
+def _normalise_cdmaterials(value: str) -> str:
+    normalised = value.strip().replace("\\", "/").lstrip("/").casefold()
+    return normalised.rstrip("/") + "/" if normalised else ""
+
+
 def _normalise_modelname(value: str) -> str:
     return value.strip().replace("\\", "/").lstrip("/").casefold()
 
@@ -881,7 +858,5 @@ __all__ = [
     "SourceQCMetadata",
     "build_reference_qc",
     "build_scaled_qc",
-    "first_body_reference_smd",
     "inspect_qc",
-    "static_bodygroup_empty_smd_name",
 ]

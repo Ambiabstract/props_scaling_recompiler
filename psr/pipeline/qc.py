@@ -11,10 +11,8 @@ from psr.assets import (
     QCTransformError,
     build_reference_qc,
     build_scaled_qc,
-    first_body_reference_smd,
     inspect_qc,
     normalize_logical_path,
-    static_bodygroup_empty_smd_name,
 )
 
 from .discovery import PipelineDiagnostic
@@ -34,8 +32,6 @@ class ReferenceQCArtifactPlan:
     requires_static_conversion: bool
     content: bytes
     mutations: tuple[str, ...]
-    empty_bodygroup_smd_name: str | None = None
-    empty_bodygroup_source_smd: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,16 +154,6 @@ def build_qc_operation_plan(
             requires_static_conversion=not asset.is_static_prop,
             content=reference_result.data,
             mutations=reference_result.mutations,
-            empty_bodygroup_smd_name=(
-                static_bodygroup_empty_smd_name(reference_result.source_sha256)
-                if "replace_bodygroup_blanks" in reference_result.mutations
-                else None
-            ),
-            empty_bodygroup_source_smd=(
-                first_body_reference_smd(source_qc)
-                if "replace_bodygroup_blanks" in reference_result.mutations
-                else None
-            ),
         )
         references.append(reference)
 

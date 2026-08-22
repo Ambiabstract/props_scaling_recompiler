@@ -11,6 +11,7 @@ from unittest.mock import patch
 from psr.assets import (
     OrderedAssetFileSystem,
     ToolExecutionError,
+    inspect_qc,
     parse_gameinfo_search_paths,
     parse_search_paths_text,
     plan_search_paths,
@@ -23,6 +24,7 @@ from psr.pipeline import (
     build_colored_material_plan,
     build_operation_plan,
     build_skin_layout_plan,
+    build_vmf_output,
     discover_vmf_requests,
     generate_and_validate,
     inspect_colored_material_sources,
@@ -211,11 +213,78 @@ class ExternalSDKGenerationTests(unittest.TestCase):
                     and b'"insert"' in item.generated.content
                     for item in result.materials
                 ))
+                reference = result.qc_plan.references[0]
+                compiled_families = inspect_qc(reference.content).skin_families
+                self.assertIsNotNone(compiled_families)
+                self.assertIn(
+                    b'$cdmaterials "models/psr_scaled/"',
+                    reference.content,
+                )
+                self.assertEqual(
+                    compiled_families,
+                    tuple(
+                        tuple(
+                            material.removeprefix("models/psr_scaled/")
+                            for material in family
+                        )
+                        for family in skin_layout.layouts[0].families
+                    ),
+                )
                 logs = (
                     result.models[0].compile_invocation.stdout
                     + result.models[0].compile_invocation.stderr
                 )
                 self.assertNotIn(b"KeyValues Error", logs)
+
+    def test_door_empty_bodygroup_reuses_original_dynamic_model(self) -> None:
+        gameinfo = ANTENNA_ROOT / "GameInfo.txt"
+        specs = parse_gameinfo_search_paths(gameinfo)
+        search_plan = plan_search_paths(
+            specs,
+            gameinfo_dir=ANTENNA_ROOT,
+            engine_root=SDK_ROOT,
+        )
+        filesystem = OrderedAssetFileSystem(search_plan.mounts)
+        source_vmf = b'''entity
+{
+    "id" "1"
+    "classname" "prop_static_scalable"
+    "model" "models/props_c17/door02_double.mdl"
+    "modelscale" "1"
+    "skin" "0"
+    "rendercolor" "255 255 255"
+}
+'''
+        operation = build_operation_plan(inspect_map_sources(
+            discover_vmf_requests(source_vmf, map_identity="maps/psr_door_fallback.vmf"),
+            filesystem,
+        ))
+        materials = build_colored_material_plan(
+            operation,
+            inspect_colored_material_sources(operation, filesystem),
+        )
+        skin_layout = build_skin_layout_plan(
+            operation,
+            materials,
+            empty_manifest(build_project_identity(gameinfo)),
+        )
+
+        self.assertTrue(operation.is_valid, operation.diagnostics)
+        self.assertTrue(operation.source_assets[0].has_empty_bodygroup_option)
+        self.assertEqual(operation.usages[0].operation, "reuse_dynamic")
+        self.assertEqual(operation.usages[0].output_classname, "prop_dynamic")
+        self.assertEqual(
+            operation.usages[0].logical_output_model,
+            "models/props_c17/door02_double.mdl",
+        )
+        self.assertEqual(operation.generated_models, ())
+        self.assertEqual(operation.colored_skins, ())
+        self.assertEqual(materials.colored_materials, ())
+        self.assertEqual(skin_layout.layouts, ())
+        output = build_vmf_output(source_vmf, operation, skin_layout)
+        self.assertIn(b'"classname" "prop_dynamic"', output.content)
+        self.assertIn(b'"modelscale" "1"', output.content)
+        self.assertIn(b'"rendercolor" "255 255 255"', output.content)
 
     def test_studiomdl_skin_family_boundary_is_1024_rows(self) -> None:
         gameinfo = ANTENNA_ROOT / "GameInfo.txt"

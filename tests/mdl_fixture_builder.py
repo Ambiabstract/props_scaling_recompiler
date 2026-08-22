@@ -89,30 +89,55 @@ def build_mdl(case: Mapping[str, Any]) -> bytes:
     ):
         raise ValueError("used_material_slots must be unique indexes within the skin row")
 
-    bodypart_offset = append(b"\0" * _BODYPART_SIZE)
-    model_offset = append(b"\0" * _MODEL_SIZE)
-    mesh_offset = append(b"\0" * (_MESH_SIZE * len(used_material_slots)))
-    struct.pack_into("<4i", data, bodypart_offset, 0, 1, 0, model_offset - bodypart_offset)
-    model_name = _fixed_ascii(case["internal_model_name"], 64)
-    struct.pack_into(
-        "<64sif9i",
-        data,
-        model_offset,
-        model_name,
-        0,
-        1.0,
-        len(used_material_slots),
-        mesh_offset - model_offset,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-    )
-    for mesh_index, material_slot in enumerate(used_material_slots):
-        struct.pack_into("<i", data, mesh_offset + mesh_index * _MESH_SIZE, material_slot)
+    bodyparts = case.get("bodyparts", [[used_material_slots]])
+    bodypart_offset = append(b"\0" * (_BODYPART_SIZE * len(bodyparts)))
+    for bodypart_index, models in enumerate(bodyparts):
+        bodypart_start = bodypart_offset + bodypart_index * _BODYPART_SIZE
+        model_offset = append(b"\0" * (_MODEL_SIZE * len(models)))
+        struct.pack_into(
+            "<4i",
+            data,
+            bodypart_start,
+            0,
+            len(models),
+            0,
+            model_offset - bodypart_start,
+        )
+        for model_index, raw_slots in enumerate(models):
+            model_slots = tuple(raw_slots)
+            if any(not 0 <= slot < skinref_count for slot in model_slots):
+                raise ValueError("bodypart model slots must be within the skin row")
+            model_start = model_offset + model_index * _MODEL_SIZE
+            mesh_offset = append(b"\0" * (_MESH_SIZE * len(model_slots)))
+            model_name = (
+                b"\0" * 64
+                if not model_slots
+                else _fixed_ascii(case["internal_model_name"], 64)
+            )
+            struct.pack_into(
+                "<64sif9i",
+                data,
+                model_start,
+                model_name,
+                0,
+                1.0,
+                len(model_slots),
+                mesh_offset - model_start,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            )
+            for mesh_index, material_slot in enumerate(model_slots):
+                struct.pack_into(
+                    "<i",
+                    data,
+                    mesh_offset + mesh_index * _MESH_SIZE,
+                    material_slot,
+                )
 
     flags = 16 if case["static_prop"] else 0
     checksum = bytes.fromhex(case["checksum_hex"])
@@ -150,7 +175,7 @@ def build_mdl(case: Mapping[str, Any]) -> bytes:
         skinref_count,
         len(skin_families),
         skin_offset,
-        1,
+        len(bodyparts),
         bodypart_offset,
         0,
         0,

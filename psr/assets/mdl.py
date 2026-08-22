@@ -66,6 +66,7 @@ class SourceAssetMetadata:
     mdl_header_checksum: str
     mdl_flags: int
     is_static_prop: bool
+    has_empty_bodygroup_option: bool
     bone_count: int
     surface_property: str
     total_vertices: int
@@ -110,7 +111,9 @@ def inspect_source_model(
     try:
         model = Model(filesystem.chain, resolved_model.file)
         bone_count = _read_bone_count(mdl_bytes)
-        stable_skins, used_material_slots = _read_stable_skin_table(mdl_bytes)
+        stable_skins, used_material_slots, has_empty_bodygroup_option = (
+            _read_stable_skin_table(mdl_bytes)
+        )
         _validate_srctools_skins(model, stable_skins, used_material_slots)
         _validate_studio_capacity(stable_skins)
     except Exception as exc:
@@ -150,6 +153,7 @@ def inspect_source_model(
         mdl_header_checksum=model.checksum.hex(),
         mdl_flags=model.flags.value,
         is_static_prop=bool(model.flags & Flags.static_prop),
+        has_empty_bodygroup_option=has_empty_bodygroup_option,
         bone_count=bone_count,
         surface_property=model.surfaceprop,
         total_vertices=model.total_verts,
@@ -309,7 +313,7 @@ def _unique_in_order(values: Iterable[str]) -> tuple[str, ...]:
 
 def _read_stable_skin_table(
     data: bytes,
-) -> tuple[tuple[tuple[str, ...], ...], tuple[int, ...]]:
+) -> tuple[tuple[tuple[str, ...], ...], tuple[int, ...], bool]:
     """Read the full QC-compatible skin table and mesh-used slot indexes.
 
     ``srctools.mdl.Model`` 2.7.0 culls unused slots by iterating a set. PSR
@@ -355,6 +359,7 @@ def _read_stable_skin_table(
         raw_skin_indices.append(texture_index)
 
     used_slots: set[int] = set()
+    has_empty_bodygroup_option = False
     for bodypart_index in range(bodypart_count):
         bodypart_start = bodypart_offset + bodypart_index * _BODYPART_STRUCT_SIZE
         _, model_count, _, model_offset = _unpack_from("<4i", data, bodypart_start)
@@ -365,6 +370,8 @@ def _read_stable_skin_table(
             mesh_count, mesh_offset = _unpack_from("<2i", data, model_start + 72)
             if mesh_count < 0:
                 raise ValueError(f"negative mesh count: {mesh_count}")
+            if model_count > 1 and mesh_count == 0:
+                has_empty_bodygroup_option = True
             for mesh_index in range(mesh_count):
                 mesh_start = model_start + mesh_offset + mesh_index * _MESH_STRUCT_SIZE
                 (material_slot,) = _unpack_from("<i", data, mesh_start)
@@ -382,7 +389,7 @@ def _read_stable_skin_table(
             textures[raw_skin_indices[row_start + slot]]
             for slot in range(skinref_count)
         ))
-    return tuple(families), ordered_slots
+    return tuple(families), ordered_slots, has_empty_bodygroup_option
 
 
 def _validate_srctools_skins(

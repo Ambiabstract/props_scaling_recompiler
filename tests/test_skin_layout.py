@@ -153,6 +153,38 @@ class StableSkinLayoutTests(unittest.TestCase):
         assignments = {item.entity_id: item.target_skin for item in plan.assignments}
         self.assertEqual(assignments, {"1": 3, "2": 2, "3": 1})
 
+    def test_dynamic_fallback_ignores_cached_generated_variants(self) -> None:
+        dynamic = load_case("dynamic_v44")
+        dynamic["bodyparts"] = [[[0]], [[], [0]]]
+        write_files(self.content, build_case_files(dynamic))
+        model = dynamic["logical_model_path"]
+        operation, materials = self.plans("dynamic-fallback-cache", [
+            entity("9", model, scale="1.5", color=(190, 48, 148)),
+        ])
+        cached = GeneratedModelRecord(
+            logical_source_model=model,
+            compile_scale_percent=150,
+            logical_output_model=scaled_model_path(model, Decimal("1.5")),
+            requires_static_conversion=False,
+            skin_layout_fingerprint="a" * 64,
+            expected_files=(scaled_model_path(model, Decimal("1.5")),),
+            artifact_fingerprint="b" * 64,
+        )
+        manifest = replace(
+            empty_manifest(self.project),
+            generated_models=(cached,),
+        )
+
+        layout = build_skin_layout_plan(operation, materials, manifest)
+        reconciled = reconcile_generation_requirements(operation, layout, manifest)
+
+        self.assertTrue(layout.is_valid, layout.diagnostics)
+        self.assertEqual(operation.usages[0].operation, "reuse_dynamic")
+        self.assertEqual(materials.colored_materials, ())
+        self.assertEqual(layout.layouts, ())
+        self.assertEqual(layout.assignments[0].target_skin, 0)
+        self.assertEqual(reconciled.generated_models, ())
+
     def test_material_limit_omits_color_and_falls_back_to_original_skin(self) -> None:
         model = self.case["logical_model_path"]
         operation, materials = self.plans("material-limit", [
