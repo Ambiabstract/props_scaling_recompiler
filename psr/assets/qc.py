@@ -19,6 +19,7 @@ from .limits import MAX_STUDIO_MATERIALS, MAX_STUDIO_SKIN_FAMILIES
 
 
 TokenKind = Literal["word", "string", "lbrace", "rbrace"]
+_EMPTY_BODYGROUP_SMD_PREFIX = "_psr_empty_bodygroup_"
 
 
 class QCTransformError(ValueError):
@@ -205,7 +206,8 @@ def build_reference_qc(
 
     data = source
     mutations: list[str] = []
-    if require_staticprop and not metadata.is_static_prop:
+    requires_static_conversion = require_staticprop and not metadata.is_static_prop
+    if requires_static_conversion:
         document = _parse_document(data)
         anchor = _commands_named(document, "$modelname")[0]
         insertion_at, prefix = _line_insertion_after(data, anchor.end, metadata.newline)
@@ -217,6 +219,21 @@ def build_reference_qc(
             ),
         ])
         mutations.append("insert_staticprop")
+
+    if requires_static_conversion:
+        document = _parse_document(data)
+        blank_tokens = _bodygroup_blank_tokens(document)
+        if blank_tokens:
+            # Validate that generation can derive the placeholder skeleton before
+            # committing the deterministic QC rewrite.
+            first_body_reference_smd(source)
+            empty_name = static_bodygroup_empty_smd_name(source_sha256)
+            replacement = b'studio "' + empty_name.encode("ascii") + b'"'
+            data = _apply_edits(data, [
+                _Edit(token.start, token.end, replacement)
+                for token in blank_tokens
+            ])
+            mutations.append("replace_bodygroup_blanks")
 
     current = inspect_qc(data)
     current_families = (
@@ -267,6 +284,35 @@ def build_reference_qc(
             "generated reference QC does not contain the requested complete skin table",
         )
     return QCTransformResult(data, source_sha256, _sha256(data), tuple(mutations))
+
+
+def static_bodygroup_empty_smd_name(source_qc_sha256: str) -> str:
+    """Return the deterministic staging-only SMD name used instead of ``blank``."""
+    value = source_qc_sha256.casefold()
+    if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
+        raise QCTransformError(
+            "invalid_source_qc_sha256",
+            f"expected 64 lowercase hexadecimal characters, got {source_qc_sha256!r}",
+        )
+    return f"{_EMPTY_BODYGROUP_SMD_PREFIX}{value[:16]}.smd"
+
+
+def first_body_reference_smd(source: bytes) -> str:
+    """Return the first mesh SMD referenced by a top-level body command."""
+    document = _parse_document(source)
+    for command in document.commands:
+        if command.name in {"$body", "$model"}:
+            candidate = _optional_argument(document, command, 1)
+            if candidate:
+                return _validate_relative_smd(candidate)
+        if command.name == "$bodygroup":
+            candidate = _first_bodygroup_studio(document, command)
+            if candidate is not None:
+                return _validate_relative_smd(candidate)
+    raise QCTransformError(
+        "body_reference_smd_missing",
+        "QC has no mesh SMD in a top-level $body, $model, or $bodygroup command",
+    )
 
 
 def build_scaled_qc(
@@ -510,6 +556,83 @@ def _find_skinfamilies_command(document: _Document) -> _Command | None:
         if _optional_argument(document, command, 0).casefold() == "skinfamilies":
             return command
     return None
+
+
+def _bodygroup_blank_tokens(document: _Document) -> tuple[_Token, ...]:
+    result: list[_Token] = []
+    for command in _commands_named(document, "$bodygroup"):
+        if command.block_open_index is None or command.block_close_index is None:
+            continue
+        child_depth = document.tokens[command.block_open_index].depth + 1
+        for token in document.tokens[
+            command.block_open_index + 1:command.block_close_index
+        ]:
+            if (
+                token.depth == child_depth
+                and token.kind == "word"
+                and token.raw.lower() == b"blank"
+                and _is_standalone_line_token(document.source, token)
+            ):
+                result.append(token)
+    return tuple(result)
+
+
+def _is_standalone_line_token(source: bytes, token: _Token) -> bool:
+    """Distinguish a bodygroup ``blank`` option from ``studio blank``."""
+    line_start = max(
+        source.rfind(b"\n", 0, token.start),
+        source.rfind(b"\r", 0, token.start),
+    ) + 1
+    newline_positions = tuple(
+        position
+        for position in (source.find(b"\n", token.end), source.find(b"\r", token.end))
+        if position >= 0
+    )
+    line_end = min(newline_positions, default=len(source))
+    before = source[line_start:token.start].strip()
+    after = source[token.end:line_end].strip()
+    return not before and (not after or after.startswith(b"//"))
+
+
+def _first_bodygroup_studio(
+    document: _Document,
+    command: _Command,
+) -> str | None:
+    if command.block_open_index is None or command.block_close_index is None:
+        return None
+    child_depth = document.tokens[command.block_open_index].depth + 1
+    start = command.block_open_index + 1
+    stop = command.block_close_index
+    for index in range(start, stop):
+        token = document.tokens[index]
+        if not (
+            token.depth == child_depth
+            and token.kind == "word"
+            and token.raw.lower() == b"studio"
+        ):
+            continue
+        for argument in document.tokens[index + 1:stop]:
+            if argument.depth < child_depth:
+                break
+            if argument.depth == child_depth and argument.kind in {"word", "string"}:
+                return _token_value(argument)
+        return None
+    return None
+
+
+def _validate_relative_smd(value: str) -> str:
+    normalised = value.strip().replace("\\", "/")
+    parts = normalised.split("/")
+    if (
+        not normalised.casefold().endswith(".smd")
+        or any(part in {"", ".", ".."} for part in parts)
+        or ":" in parts[0]
+    ):
+        raise QCTransformError(
+            "body_reference_smd_invalid",
+            f"body mesh must be a safe relative .smd path, got {value!r}",
+        )
+    return str(PurePosixPath(*parts))
 
 
 def _argument_token(
@@ -758,5 +881,7 @@ __all__ = [
     "SourceQCMetadata",
     "build_reference_qc",
     "build_scaled_qc",
+    "first_body_reference_smd",
     "inspect_qc",
+    "static_bodygroup_empty_smd_name",
 ]

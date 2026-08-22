@@ -154,16 +154,20 @@ def inspect_source_material(
 def select_color_parameter(metadata: SourceMaterialMetadata) -> ColorParameter | None:
     """Choose a conservative fixed-tint parameter for SDK 2013 model shaders.
 
-    Existing color keys are preserved.  For the two confirmed generic model
-    shaders, ``$color2`` is the default base-texture tint.  Other shaders stay
-    unsupported until an SDK regression proves their tint semantics.
+    Existing color keys are preserved.  An ``SDK_`` shader name is treated as
+    an alias of the same unprefixed shader.  For the supported generic model
+    shaders, ``$color2`` is the default base-texture tint.  Other base shaders
+    stay unsupported until their tint semantics are approved.
     """
     parameters = {name for name, _value in metadata.parameters}
     if "$color2" in parameters:
         return "$color2"
     if "$color" in parameters:
         return "$color"
-    if metadata.effective_shader.casefold() in {"vertexlitgeneric", "unlitgeneric"}:
+    shader = metadata.effective_shader.casefold()
+    if shader.startswith("sdk_"):
+        shader = shader.removeprefix("sdk_")
+    if shader in {"vertexlitgeneric", "unlitgeneric"}:
         return "$color2"
     return None
 

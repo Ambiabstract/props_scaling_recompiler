@@ -15,8 +15,10 @@ from psr.assets import (
     MaterialGenerationError,
     OrderedAssetFileSystem,
     SourceMaterialInspectionError,
+    SMDTransformError,
     ToolExecutionError,
     ToolInvocation,
+    build_empty_bodygroup_smd,
     generate_colored_material,
     inspect_source_material,
     run_crowbar_decompile,
@@ -26,7 +28,12 @@ from psr.assets import (
 
 from .materials import ColoredMaterialOperationPlan
 from .planning import GeneratedModelRequirement, OperationPlan
-from .qc import QCOperationPlan, ScaledQCArtifactPlan, build_qc_operation_plan
+from .qc import (
+    QCOperationPlan,
+    ReferenceQCArtifactPlan,
+    ScaledQCArtifactPlan,
+    build_qc_operation_plan,
+)
 from .skin_layout import SkinLayoutOperationPlan
 from .staging import (
     StagedFile,
@@ -187,6 +194,18 @@ def generate_and_validate(
         stage_qc_operation(workspace, qc_plan)
     except StagingError as exc:
         raise GenerationError(exc.code, "stage_qc", exc.detail) from exc
+
+    references = {item.logical_source_model: item for item in qc_plan.references}
+    for logical_model, decompile in decompiled_by_model.items():
+        reference = references.get(logical_model)
+        if reference is None:
+            raise GenerationError(
+                "generation_reference_unplanned",
+                "stage_empty_bodygroup",
+                "decompiled model has no reference QC artifact",
+                logical_path=logical_model,
+            )
+        _stage_empty_bodygroup_smd(workspace, decompile, reference)
 
     requirements = {
         item.logical_output_model: item
@@ -418,6 +437,55 @@ def _stage_compile_qc(
             "stage_qc",
             exc.detail,
             logical_path=variant.logical_output_model,
+        ) from exc
+
+
+def _stage_empty_bodygroup_smd(
+    workspace: StagingWorkspace,
+    decompile: CrowbarDecompileResult,
+    reference: ReferenceQCArtifactPlan,
+) -> StagedFile | None:
+    name = reference.empty_bodygroup_smd_name
+    source_name = reference.empty_bodygroup_source_smd
+    if name is None and source_name is None:
+        return None
+    if name is None or source_name is None:
+        raise GenerationError(
+            "empty_bodygroup_plan_incomplete",
+            "stage_empty_bodygroup",
+            "placeholder name and skeleton source must be planned together",
+            logical_path=reference.logical_source_model,
+        )
+    try:
+        parent = decompile.qc_path.parent.resolve().relative_to(workspace.root)
+        source_path = decompile.qc_path.parent.joinpath(
+            *PurePosixPath(source_name).parts
+        ).resolve()
+        source_path.relative_to(decompile.qc_path.parent.resolve())
+        source = source_path.read_bytes()
+        content = build_empty_bodygroup_smd(source)
+        relative_path = PurePosixPath(*parent.parts, name).as_posix()
+        return workspace.write_bytes(relative_path, content)
+    except SMDTransformError as exc:
+        raise GenerationError(
+            exc.code,
+            "stage_empty_bodygroup",
+            exc.detail,
+            logical_path=reference.logical_source_model,
+        ) from exc
+    except (OSError, ValueError) as exc:
+        raise GenerationError(
+            "empty_bodygroup_source_read_failed",
+            "stage_empty_bodygroup",
+            f"{type(exc).__name__}: {exc}",
+            logical_path=reference.logical_source_model,
+        ) from exc
+    except StagingError as exc:
+        raise GenerationError(
+            exc.code,
+            "stage_empty_bodygroup",
+            exc.detail,
+            logical_path=reference.logical_source_model,
         ) from exc
 
 

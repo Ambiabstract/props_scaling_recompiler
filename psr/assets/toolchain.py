@@ -252,11 +252,25 @@ def validate_compiled_model(
         logical_path,
     )
     expected_name = logical_path.removeprefix("models/")
-    if _normalise_internal_name(internal_name) != expected_name:
+    try:
+        # studiohdr_t::name is a 64-byte C string. StudioMDL therefore keeps
+        # at most 63 ASCII bytes even though it still emits the output under
+        # the complete $modelname filesystem path.
+        expected_header_name = expected_name.encode("ascii")[:63].decode("ascii")
+    except UnicodeEncodeError as exc:
+        raise CompiledModelValidationError(
+            "compiled_modelname_encoding",
+            logical_path,
+            "expected MDL header model name is not ASCII",
+        ) from exc
+    if _normalise_internal_name(internal_name) != expected_header_name.casefold():
         raise CompiledModelValidationError(
             "compiled_modelname_mismatch",
             logical_path,
-            f"MDL header names {internal_name!r}, expected {expected_name!r}",
+            (
+                f"MDL header names {internal_name!r}, expected StudioMDL-representable "
+                f"name {expected_header_name!r} for {expected_name!r}"
+            ),
         )
     if not is_static:
         raise CompiledModelValidationError(

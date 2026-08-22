@@ -287,6 +287,68 @@ class ToolAdapterTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, "compiled_companion_missing")
             self.assertIn(".phy", raised.exception.detail)
 
+    def test_validation_accepts_studiomdl_63_byte_header_name_truncation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            game = Path(temp)
+            logical = (
+                "models/psr_scaled/props/de_nuke/hr_nuke/nuke_clothes/"
+                "nuke_overall_gloves_scaled_200.mdl"
+            )
+            internal_name = logical.removeprefix("models/")
+            case = {
+                "internal_model_name": "fixture/short.mdl",
+                "mdl_version": 48,
+                "static_prop": True,
+                "checksum_hex": "11223344",
+                "bone_count": 1,
+                "skin_families": [["body"]],
+                "cdmaterials": ["models/props/"],
+                "surface_property": "default",
+            }
+            mdl = bytearray(build_mdl(case))
+            truncated = internal_name.encode("ascii")[:63]
+            mdl[12:76] = truncated + b"\0" * (64 - len(truncated))
+            target = game.joinpath(*Path(logical).parts)
+            target.parent.mkdir(parents=True)
+            target.write_bytes(mdl)
+            for extension in (".vvd", ".dx80.vtx", ".dx90.vtx", ".sw.vtx"):
+                target.with_suffix(extension).write_bytes(extension.encode("ascii"))
+
+            validation = validate_compiled_model(game, logical, requires_physics=False)
+
+            self.assertEqual(validation.internal_model_name, internal_name[:63])
+
+    def test_validation_rejects_wrong_truncated_header_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            game = Path(temp)
+            logical = (
+                "models/psr_scaled/props/de_nuke/hr_nuke/nuke_clothes/"
+                "nuke_overall_gloves_scaled_200.mdl"
+            )
+            case = {
+                "internal_model_name": "fixture/short.mdl",
+                "mdl_version": 48,
+                "static_prop": True,
+                "checksum_hex": "11223344",
+                "bone_count": 1,
+                "skin_families": [["body"]],
+                "cdmaterials": ["models/props/"],
+                "surface_property": "default",
+            }
+            mdl = bytearray(build_mdl(case))
+            wrong = ("x" + logical.removeprefix("models/")[1:]).encode("ascii")[:63]
+            mdl[12:76] = wrong + b"\0" * (64 - len(wrong))
+            target = game.joinpath(*Path(logical).parts)
+            target.parent.mkdir(parents=True)
+            target.write_bytes(mdl)
+            for extension in (".vvd", ".dx80.vtx", ".dx90.vtx", ".sw.vtx"):
+                target.with_suffix(extension).write_bytes(extension.encode("ascii"))
+
+            with self.assertRaises(CompiledModelValidationError) as raised:
+                validate_compiled_model(game, logical, requires_physics=False)
+
+            self.assertEqual(raised.exception.code, "compiled_modelname_mismatch")
+
 
 class StagedQCCompileMatrixTests(unittest.TestCase):
     def test_static_dynamic_collision_and_existing_scale_matrix(self) -> None:

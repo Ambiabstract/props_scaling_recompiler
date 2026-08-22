@@ -140,6 +140,40 @@ class SourceMaterialInspectionTests(unittest.TestCase):
         self.assertEqual(select_color_parameter(legacy_tint), "$color")
         self.assertIn(("$color", "[0.25 0.5 0.75]"), legacy_tint.parameters)
 
+    def test_sdk_shader_prefix_reuses_base_shader_color_policy(self) -> None:
+        content = self.root / "content"
+        write_files(content, {
+            "materials/models/fixture/sdk_body.vmt": fixture_bytes(
+                "sdk_vertexlit_no_color.vmt"
+            ),
+            "materials/models/fixture/sdk_unlit.vmt": (
+                b'SDK_UnlitGeneric\n{\n    "$basetexture" "fixture/unlit"\n}\n'
+            ),
+            "materials/models/fixture/sdk_unsupported.vmt": (
+                b'SDK_LightmappedGeneric\n{\n    "$basetexture" "fixture/world"\n}\n'
+            ),
+        })
+        filesystem = self.filesystem("|gameinfo_path|content")
+
+        vertexlit = inspect_source_material(
+            filesystem,
+            "materials/models/fixture/sdk_body.vmt",
+        )
+        unlit = inspect_source_material(
+            filesystem,
+            "materials/models/fixture/sdk_unlit.vmt",
+        )
+        unsupported = inspect_source_material(
+            filesystem,
+            "materials/models/fixture/sdk_unsupported.vmt",
+        )
+
+        self.assertEqual(vertexlit.effective_shader, "SDK_VertexLitGeneric")
+        self.assertEqual(select_color_parameter(vertexlit), "$color2")
+        self.assertEqual(unlit.effective_shader, "SDK_UnlitGeneric")
+        self.assertEqual(select_color_parameter(unlit), "$color2")
+        self.assertIsNone(select_color_parameter(unsupported))
+
     def test_patch_is_expanded_and_all_dependencies_are_fingerprinted(self) -> None:
         content = self.root / "content"
         files = {

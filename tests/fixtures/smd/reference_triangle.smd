@@ -1,0 +1,17 @@
+// Synthetic reference SMD.
+version 1
+nodes
+  0 "root" -1
+  1 "handle" 0
+end
+skeleton
+  time 0
+    0 0 0 0 0 0 0
+    1 1 2 3 0 0 0
+end
+triangles
+fixture/material
+  0 0 0 0 0 0 1 0 0 1 0 1
+  0 1 0 0 0 0 1 1 0 1 0 1
+  0 0 1 0 0 0 1 0 1 1 0 1
+end

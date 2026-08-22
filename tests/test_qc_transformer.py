@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import unittest
 from decimal import Decimal
 from pathlib import Path
@@ -8,7 +9,9 @@ from psr.assets.qc import (
     QCTransformError,
     build_reference_qc,
     build_scaled_qc,
+    first_body_reference_smd,
     inspect_qc,
+    static_bodygroup_empty_smd_name,
 )
 
 
@@ -55,6 +58,67 @@ class QCInspectionTests(unittest.TestCase):
 
 
 class ReferenceQCTransformTests(unittest.TestCase):
+    def test_dynamic_static_conversion_replaces_bodygroup_blank_with_empty_smd(self) -> None:
+        source = (FIXTURES / "dynamic_bodygroup_blank.qc").read_bytes()
+        expected_name = static_bodygroup_empty_smd_name(
+            hashlib.sha256(source).hexdigest()
+        )
+
+        result = build_reference_qc(
+            source,
+            expected_source_families=(("body",),),
+            target_families=(("body",),),
+            require_staticprop=True,
+        )
+
+        self.assertIn(b"$staticprop", result.data)
+        self.assertIn(f'studio "{expected_name}"'.encode("ascii"), result.data)
+        self.assertNotIn(b"\n    blank", result.data)
+        self.assertEqual(first_body_reference_smd(source), "door_reference.smd")
+        self.assertEqual(
+            result.mutations,
+            ("insert_staticprop", "replace_bodygroup_blanks"),
+        )
+
+    def test_existing_static_bodygroup_blank_is_not_rewritten(self) -> None:
+        source = (
+            (FIXTURES / "dynamic_bodygroup_blank.qc").read_bytes()
+            .replace(
+                b'$modelname "props/door.mdl"\n',
+                b'$modelname "props/door.mdl"\n$staticprop\n',
+            )
+        )
+
+        result = build_reference_qc(
+            source,
+            expected_source_families=(("body",),),
+            target_families=(("body",),),
+            require_staticprop=True,
+        )
+
+        self.assertIn(b"\n    blank", result.data)
+        self.assertNotIn("replace_bodygroup_blanks", result.mutations)
+
+    def test_studio_argument_named_blank_is_not_a_blank_bodygroup_option(self) -> None:
+        source = (
+            b'$modelname "props/word_blank.mdl"\n'
+            b'$bodygroup "body"\n'
+            b'{\n'
+            b'    studio "mesh.smd"\n'
+            b'    studio blank\n'
+            b'}\n'
+        )
+
+        result = build_reference_qc(
+            source,
+            expected_source_families=(("body",),),
+            target_families=(("body",),),
+            require_staticprop=True,
+        )
+
+        self.assertIn(b"    studio blank\n", result.data)
+        self.assertNotIn("replace_bodygroup_blanks", result.mutations)
+
     def test_dynamic_reference_adds_staticprop_and_replaces_complete_skin_table(self) -> None:
         source = (FIXTURES / "dynamic_physics.qc").read_bytes()
         target_families = (

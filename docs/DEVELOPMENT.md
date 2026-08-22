@@ -44,7 +44,7 @@ CLI сохраняет совместимость с Hammer compile-run чере
 powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_release.ps1 -CrowbarPath <path-to-CrowbarCommandLineDecomp.exe>
 ```
 
-Скрипт сначала запускает обычные тесты, пересоздаёт только собственный `dist/props_scaling_recompiler_v2`, выполняет frozen `--version` smoke и отклоняет основной exe крупнее 64 MiB. Размер свыше предпочтительных 16 MiB даёт warning. Текущая проверенная сборка на Python 3.14/PyInstaller 6.22.2 — 10,90 MiB.
+Скрипт сначала запускает обычные тесты, пересоздаёт только собственный `dist/props_scaling_recompiler_v2`, выполняет frozen `--version` smoke и отклоняет основной exe крупнее 64 MiB. Размер свыше предпочтительных 16 MiB даёт warning. Текущая проверенная сборка на Python 3.14/PyInstaller 6.22.2 — 11 437 528 байт (10,91 MiB), SHA-256 `A023D40A60A82762E1D7AE251C18A96F5473E31D0F6C3817EAE1853A6AD5939C`.
 
 Полный frozen no-op regression запускается отдельно, чтобы тестировать уже собранный файл:
 
@@ -60,7 +60,7 @@ $env:PSR_RUN_EXTERNAL_RUNTIME = '1'
 python -m pytest -q -s tests/test_external_runtime.py -m external_sdk
 ```
 
-Внешние model tools вызываются только через `psr.assets.toolchain`: argv передаётся списком без shell, stdout/stderr сохраняются как bytes, timeout и ненулевой exit code становятся категоризированными ошибками. Crowbar обязан выдать ровно один QC в пустом isolated output directory. Успех StudioMDL сам по себе не считается готовым артефактом: `validate_compiled_model()` отдельно проверяет managed logical path, MDL 44–49, точный internal model name, static-prop flag и `.mdl/.vvd/.dx80.vtx/.dx90.vtx/.sw.vtx`, а при collision также `.phy`.
+Внешние model tools вызываются только через `psr.assets.toolchain`: argv передаётся списком без shell, stdout/stderr сохраняются как bytes, timeout и ненулевой exit code становятся категоризированными ошибками. Crowbar обязан выдать ровно один QC в пустом isolated output directory. Успех StudioMDL сам по себе не считается готовым артефактом: `validate_compiled_model()` отдельно проверяет managed logical path, MDL 44–49, точное StudioMDL-представимое internal model name, static-prop flag и `.mdl/.vvd/.dx80.vtx/.dx90.vtx/.sw.vtx`, а при collision также `.phy`. Поле `studiohdr_t::name[64]` в реальном SDK хранит не более 63 ASCII-байт и завершающий NUL, поэтому для более длинного `$modelname` строго проверяется детерминированный 63-байтовый префикс полного logical path.
 
 `psr.assets.generate_colored_material()` детерминированно создаёт generated Patch либо раскрытую full-copy VMT, повторно парсит собственный output через `srctools.vmt.Material` и возвращает bytes вместе с SHA-256. Patch включает полный logical source VMT path и помещает выбранный `$color`/`$color2` в запланированный `insert`/`replace`; full-copy сохраняет effective shader, параметры, blocks и proxies. Синтаксический/semantic контракт автоматизирован, но runtime-семантика Patch всё ещё требует отдельной opt-in проверки на SDK 2013 SP перед production commit цветных материалов.
 

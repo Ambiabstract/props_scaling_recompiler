@@ -11,7 +11,12 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from psr.assets import OrderedAssetFileSystem, parse_search_paths_text, plan_search_paths
+from psr.assets import (
+    OrderedAssetFileSystem,
+    build_empty_bodygroup_smd,
+    parse_search_paths_text,
+    plan_search_paths,
+)
 from psr.cache import (
     GeneratedModelRecord,
     build_project_identity,
@@ -101,13 +106,37 @@ $lod 40 { replacemodel "body.smd" "lod.smd" }
 '''
 
 SOURCE_DYNAMIC_QC = b'''$modelname "fixture/dynamic_v44.mdl"
-$body "body" "body.smd"
+$bodygroup "body"
+{
+    studio "body.smd"
+}
+$bodygroup "optional"
+{
+    blank
+    studio "body.smd"
+}
 $cdmaterials "models/fixture/dynamic/"
 $texturegroup "skinfamilies"
 {
     { "shell" }
 }
 $sequence "idle" "body.smd"
+'''
+
+SOURCE_REFERENCE_SMD = b'''version 1
+nodes
+  0 "root" -1
+end
+skeleton
+  time 0
+    0 0 0 0 0 0 0
+end
+triangles
+fixture/shell
+  0 0 0 0 0 0 1 0 0 1 0 1
+  0 1 0 0 0 0 1 1 0 1 0 1
+  0 0 1 0 0 0 1 0 1 1 0 1
+end
 '''
 
 
@@ -126,7 +155,7 @@ if model.stem == "dynamic_v44":
     (output / "dynamic_v44.qc").write_bytes({SOURCE_DYNAMIC_QC!r})
 else:
     (output / "static_multi.qc").write_bytes({SOURCE_QC!r})
-(output / "body.smd").write_bytes(b"body")
+(output / "body.smd").write_bytes({SOURCE_REFERENCE_SMD!r})
 (output / "lod.smd").write_bytes(b"lod")
 (output / "physics.smd").write_bytes(b"physics")
 '''
@@ -942,6 +971,21 @@ class GenerationPipelineTests(unittest.TestCase):
                 "models/psr_scaled/fixture/dynamic_v44_scaled_100.mdl",
             )
             self.assertIn("insert_staticprop", result.qc_plan.references[0].mutations)
+            reference = result.qc_plan.references[0]
+            self.assertIn("replace_bodygroup_blanks", reference.mutations)
+            self.assertIsNotNone(reference.empty_bodygroup_smd_name)
+            placeholder = (
+                result.decompilations[0].qc_path.parent
+                / reference.empty_bodygroup_smd_name
+            )
+            self.assertEqual(
+                placeholder.read_bytes(),
+                build_empty_bodygroup_smd(SOURCE_REFERENCE_SMD),
+            )
+            self.assertIn(
+                f'studio "{reference.empty_bodygroup_smd_name}"'.encode("ascii"),
+                model.qc_artifact.content,
+            )
             self.assertEqual(len(model.validation.files), 5)
 
     def test_material_change_after_planning_aborts_before_tool_execution(self) -> None:
