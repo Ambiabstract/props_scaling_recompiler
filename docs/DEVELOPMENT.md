@@ -34,7 +34,7 @@ Runtime-зависимость `srctools` закреплена точной ве
 
 ## Runtime и release-сборка
 
-CLI сохраняет совместимость с Hammer compile-run через `-game`, `-vmf_in` и `-vmf_out`. Старые `0/1`-флаги принимаются, но игнорируются с deprecated warning. Project state размещается под `%LOCALAPPDATA%\PropsScalingRecompiler\projects\<project_id>`; два одновременных запуска одного проекта блокируются. Manifest, recovery journal, logs и operation staging не размещаются рядом с пользовательским VMF.
+CLI сохраняет совместимость с Hammer compile-run через `-game`, `-vmf_in` и `-vmf_out`. Старые `0/1`-флаги принимаются, но игнорируются с deprecated warning. Постоянный project state размещается под `%LOCALAPPDATA%\PropsScalingRecompiler\projects\<project_id>`; два одновременных запуска одного проекта блокируются. Короткий operation staging находится под `%LOCALAPPDATA%\PropsScalingRecompiler\work\<project_prefix>`, чтобы Crowbar 0.68 не упирался в legacy Win32 path limit. Manifest, recovery journal, logs и staging не размещаются рядом с пользовательским VMF.
 
 Целевая поставка — Windows 10/11 x64: один `props_scaling_recompiler.exe` и отдельный `third-party/CrowbarCommandLineDecomp.exe`. VPKEdit и Crowbar не встраиваются в основной exe. StudioMDL берётся из окружения Source SDK 2013 SP.
 
@@ -51,6 +51,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_release.ps1 
 ```text
 $env:PSR_FROZEN_EXE = (Resolve-Path dist\props_scaling_recompiler_v2\props_scaling_recompiler.exe).Path
 python -m pytest -q tests/test_frozen_executable.py
+```
+
+Полный opt-in production runtime regression на копии приоритетной карты Antenna запускает cold generation реальными Crowbar/StudioMDL, затем tool-less warm reuse. Протокол и зафиксированные метрики находятся в `docs/research/PRODUCTION_RUNTIME_VALIDATION.md`:
+
+```text
+$env:PSR_RUN_EXTERNAL_RUNTIME = '1'
+python -m pytest -q -s tests/test_external_runtime.py -m external_sdk
 ```
 
 Внешние model tools вызываются только через `psr.assets.toolchain`: argv передаётся списком без shell, stdout/stderr сохраняются как bytes, timeout и ненулевой exit code становятся категоризированными ошибками. Crowbar обязан выдать ровно один QC в пустом isolated output directory. Успех StudioMDL сам по себе не считается готовым артефактом: `validate_compiled_model()` отдельно проверяет managed logical path, MDL 44–49, точный internal model name, static-prop flag и `.mdl/.vvd/.dx80.vtx/.dx90.vtx/.sw.vtx`, а при collision также `.phy`.

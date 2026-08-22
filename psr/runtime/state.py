@@ -56,15 +56,23 @@ def build_project_state_paths(
                 "LOCALAPPDATA is not defined; PSR requires Windows 10/11 user state",
             )
         local_appdata = Path(raw)
-    base = local_appdata.resolve() / _APPLICATION_DIRECTORY / "projects"
+    application_root = local_appdata.resolve() / _APPLICATION_DIRECTORY
+    base = application_root / "projects"
     root = base / project.project_id
+    # Crowbar 0.68 still uses the legacy Win32 path limit. Keeping operation
+    # staging below the full 64-character project-id directory makes room for
+    # original model subpaths and generated QC/SMD names. The full identity,
+    # lock, manifest, and recovery journal remain in ``root``; staging roots
+    # are unique and marker-protected, so the short routing key is not an
+    # identity or ownership boundary.
+    staging = application_root / "work" / project.project_id[:16]
     return ProjectStatePaths(
         root=root,
         manifest=root / "manifest.json",
         lock=root / "operation.lock",
         recovery_journal=root / "recovery.json",
         logs=root / "logs",
-        staging=root / "staging",
+        staging=staging,
         failed_runs=root / "failed_runs",
     )
 

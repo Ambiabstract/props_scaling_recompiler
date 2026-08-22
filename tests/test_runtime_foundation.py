@@ -40,6 +40,13 @@ class ProjectStateTests(unittest.TestCase):
         self.assertEqual(paths.manifest.parent, paths.root)
         self.assertEqual(paths.lock.parent, paths.root)
         self.assertEqual(paths.recovery_journal.parent, paths.root)
+        self.assertEqual(
+            paths.staging,
+            self.root.resolve()
+            / "PropsScalingRecompiler"
+            / "work"
+            / ("a" * 16),
+        )
         self.assertFalse(paths.root.exists())
 
         paths.ensure_directories()

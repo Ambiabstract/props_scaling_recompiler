@@ -39,4 +39,6 @@ Warm-cache matrix в `test_generation_pipeline.py` повторяет тот ж�
 
 `test_external_sdk_generation.py` по явному `PSR_RUN_EXTERNAL_SDK=1` запускает read-only/isolated matrix на реальном `book_2`, Crowbar 0.68 и StudioMDL SDK 2013 SP. Direct `insert`, direct `replace` и source-Patch full-copy cases используют только temporary staging/overlays; capacity cases доказывают успешные 31 material/1024 family rows и отказ StudioMDL на 32 material/1025 rows. Default test run пропускает их; протокол границ находится в `docs/research/SDK_SKIN_LIMITS.md`.
 
+`test_external_runtime.py` по явному `PSR_RUN_EXTERNAL_RUNTIME=1` выполняет полный production cold-run на временной копии `aa_models_color_tint_test_01a.vmf`, структурно проверяет итоговый VMF и manifest, а затем повторяет запуск без Crowbar/StudioMDL и доказывает побайтово стабильный warm-cache reuse. Исходный VMF и managed trees Antenna сверяются до/после. Протокол находится в `docs/research/PRODUCTION_RUNTIME_VALIDATION.md`.
+
 `test_skin_layout.py` дополнительно проверяет project-wide reconciliation: добавление нового colored row к стабильному layout возвращает в generation plan закэшированные масштабы других карт, чтобы один `_scaled_XXX` path не смешивал разные skin-layout revisions.

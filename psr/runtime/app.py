@@ -36,6 +36,7 @@ from psr.pipeline import (
 )
 
 from .reporting import DiagnosticReport
+from .staging_gameinfo import build_staging_gameinfo
 from .state import ProjectLock, ProjectStatePaths, build_project_state_paths
 
 
@@ -193,6 +194,10 @@ def execute_compile_run(
             preserve=True,
         )
         try:
+            workspace.write_bytes(
+                "game/GameInfo.txt",
+                build_staging_gameinfo(search_plan.mounts),
+            )
             generation = generate_and_validate(
                 workspace,
                 filesystem,
@@ -219,11 +224,24 @@ def execute_compile_run(
                 recovery_journal_path=state.recovery_journal,
             )
         except (GenerationError, CommitError, StagingError) as exc:
+            detail = getattr(exc, "detail", str(exc))
+            logical_path = getattr(exc, "logical_path", None)
+            if logical_path is not None:
+                detail = f"{logical_path}: {detail}"
             report.add(
                 "error",
                 getattr(exc, "code", "pipeline_failed"),
-                getattr(exc, "detail", str(exc)),
+                detail,
             )
+            invocation = getattr(exc, "invocation", None)
+            if invocation is not None:
+                captured = _captured_tool_output(invocation.stdout, invocation.stderr)
+                if captured:
+                    report.add(
+                        "recommendation",
+                        "external_tool_output",
+                        captured,
+                    )
             report.add(
                 "recommendation",
                 "staging_retained",
@@ -325,6 +343,15 @@ def _preserve_rejected_manifest(
     except OSError:
         return None
     return destination
+
+
+def _captured_tool_output(stdout: bytes, stderr: bytes) -> str:
+    combined = b"\n".join(item for item in (stdout, stderr) if item).strip()
+    if not combined:
+        return ""
+    limit = 16 * 1024
+    suffix = b"\n...[tool output truncated]" if len(combined) > limit else b""
+    return combined[:limit].decode("utf-8", errors="replace") + suffix.decode("ascii")
 
 
 __all__ = [
