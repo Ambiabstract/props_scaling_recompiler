@@ -234,6 +234,22 @@ def build_reference_qc(
                 blank_tokens[0].start,
             )
 
+        # Crowbar can emit explicit source-skeleton declarations even though
+        # its decompiled render SMD is already rigidly weighted to the
+        # ``static_prop`` bone.  Keeping those declarations before adding
+        # $staticprop makes StudioMDL retain the old, unused bones ahead of the
+        # render bone.  Source's static-prop path transforms bone 0 only, so
+        # the render mesh then appears at world origin while PHY remains at the
+        # entity.  Remove only top-level commands and leave static source QCs,
+        # comments, nested text and every unrelated byte untouched.
+        definebones = _commands_named(document, "$definebone")
+        if definebones:
+            data = _apply_edits(data, [
+                _Edit(command.start, command.end, b"")
+                for command in definebones
+            ])
+            mutations.append("remove_definebones")
+
     if compiled_target != target:
         document = _parse_document(data)
         cdmaterials = _commands_named(document, "$cdmaterials")

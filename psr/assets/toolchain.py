@@ -18,6 +18,7 @@ from .searchpaths import normalize_logical_path
 
 
 _STATIC_PROP_FLAG = 0x10
+_BONE_COUNT_OFFSET = 156
 _SUPPORTED_MDL_VERSIONS = range(44, 50)
 _DEFAULT_MODEL_EXTENSIONS = (
     ".mdl",
@@ -200,6 +201,7 @@ def validate_compiled_model(
     logical_model_path: str,
     *,
     requires_physics: bool,
+    requires_static_conversion: bool = False,
     required_extensions: Sequence[str] = _DEFAULT_MODEL_EXTENSIONS,
 ) -> CompiledModelValidation:
     """Validate a staged managed model and every explicitly expected file."""
@@ -238,7 +240,7 @@ def validate_compiled_model(
             )
         if extension == ".mdl":
             with physical.open("rb") as stream:
-                mdl_header = stream.read(156)
+                mdl_header = stream.read(_BONE_COUNT_OFFSET + 4)
         metadata.append(CompiledFileMetadata(
             logical_path=companion,
             physical_path=physical,
@@ -278,6 +280,8 @@ def validate_compiled_model(
             logical_path,
             "generated MDL does not have the static-prop flag",
         )
+    if requires_static_conversion:
+        _validate_static_conversion_bones(mdl_header, logical_path)
     return CompiledModelValidation(
         logical_model_path=logical_path,
         internal_model_name=internal_name,
@@ -380,6 +384,25 @@ def _inspect_compiled_mdl_header(data: bytes, logical_path: str) -> tuple[int, s
         ) from exc
     flags = struct.unpack_from("<I", data, 152)[0]
     return version, internal_name, bool(flags & _STATIC_PROP_FLAG)
+
+
+def _validate_static_conversion_bones(data: bytes, logical_path: str) -> None:
+    if len(data) < _BONE_COUNT_OFFSET + 4:
+        raise CompiledModelValidationError(
+            "compiled_mdl_truncated",
+            logical_path,
+            "MDL header does not contain numbones",
+        )
+    bone_count = struct.unpack_from("<i", data, _BONE_COUNT_OFFSET)[0]
+    if bone_count != 1:
+        raise CompiledModelValidationError(
+            "compiled_static_conversion_bones",
+            logical_path,
+            (
+                "dynamic-to-static output must contain exactly one render bone at "
+                f"index 0, found {bone_count} bones"
+            ),
+        )
 
 
 def _normalise_internal_name(value: str) -> str:

@@ -349,6 +349,39 @@ class ToolAdapterTests(unittest.TestCase):
 
             self.assertEqual(raised.exception.code, "compiled_modelname_mismatch")
 
+    def test_validation_rejects_multibone_dynamic_to_static_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            game = Path(temp)
+            logical = "models/psr_scaled/props/multibone_scaled_100.mdl"
+            case = {
+                "internal_model_name": logical.removeprefix("models/"),
+                "mdl_version": 48,
+                "static_prop": True,
+                "checksum_hex": "11223344",
+                "bone_count": 2,
+                "skin_families": [["body"]],
+                "cdmaterials": ["models/props/"],
+                "surface_property": "default",
+            }
+            target = game.joinpath(*Path(logical).parts)
+            target.parent.mkdir(parents=True)
+            target.write_bytes(build_mdl(case))
+            for extension in (".vvd", ".dx80.vtx", ".dx90.vtx", ".sw.vtx"):
+                target.with_suffix(extension).write_bytes(extension.encode("ascii"))
+
+            with self.assertRaises(CompiledModelValidationError) as raised:
+                validate_compiled_model(
+                    game,
+                    logical,
+                    requires_physics=False,
+                    requires_static_conversion=True,
+                )
+
+            self.assertEqual(
+                raised.exception.code,
+                "compiled_static_conversion_bones",
+            )
+
 
 class StagedQCCompileMatrixTests(unittest.TestCase):
     def test_static_dynamic_collision_and_existing_scale_matrix(self) -> None:

@@ -202,6 +202,7 @@ def _validate_cached_model(
         game,
         record.logical_output_model,
         requires_physics=source_has_physics,
+        requires_static_conversion=record.requires_static_conversion,
     )
     canonical_expected = {item.logical_path for item in validation.files}
     if canonical_expected != set(expected) or any(

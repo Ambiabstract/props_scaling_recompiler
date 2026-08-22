@@ -38,7 +38,7 @@ CLI сохраняет совместимость с Hammer compile-run чере
 
 Fallback версии 2.0 для dynamic MDL с пустым option многовариантного bodygroup является чистой VMF-конверсией: asset не передаётся Crowbar/StudioMDL, не получает managed MDL/VMT/skin layout и не восстанавливается из прежних cached variants. В output сохраняются исходные `model`, `modelscale`, `rendercolor` и `skin`, classname становится `prop_dynamic`, а legacy `convert_prop_to_static` удаляется. Полноценная static-конвертация этого класса моделей отложена в отдельный будущий SMD-aware этап; zero-triangle placeholders запрещены.
 
-Целевая поставка — Windows 10/11 x64: один `props_scaling_recompiler.exe` и отдельный `third-party/CrowbarCommandLineDecomp.exe`. VPKEdit и Crowbar не встраиваются в основной exe. StudioMDL берётся из окружения Source SDK 2013 SP. Текущая сборка после VMF-only dynamic-bodygroup fallback — 11 432 874 байта (10,90 MiB), SHA-256 `F82035D6372F4E0A4653C98B3DA92D65689E27E40635E0C81C4C46BAF6B65F59`.
+Целевая поставка — Windows 10/11 x64: один `props_scaling_recompiler.exe` и отдельный `third-party/CrowbarCommandLineDecomp.exe`. VPKEdit и Crowbar не встраиваются в основной exe. StudioMDL берётся из окружения Source SDK 2013 SP. Текущая сборка `2.0.0.dev3` после исправления dynamic-to-static bone layout — 11 433 757 байт (10,90 MiB), SHA-256 `A131E91A9A1928D33924CECB4EBAF97738FA80BEE581EA3C4DF37A99025D086C`.
 
 Воспроизводимая сборка:
 
@@ -46,7 +46,15 @@ Fallback версии 2.0 для dynamic MDL с пустым option многов
 powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_release.ps1 -CrowbarPath <path-to-CrowbarCommandLineDecomp.exe>
 ```
 
-Скрипт сначала запускает обычные тесты, пересоздаёт только собственный `dist/props_scaling_recompiler_v2`, выполняет frozen `--version` smoke и отклоняет основной exe крупнее 64 MiB. Размер свыше предпочтительных 16 MiB даёт warning. Текущая проверенная сборка на Python 3.14/PyInstaller 6.22.2 — 11 432 874 байта (10,90 MiB), SHA-256 `F82035D6372F4E0A4653C98B3DA92D65689E27E40635E0C81C4C46BAF6B65F59`.
+Скрипт сначала запускает обычные тесты, пересоздаёт только собственный `dist/props_scaling_recompiler_v2`, выполняет frozen `--version` smoke и отклоняет основной exe крупнее 64 MiB. Размер свыше предпочтительных 16 MiB даёт warning. Текущая проверенная сборка `2.0.0.dev3` на Python 3.14/PyInstaller 6.22.2 — 11 433 757 байт (10,90 MiB), SHA-256 `A131E91A9A1928D33924CECB4EBAF97738FA80BEE581EA3C4DF37A99025D086C`.
+
+После каждого полезного изменения рабочего кода, поведения или сборочной конфигурации PSR завершённый цикл разработки включает не только автоматические проверки, но и немедленную подготовку версии для ручного теста пользователя:
+
+1. Успешно выполнить release-сборку и frozen smoke.
+2. Скопировать полученный `dist\props_scaling_recompiler_v2\props_scaling_recompiler.exe` с заменой в `C:\Program Files (x86)\Steam\steamapps\common\Source SDK Base 2013 Singleplayer\bin\props_scaling_recompiler.exe`.
+3. Повторно вычислить SHA-256 обоих файлов и убедиться, что установленный EXE побайтно соответствует только что собранному.
+
+Пользователь заранее разрешил это точечное обновление установленного EXE, чтобы сразу переходить к ручной проверке. Разрешение не распространяется на другие файлы SDK или проекта Antenna. Изменения только документации не требуют пересборки и установки EXE.
 
 Полный frozen no-op regression запускается отдельно, чтобы тестировать уже собранный файл:
 

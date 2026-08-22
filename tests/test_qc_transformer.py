@@ -171,6 +171,55 @@ class ReferenceQCTransformTests(unittest.TestCase):
         self.assertEqual(first.mutations, ())
         self.assertEqual(second.data, source)
 
+    def test_dynamic_static_conversion_removes_only_top_level_definebones(self) -> None:
+        source = (
+            b'// $definebone "commented" "" 0 0 0 0 0 0\n'
+            b'$modelname "props/dynamic.mdl"\n'
+            b'$definebone "old_root" "" 0 0 0 0 0 0\n'
+            b'$definebone "old_child" "old_root" 1 2 3 0 0 0\n'
+            b'$body "body" "body.smd"\n'
+            b'$collisionmodel "physics.smd"\n'
+            b'{\n'
+            b'    $definebone "nested_text" "" 0 0 0 0 0 0\n'
+            b'}\n'
+        )
+
+        result = build_reference_qc(
+            source,
+            expected_source_families=(("body",),),
+            target_families=(("body",),),
+            require_staticprop=True,
+        )
+
+        self.assertEqual(
+            result.mutations,
+            ("insert_staticprop", "remove_definebones"),
+        )
+        self.assertNotIn(b'$definebone "old_root"', result.data)
+        self.assertNotIn(b'$definebone "old_child"', result.data)
+        self.assertIn(b'// $definebone "commented"', result.data)
+        self.assertIn(b'$definebone "nested_text"', result.data)
+        self.assertIn(b'$body "body" "body.smd"', result.data)
+        self.assertTrue(inspect_qc(result.data).is_static_prop)
+
+    def test_static_source_keeps_top_level_definebones(self) -> None:
+        source = (
+            b'$modelname "props/static.mdl"\n'
+            b'$staticprop\n'
+            b'$definebone "static_prop" "" 0 0 0 0 0 0\n'
+            b'$body "body" "body.smd"\n'
+        )
+
+        result = build_reference_qc(
+            source,
+            expected_source_families=(("body",),),
+            target_families=(("body",),),
+            require_staticprop=True,
+        )
+
+        self.assertEqual(result.data, source)
+        self.assertEqual(result.mutations, ())
+
     def test_missing_texturegroup_is_valid_for_one_source_family_and_inserted_for_color(self) -> None:
         source = b'$modelname "props/single.mdl"\n$body "b" "b.smd"\n'
 

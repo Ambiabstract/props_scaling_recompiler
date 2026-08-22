@@ -220,6 +220,7 @@ def generate_and_validate(
                 workspace.path("game"),
                 variant.logical_output_model,
                 requires_physics=source.has_physics,
+                requires_static_conversion=requirement.requires_static_conversion,
             )
         except ToolExecutionError as exc:
             raise GenerationError(
