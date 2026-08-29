@@ -1,6 +1,6 @@
 # Память проекта props_scaling_recompiler
 
-Дата фиксации: 2026-08-29.
+Дата фиксации: 2026-08-30.
 
 ## Назначение
 
@@ -173,6 +173,8 @@ blablabla -> 1.0
 
 В production-модели данных и кэше хранятся raw-строка `modelscale` и итоговый PSR compile scale после Hammer-совместимой нормализации, нижнего clamp и округления. Именование, generated identity и кэш опираются на compile scale; raw сохраняется в `MapUsage` для provenance и диагностики. Geometry scale детерминированно выводится из compile scale, MDL bone count и static flag, присутствует в operation/QC plan, но не становится независимой persistent identity. Hammer-compatible effective scale является тестовым oracle и не входит в cache schema. Разные raw-значения намеренно схлопываются в один `_scaled_XXX`, если дают одинаковый округлённый compile scale. Числовая identity равна точному целому `compile_scale * 100`; в имени она форматируется с минимальной шириной 3 и ведущими нулями для коротких значений (`001`, `050`, `110`, но `1000` и `5500` не обрезаются). Внутренняя структура исходного model path сохраняется под `models/psr_scaled/`.
 
+Корректно распарсенный десятичный `skin`, индекс которого не существует в текущей source skin-family table, повторяет подтверждённое поведение Hammer++ и игрового runtime: effective source skin равен 0. Downstream planning, покраска, skin-layout identity и итоговый VMF работают так, будто художник намеренно указал skin 0, но итоговый отчёт обязательно содержит жёлтый warning с raw/effective index, моделью и затронутыми entity IDs. Исходная raw-строка остаётся в `VmfEntityRequest` до нормализации и повторно читается из исходного VMF при следующем compile-run. Если original MDL изменится и прежний raw index станет существующим, новый source/skin-layout fingerprint инвалидирует все cached scale variants этой модели, после чего request интерпретируется уже как новый настоящий skin и все variations перекомпилируются. Недесятичная строка `skin` не является «несуществующим индексом» и пока остаётся отдельным malformed request.
+
 ### Материалы
 
 Корень generated-материалов:
@@ -296,7 +298,15 @@ validate inputs
 
 Если корректный partial либо byte-equivalent passthrough `vmf_out` создан и валидирован, run всегда возвращает exit code 0, даже когда отчёт содержит красные errors, пропущенные entities/models или fallback-замены. Exit code 1 зарезервирован исключительно для случаев, когда PSR не смог передать корректный `vmf_out` следующему compile step. В самом плохом восстанавливаемом случае PSR пишет эквивалент оригинального `vmf_in`, не меняя его содержимое; неизвестный движку `prop_static_scalable` в таком output допустим.
 
-Каждый compile-run, включая no-op и завершение с ошибкой, заканчивается единым сводным отчётом. В конце консольного вывода отдельно группируются и дедуплицируются все ошибки, предупреждения и рекомендации, накопленные всеми стадиями; пользователь не должен искать диагностику по промежуточному логу. Warning-секции и отдельные warning-сообщения выводятся жёлтым цветом, если консоль поддерживает цвет. Итоговый exit code вычисляется после печати отчёта.
+Каждый compile-run, включая no-op и завершение с ошибкой, заканчивается единым сводным отчётом. Пользователь не должен искать диагностику по промежуточному логу. Итоговый exit code вычисляется независимо от severity после печати отчёта.
+
+Отчёт имеет ровно три дедуплицированные группы:
+
+- красный `ERROR`: PSR не смог создать или предоставить требуемый static-result. Успешный перевод entity в `prop_dynamic_override`, сохранение исходного `prop_static_scalable` или другой fail-soft fallback не понижает такой случай до warning; fallback лишь позволяет продолжить compile-run и получить exit code 0 при валидном `vmf_out`. Уже готовая подходящая original static model считается успешно предоставленным static-result и ошибкой не является;
+- жёлтый `WARNING`: static-result успешно получен и может быть использован, но request/result был нормализован, ограничен, угадан или имеет известный дефект/нюанс. Сюда относятся skin/material capacity fallback, Hammer-необычный scale (`0.001`, `1,0`, `blablabla`), известная проблема collision transform при пригодной статической модели, out-of-range skin с effective 0 и будущий поиск original model по указанной generated variation;
+- нейтральный `INFO`: статистика проекта и текущей сессии — discovered/processed/generated/reused/skipped/fallback counts, размеры, elapsed time, cache/project summary и необязательные короткие весёлые факты.
+
+Если одна первопричина порождает несколько сообщений, итоговый отчёт оставляет наивысшую severity и объединяет модели/вариации/entity IDs, не спамя одинаковыми строками. Практическую рекомендацию по исправлению следует прикладывать к соответствующей `ERROR`/`WARNING` записи, а не выделять четвёртую категорию. При отсутствии ANSI/console color смысл сохраняют текстовые заголовки и метки.
 
 ## GameInfo и разрешение ассетов
 
@@ -515,7 +525,7 @@ debug_logs/psr_big_map_test_02a_props_scaling_recompiler_log.txt
 
 Реальные VMF теперь доступны в проекте Antenna и описаны ниже. Они остаются mutable integration-окружением вне репозитория. Для unit/regression automation позднее нужно сделать минимальные source-preserving копии или synthetic fixtures с зафиксированным provenance/hash, не изменяя оригинальные карты.
 
-Read-only проверка нового VMF discovery воспроизвела зафиксированные counts и SHA-256 всех трёх приоритетных карт: 27/118/49 активных PSR entities, ноль hidden и ноль structural diagnostics. Для `aa_models_color_tint_test_01a.vmf` все восемь уникальных моделей дополнительно разрешены и прочитаны через production MDL adapter без diagnostics. После подключения scale resolver полный pre-generation plan этой карты также валиден: 27 usages агрегированы в 17 generated-model requirements и 8 color/skin requirements без diagnostics.
+Read-only проверка VMF discovery подтверждает текущие counts трёх приоритетных карт: 27/118/62 активных PSR entities, ноль hidden и ноль structural diagnostics. Для `aa_models_color_tint_test_01a.vmf` все восемь уникальных моделей дополнительно разрешены и прочитаны через production MDL adapter без diagnostics. После подключения scale resolver полный pre-generation plan этой карты также валиден: 27 usages агрегированы в 17 generated-model requirements и 8 color/skin requirements без diagnostics.
 
 Read-only material inventory той же `aa_models_color_tint_test_01a.vmf` при неизменном SHA-256 `18AEDE35A65477A3CECD00B6E063DE3E5807F5FB7388DD77C37F80958F57B69D` нашёл четыре уникальных реально требуемых VMT и восемь `(source VMT, RGB)` generated identities. Все четыре VMT разрешены из folder SearchPath, используют прямой `VertexLitGeneric`, не содержат `$color`/`$color2`, proxies или Patch dependencies. Текущий консервативный план для всех восьми identities валиден и выбирает `$color2` + `insert` + `patch`; внешние файлы не изменялись.
 
@@ -539,7 +549,7 @@ C:\Program Files (x86)\Steam\steamapps\sourcemods\antenna_sdk2013\maps
 |---|---|---:|---:|---:|---:|---:|
 | `aa_models_color_tint_test_01a.vmf` | `18AEDE35A65477A3CECD00B6E063DE3E5807F5FB7388DD77C37F80958F57B69D` | 27 | 8 | 25 | 2 | 8 |
 | `aa_models_static_convert_test_01a.vmf` | `690C587A6D9C6FF50AA951A997BFA02E1B8DF896EF40B711DA090F9581EEAE4A` | 118 | 66 | 107 | 11 | 6 |
-| `psr_test_01a.vmf` | `506DA823F25275C40B0DFEA55F2F891A893626E9EB71F47D48865B376B94391A` | 49 | 7 | 49 | 0 | 24 |
+| `psr_test_01a.vmf` | `A468E5D3527FF3E7D9F271EEEC08AC6220BF100B4F8F923B43B0BC2F4711C58D` | 62 | 11 | 62 | 0 | 29 |
 
 Здесь request — точная raw-комбинация `(model, modelscale, skin, rendercolor)` до Hammer-compatible нормализации. Повтор — дополнительная entity с уже встречавшейся raw-комбинацией. После вычисления effective scale и итогового compile scale число generated artifacts может быть меньше.
 
@@ -571,12 +581,13 @@ C:\Program Files (x86)\Steam\steamapps\sourcemods\antenna_sdk2013\maps
 
 ### psr_test_01a
 
-Компактная regression-карта для scale/static conversion, Hammer++ scale parsing и покраски при исходном skin 0.
+Компактная regression-карта для scale/static conversion, Hammer++ scale parsing, покраски и out-of-range skin normalization.
 
-- 49 PSR entities, 7 моделей и 49 уникальных raw requests; точных raw-повторов в текущем снимке нет.
-- Все 49 entities используют source skin 0. Поэтому карта хорошо проверяет покраску, но не заменяет `aa_models_color_tint_test_01a` для remap нескольих исходных skin families.
-- 24 non-white entities охватывают девять non-white RGB; вместе с white это десять цветовых значений.
-- Raw scale matrix: `1.0` (15), `0.50` (13), `1.50` (15), `3` (2), а также по одной entity с `1,0`, `3,0`, `invalid_scale_test` и `blablabla`.
+- Структурно валидный снимок от 2026-08-30 имеет 63 564 байта, 62 PSR entities, 11 моделей, 62 уникальных raw requests, ноль точных повторов, ноль hidden PSR entities и ноль structural diagnostics.
+- 58 entities используют raw skin 0. `concrete_tile_256_2.mdl` имеет ровно две source families (валидные индексы 0/1): entity 1617/1651 проверяют валидный skin 1 при scale `1.0`/`0.60`, а entity 1621/1653 намеренно запрашивают несуществующий skin 2 при тех же масштабах и должны нормализоваться в effective skin 0 с одним дедуплицированным жёлтым warning, перечисляющим обе entity.
+- 29 non-white entities охватывают тринадцать non-white RGB; вместе с white это четырнадцать цветовых значений.
+- Raw scale matrix: `1.0` (18), `0.50` (17), `1.50` (15), `0.60` (3), `3` (2), `1` (2), а также по одной entity с `0.35`, `1,0`, `3,0`, `invalid_scale_test` и `blablabla`.
+- Read-only WIP plan разрешает все 11 source MDL и строит 62 usages, 24 generated-model requirements и 17 colored-skin requirements. Текущий временный код ещё не создаёт утверждённый out-of-range skin warning и ошибочно считает три empty-bodygroup dynamic fallback предупреждениями. После исправления ожидаются три красных `ERROR` для entity 540/542/544, четыре Hammer scale `WARNING` и один дедуплицированный out-of-range skin `WARNING` для raw skin 2 с entity 1621/1653.
 - По поведению output 1.1.2 три модели при scale 1.0 используют оригинал как static, четыре получают legacy `_static` вариант. Это удобная начальная матрица уже-static против convert-to-static.
 
 Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и структурно валиден:
@@ -603,7 +614,6 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - точная runtime-семантика generated Patch `insert`/`replace` и Patch-chain на SDK 2013 SP;
 - способ fingerprint зависимостей для Patch из VPK;
 - политика переноса legacy-generated модели, выбранной как новый original;
-- фактическое поведение Hammer++ viewport и игрового runtime для несуществующего skin index: проверить как минимум `skin == skin_family_count`, очень большое и отрицательное значение; до результата не считать такой request ошибкой и не закреплять принудительную подмену на skin 0 как контракт;
 - полевой smoke общего fallback на `prop_dynamic_override`: сохранение `modelscale`/`skin`/`rendercolor`, видимая геометрия, collision и отсутствие удаления representative static/dynamic/physics моделей. Это проверка выбранного поведения, а не compatibility-gate перед каждой заменой;
 - retention/cleanup policy для сохранённых staging и failed runs;
 - UX и CLI-флаг явного project-wide colored-layout cleanup/compaction; базовая safety-policy и требование dry-run уже утверждены.
@@ -615,10 +625,10 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 2. Зафиксировать маленькими contract fixtures fail-soft outcomes и dependency closures: entity-only, color/material usage, model+scale variation, whole original model, shared VMT и невозможность `vmf_out`. Отдельно проверить контракт exit code 0/1 и byte-equivalent passthrough.
 3. Заменить all-or-nothing generation/commit на сбор результатов по единицам работы: продолжать независимые операции, валидировать и публиковать только успешные artifacts, обновлять manifest/`MapUsage` только доказанными результатами и передавать VMF writer полный outcome ledger.
 4. Реализовать общий `prop_dynamic_override` fallback без model compatibility-gate, с сохранением runtime properties, красной итоговой диагностикой и CLI-переключателем default 1. При отключённом fallback неудачная entity остаётся исходным `prop_static_scalable`.
-5. Сделать `vmf_out` главным критерием успеха run: partial/passthrough output валидируется структурно и возвращает 0; только невозможность передать валидный output возвращает 1. После этого собрать единый дедуплицированный отчёт с перечнем пропущенных entities/variations/models.
+5. Сделать `vmf_out` главным критерием успеха run: partial/passthrough output валидируется структурно и возвращает 0; только невозможность передать валидный output возвращает 1. После этого собрать единый дедуплицированный трёхсекционный отчёт `ERROR`/`WARNING`/`INFO`, где severity не определяет exit code.
 6. Завершить bounds-изменение: обновить старые tests, добавить version/fingerprint generation recipe для инвалидирования уже собранных MDL после изменения QC-transform semantics и полево проверить culling крупных моделей.
 7. Добавить централизованный UX progress/heartbeat для этапов дольше пяти секунд, стартовый banner/контакты, понятные сообщения о неверном размещении EXE и итоговый elapsed time. Временные разрозненные `print()` не использовать как интерфейс.
-8. Провести два компактных полевых исследования на целевом SDK: поведение Hammer++/runtime при несуществующем skin index и smoke выбранного `prop_dynamic_override` на representative static/dynamic/physics models. Результат skin-теста определяет policy без предварительного предположения `skin -> 0`.
+8. Добавить regression для out-of-range integer skin: raw сохраняется на входе, effective skin становится 0 с дедуплицированным warning, colored request использует `(skin 0, RGB)`, а увеличение source skin-family count меняет effective skin и инвалидирует все scale variants модели. Отдельно провести smoke выбранного `prop_dynamic_override` на representative static/dynamic/physics models.
 9. Локализовать дефект `book_2` отдельным QC/SMD/bone-transform fixture: сравнить render geometry, PHY/collision и root bone transform до/после decompile/compile; исправление не смешивать с общей fail-soft переработкой.
 10. Добавить в итоговый отчёт предупреждение для окрашиваемого исходного материала без `"$blendtintbybasealpha" "1"`. После горящих задач расширить визуальную Patch matrix на replace существующего color-key, исходный Patch и proxies.
 
@@ -649,13 +659,14 @@ Legacy-output 1.1.2 находится в `maps/psr_temp/psr_test_01a.vmf` и с
 - Из итогового `prop_static` удаляются raw `modelscale`, `rendercolor` и служебные PSR properties; `skin` сохраняется как итоговый mapped index. Dynamic fallback 2.0 сохраняет исходные `model`, `modelscale`, `rendercolor` и `skin`, удаляя только `convert_prop_to_static` и будущие нерелевантные service keys.
 - Общий аварийный fallback использует `prop_dynamic_override`, выполняется без PSR compatibility-проверок, сохраняет runtime properties и диагностируется как красный `ERROR`. Отдельный CLI-флаг управляет им, default равен 1.
 - Fail-soft commit работает по минимальному dependency closure. Любой валидный partial/passthrough `vmf_out` означает exit code 0; exit code 1 означает, что корректный `vmf_out` передать не удалось.
+- Корректный целый skin index вне текущей source table нормализуется в effective skin 0 и создаёт жёлтый warning. Недесятичный skin остаётся malformed request. Изменение original MDL/skin table инвалидирует все scale variants модели и заставляет повторно интерпретировать raw skin из исходного VMF.
 - Normal cleanup управляет только новыми managed roots.
 - Legacy migration/cleanup является отдельной операцией.
 - Покраска предпочитает Patch с fallback на полную VMT-копию.
 - При выборе color-policy префикс `SDK_` является прозрачным alias базового shader name; это не разрешает неподдерживаемый базовый shader и не меняет shader name в generated/full-copy VMT.
 - Compile-safe skin layout ограничен 31 уникальным material name и 1024 skin-family rows. Превышающая предел новая цветная вариация пропускается с warning, а entity использует исходный skin; отклонённый VMT не генерируется.
 - Неиспользуемые colored mappings сохраняют стабильные индексы при обычных compile-run. Их удаление/сдвиг разрешены только явному project-wide cleanup с dry-run, предупреждением и перечнем карт/масштабов для обязательной перекомпиляции.
-- В конце каждого compile-run печатается единый дедуплицированный отчёт со всеми errors, warnings и recommendations; warning выводится жёлтым при поддержке цвета.
+- В конце каждого compile-run печатается единый дедуплицированный отчёт из красных `ERROR`, жёлтых `WARNING` и нейтральных `INFO`. Рекомендации входят в соответствующие error/warning записи. Severity и exit code независимы; без поддержки цвета сохраняются текстовые метки.
 - Project cache использует строго валидируемый versioned JSON manifest, изолированный нормализованной identity `GameInfo.txt`, и атомарный replace вместо pickle.
 - Warm-cache reuse является проверкой текущего manifest и filesystem state, а не доверием к наличию имени: source/layout/параметры и хэши каждого material/model companion должны совпасть. Не прошедший проверку артефакт становится точечным generation miss; reused-файлы повторно проверяются перед commit.
 - QC variants строятся из общего validated reference QC; generated filename использует compile-scale identity, `$scale` и LOD distances используют model-dependent geometry scale, collision сохраняется без числового переписывания, а top-level `$bbox`/`$cbox`/`$illumposition` удаляются для пересчёта StudioMDL. Viewport regression остаётся отдельным более широким уровнем проверки.
