@@ -421,6 +421,22 @@ def build_scaled_qc(
         data = _apply_edits(data, lod_edits)
         mutations.append("scale_lod_distances")
 
+    # Explicit bounds and illumination positions from the source QC describe the
+    # unscaled model.  Let StudioMDL derive fresh values for each generated
+    # scale variant instead of carrying stale source values forward.
+    document = _parse_document(data)
+    explicit_bounds = tuple(
+        command
+        for name in ("$bbox", "$cbox", "$illumposition")
+        for command in _commands_named(document, name)
+    )
+    if explicit_bounds:
+        data = _apply_edits(data, [
+            _Edit(command.start, command.end, b"")
+            for command in explicit_bounds
+        ])
+        mutations.append("remove_explicit_bounds")
+
     final = inspect_qc(data)
     if _normalise_modelname(final.model_name) != target_modelname:
         raise QCTransformError("generated_modelname_mismatch", target_modelname)

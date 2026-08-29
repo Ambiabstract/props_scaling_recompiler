@@ -307,6 +307,13 @@ class ColoredMaterialPlanningTests(unittest.TestCase):
         self.assertEqual(plan.colored_skins[0].material_slots, (0, 1))
         self.assertEqual(plan.colored_skins[0].entity_ids, ("1", "2"))
         self.assertEqual(
+            [
+                item.code for item in plan.diagnostics
+                if item.code == "blendtintbybasealpha_missing"
+            ],
+            ["blendtintbybasealpha_missing", "blendtintbybasealpha_missing"],
+        )
+        self.assertEqual(
             plan.colored_skins[0].logical_colored_materials,
             (
                 "materials/models/psr_scaled/fixture/primary/body_col_190_048_148.vmt",

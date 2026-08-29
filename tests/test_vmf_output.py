@@ -10,6 +10,7 @@ from psr.pipeline import (
     MapUsagePlan,
     OperationPlan,
     SkinLayoutOperationPlan,
+    VmfFallbackAssignment,
     VmfOutputError,
     build_vmf_output,
     discover_vmf_requests,
@@ -165,6 +166,31 @@ class VmfOutputTests(unittest.TestCase):
 
         result = build_vmf_output(source, operation, skin_layout)
 
+        self.assertIn(b'\t"skin" "00" // preserve exactly\r\n', result.content)
+
+    def test_general_fallback_writes_dynamic_override_and_preserves_runtime_values(self) -> None:
+        source = ACTIVE_AND_HIDDEN.replace(
+            b'\t"rendercolor" "190 48 148"\r\n',
+            b'\t"skin" "00" // preserve exactly\r\n'
+            b'\t"rendercolor" "190 48 148"\r\n',
+        )
+        operation, skin_layout = plans(source)
+        operation = replace(operation, usages=())
+        skin_layout = replace(skin_layout, assignments=())
+
+        result = build_vmf_output(
+            source,
+            operation,
+            skin_layout,
+            fallbacks=(VmfFallbackAssignment("100"),),
+        )
+
+        active = parse_vmf(result.content).blocks[0]
+        self.assertEqual(active.direct_values(b"classname"), (b"prop_dynamic_override",))
+        self.assertEqual(active.direct_values(b"modelscale"), (b"1.5",))
+        self.assertEqual(active.direct_values(b"rendercolor"), (b"190 48 148",))
+        self.assertEqual(active.direct_values(b"skin"), (b"00",))
+        self.assertEqual(active.direct_values(b"convert_prop_to_static"), ())
         self.assertIn(b'\t"skin" "00" // preserve exactly\r\n', result.content)
 
     def test_noop_output_is_byte_identical(self) -> None:

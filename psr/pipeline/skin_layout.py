@@ -27,6 +27,7 @@ from .planning import OperationPlan, WHITE
 
 
 _QC_MATERIAL_BINDING_VERSION = 2
+MODEL_GENERATION_RECIPE_VERSION = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -612,6 +613,15 @@ def _layout_fingerprint(
         # dedicated $cdmaterials entry. Bumping this value invalidates models
         # compiled with the former duplicated runtime path.
         "qc_material_binding_version": _QC_MATERIAL_BINDING_VERSION,
+        # This fingerprint is persisted indirectly in every generated-model
+        # record through skin_layout_fingerprint. Bump the recipe version for
+        # any QC/compile semantic change that must invalidate existing MDLs.
+        "model_generation_recipe": {
+            "version": MODEL_GENERATION_RECIPE_VERSION,
+            "explicit_bounds": "remove_bbox_cbox_illumposition",
+            "dynamic_definebones": "remove_top_level",
+            "geometry_scale": "model_aware_v1",
+        },
     })
 
 
@@ -638,6 +648,7 @@ def _canonical_fingerprint(value: object) -> str:
 
 
 __all__ = [
+    "MODEL_GENERATION_RECIPE_VERSION",
     "EntitySkinAssignment",
     "ModelSkinLayoutPlan",
     "SkinLayoutOperationPlan",

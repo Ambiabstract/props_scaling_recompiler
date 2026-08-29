@@ -304,6 +304,24 @@ class DiscoveryPlanningTests(unittest.TestCase):
         )
         self.assertEqual(plan.usages[0].compile_scale, Decimal("1"))
 
+    def test_out_of_range_integer_skin_uses_effective_skin_zero(self) -> None:
+        static = load_mdl_case("static_multi_material")
+        model = static["logical_model_path"]
+        self.install_case(static)
+        source = entity("14", model, "1.5", skin="999", color="1 2 3").encode("ascii")
+
+        discovery = discover_vmf_requests(source, map_identity="maps/skin_zero.vmf")
+        inspected = inspect_map_sources(discovery, self.filesystem())
+        plan = build_operation_plan(inspected)
+
+        self.assertTrue(plan.is_valid)
+        self.assertEqual(plan.usages[0].request.raw_skin, "999")
+        self.assertEqual(plan.usages[0].source_skin, 0)
+        self.assertEqual(plan.colored_skins[0].source_skin, 0)
+        warning = next(item for item in plan.diagnostics if item.code == "skin_out_of_range")
+        self.assertEqual(warning.severity, "warning")
+        self.assertEqual(warning.entity_id, "14")
+
     def test_geometry_scale_uses_one_bone_nonstatic_rule_not_physics_proxy(self) -> None:
         one_bone = load_mdl_case("dynamic_v44")
         one_bone["logical_model_path"] = "models/fixture/one_bone.mdl"

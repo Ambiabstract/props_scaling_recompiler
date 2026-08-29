@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Literal, TextIO
 
 
-Severity = Literal["error", "warning", "recommendation"]
+Severity = Literal["error", "warning", "info"]
+InputSeverity = Literal["error", "warning", "info", "recommendation"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +30,7 @@ class DiagnosticReport:
 
     @property
     def entries(self) -> tuple[ReportEntry, ...]:
-        order = {"error": 0, "warning": 1, "recommendation": 2}
+        order = {"error": 0, "warning": 1, "info": 2}
         return tuple(sorted(
             self._entries.values(),
             key=lambda item: (
@@ -47,15 +48,16 @@ class DiagnosticReport:
 
     def add(
         self,
-        severity: Severity,
+        severity: InputSeverity,
         code: str,
         detail: str,
         *,
         entity_id: str | None = None,
         source_line: int | None = None,
     ) -> None:
-        entry = ReportEntry(severity, code, detail, entity_id, source_line)
-        key = (severity, code, detail, entity_id, source_line)
+        normalised: Severity = "info" if severity == "recommendation" else severity
+        entry = ReportEntry(normalised, code, detail, entity_id, source_line)
+        key = (normalised, code, detail, entity_id, source_line)
         self._entries.setdefault(key, entry)
 
     def extend_pipeline(self, diagnostics: object) -> None:
@@ -72,27 +74,41 @@ class DiagnosticReport:
         groups = (
             ("error", "ERRORS", "31"),
             ("warning", "WARNINGS", "33"),
-            ("recommendation", "RECOMMENDATIONS", "36"),
+            ("info", "INFO", "36"),
         )
         lines = ["", "=== props_scaling_recompiler summary ==="]
         for severity, title, ansi in groups:
             entries = [item for item in self.entries if item.severity == severity]
             if not entries:
                 continue
-            heading = f"{title} ({len(entries)})"
+            grouped: dict[tuple[str, str], list[ReportEntry]] = {}
+            for item in entries:
+                grouped.setdefault((item.code, item.detail), []).append(item)
+            heading = f"{title} ({len(grouped)})"
             if color:
                 heading = f"\x1b[{ansi}m{heading}\x1b[0m"
             lines.append(heading)
-            for item in entries:
+            for (code, detail), items in grouped.items():
+                entity_ids = sorted(
+                    {item.entity_id for item in items if item.entity_id is not None},
+                    key=lambda value: (
+                        (0, int(value)) if value.isdecimal() else (1, value)
+                    ),
+                )
+                source_lines = sorted({
+                    item.source_line for item in items if item.source_line is not None
+                })
                 location: list[str] = []
-                if item.entity_id is not None:
-                    location.append(f"entity {item.entity_id}")
-                if item.source_line is not None:
-                    location.append(f"line {item.source_line}")
+                if entity_ids:
+                    label = "entity" if len(entity_ids) == 1 else "entities"
+                    location.append(f"{label} {', '.join(entity_ids)}")
+                if source_lines:
+                    label = "line" if len(source_lines) == 1 else "lines"
+                    location.append(f"{label} {', '.join(map(str, source_lines))}")
                 suffix = f" ({', '.join(location)})" if location else ""
-                lines.append(f"  [{item.code}]{suffix} {item.detail}")
+                lines.append(f"  [{code}]{suffix} {detail}")
         if len(lines) == 2:
-            lines.append("No errors, warnings, or recommendations.")
+            lines.append("No errors or warnings.")
         return "\n".join(lines) + "\n"
 
     def print(self, stream: TextIO | None = None) -> None:
@@ -125,4 +141,4 @@ def _enable_console_color(stream: TextIO) -> bool:
         return False
 
 
-__all__ = ["DiagnosticReport", "ReportEntry", "Severity"]
+__all__ = ["DiagnosticReport", "InputSeverity", "ReportEntry", "Severity"]

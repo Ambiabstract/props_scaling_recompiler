@@ -26,6 +26,7 @@ from .materials import (
 )
 from .skin_layout import (
     EntitySkinAssignment,
+    MODEL_GENERATION_RECIPE_VERSION,
     ModelSkinLayoutPlan,
     SkinLayoutOperationPlan,
     build_skin_layout_plan,
@@ -49,13 +50,25 @@ from .staging import (
 )
 from .generation import (
     GenerationError,
+    GenerationFailure,
     GenerationResult,
+    MaterialGenerationResult,
     ValidatedMaterialArtifact,
     ValidatedModelArtifact,
     generate_and_validate,
+    generate_materials_and_validate,
+    generate_models_and_validate,
     model_artifact_fingerprint,
 )
 from .reconciliation import reconcile_generation_requirements
+from .outcomes import (
+    FailureScope,
+    OutcomeLedger,
+    WorkFailure,
+    filter_material_plan,
+    filter_operation_plan,
+    filter_skin_layout_plan,
+)
 from .reuse import (
     ArtifactReusePlan,
     ExistingArtifact,
@@ -63,7 +76,12 @@ from .reuse import (
     ReusedModelArtifact,
     plan_artifact_reuse,
 )
-from .vmf_output import VmfOutput, VmfOutputError, build_vmf_output
+from .vmf_output import (
+    VmfFallbackAssignment,
+    VmfOutput,
+    VmfOutputError,
+    build_vmf_output,
+)
 from .commit import (
     CommitArtifact,
     CommitError,
@@ -88,15 +106,20 @@ __all__ = [
     "ColoredSkinMaterialPlan",
     "EntitySkinAssignment",
     "ExistingArtifact",
+    "FailureScope",
     "GeneratedModelRequirement",
     "GenerationError",
+    "GenerationFailure",
     "GenerationResult",
     "InspectedMap",
     "MapDiscovery",
     "MapUsagePlan",
     "MaterialInspection",
+    "MODEL_GENERATION_RECIPE_VERSION",
+    "MaterialGenerationResult",
     "ModelSkinLayoutPlan",
     "OperationPlan",
+    "OutcomeLedger",
     "PipelineDiagnostic",
     "QCOperationPlan",
     "ReferenceQCArtifactPlan",
@@ -109,11 +132,13 @@ __all__ = [
     "StagingError",
     "StagingWorkspace",
     "VmfEntityRequest",
+    "VmfFallbackAssignment",
     "ValidatedMaterialArtifact",
     "ValidatedModelArtifact",
     "VmfOutput",
     "VmfOutputError",
     "WHITE",
+    "WorkFailure",
     "build_operation_plan",
     "build_qc_operation_plan",
     "build_colored_material_plan",
@@ -126,6 +151,11 @@ __all__ = [
     "inspect_colored_material_sources",
     "inspect_map_sources",
     "generate_and_validate",
+    "generate_materials_and_validate",
+    "generate_models_and_validate",
+    "filter_material_plan",
+    "filter_operation_plan",
+    "filter_skin_layout_plan",
     "model_artifact_fingerprint",
     "plan_artifact_reuse",
     "reconcile_generation_requirements",

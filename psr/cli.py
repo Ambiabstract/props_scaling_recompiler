@@ -6,6 +6,7 @@ import argparse
 import os
 import platform
 import sys
+import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,7 +18,9 @@ from psr.runtime import (
     CompileRequest,
     DiagnosticReport,
     ProjectLockError,
+    ProgressReporter,
     RuntimeExecutionError,
+    deliver_passthrough_vmf,
     execute_compile_run,
 )
 
@@ -48,6 +51,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("-game", required=True, help="Source game/mod directory")
     parser.add_argument("-vmf_in", required=True, help="input VMF path")
     parser.add_argument("-vmf_out", required=True, help="output VMF path")
+    parser.add_argument(
+        "-dynamic_fallback",
+        type=_zero_or_one,
+        default=1,
+        help=(
+            "use prop_dynamic_override for failed entities (default: 1); "
+            "0 leaves them as prop_static_scalable"
+        ),
+    )
     parser.add_argument(
         "-subfolders",
         type=_zero_or_one,
@@ -83,8 +95,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    started = time.perf_counter()
+    _print_banner()
     report = DiagnosticReport()
     result = None
+    args = None
+    emergency_vmf_delivered = False
     try:
         args = build_arg_parser().parse_args(argv)
         for name in _DEPRECATED_FLAGS:
@@ -98,23 +114,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         _validate_platform()
         application_dir = _application_directory()
         crowbar, studiomdl = discover_tool_commands(application_dir)
-        result = execute_compile_run(
-            CompileRequest(
-                game_directory=Path(args.game),
-                vmf_input_path=Path(args.vmf_in),
-                vmf_output_path=Path(args.vmf_out),
-                engine_root=_engine_root(application_dir),
-                crowbar_command=crowbar,
-                studiomdl_command=studiomdl,
-            ),
-            report,
-        )
+        with ProgressReporter() as progress:
+            result = execute_compile_run(
+                CompileRequest(
+                    game_directory=Path(args.game),
+                    vmf_input_path=Path(args.vmf_in),
+                    vmf_output_path=Path(args.vmf_out),
+                    engine_root=_engine_root(application_dir),
+                    crowbar_command=crowbar,
+                    studiomdl_command=studiomdl,
+                    dynamic_fallback=bool(args.dynamic_fallback),
+                ),
+                report,
+                progress,
+            )
     except CliArgumentError as exc:
         report.add("error", "invalid_arguments", str(exc))
         report.add(
             "recommendation",
             "cli_usage",
-            "use -game <dir> -vmf_in <input.vmf> -vmf_out <output.vmf>",
+            (
+                "place props_scaling_recompiler.exe in the Source SDK 2013 SP "
+                "bin directory and run it from a Hammer++ compile configuration "
+                "with -game, -vmf_in, and -vmf_out"
+            ),
         )
     except (
         RuntimeExecutionError,
@@ -130,6 +153,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             getattr(exc, "code", "runtime_failed"),
             getattr(exc, "detail", f"{type(exc).__name__}: {exc}"),
         )
+        if args is not None and not isinstance(exc, ProjectLockError):
+            emergency_vmf_delivered = _try_emergency_passthrough(args, report)
     except Exception as exc:  # Last-resort boundary: never claim success.
         report.add(
             "error",
@@ -141,20 +166,31 @@ def main(argv: Sequence[str] | None = None) -> int:
             "internal_traceback",
             traceback.format_exc(),
         )
+        if args is not None:
+            emergency_vmf_delivered = _try_emergency_passthrough(args, report)
 
     if result is not None:
-        outcome = "SUCCESS" if result.success and not report.has_errors else "FAILED"
-        print(
+        outcome = (
+            "SUCCESS" if result.success and not report.has_errors
+            else "PARTIAL" if result.success
+            else "FAILED"
+        )
+        report.add(
+            "info",
+            "session_summary",
             f"PSR {__version__}: {outcome}; entities={result.active_entities}, "
             f"models_generated={result.generated_models}, "
             f"models_reused={result.reused_models}, "
             f"materials_generated={result.generated_materials}, "
             f"materials_reused={result.reused_materials}, "
-            f"published_files={result.published_files}"
+            f"published_files={result.published_files}",
         )
+    elapsed = time.perf_counter() - started
+    report.add("info", "elapsed_time", _format_elapsed(elapsed))
+    if result is not None:
         _write_report_log(report, result.state.logs)
     report.print()
-    return 1 if report.has_errors or (result is not None and not result.success) else 0
+    return 0 if (result is not None and result.success) or emergency_vmf_delivered else 1
 
 
 def discover_tool_commands(
@@ -171,6 +207,39 @@ def discover_tool_commands(
         None if crowbar is None else (crowbar,),
         None if studiomdl is None else (studiomdl,),
     )
+
+
+def _print_banner() -> None:
+    print(f"props_scaling_recompiler {__version__}")
+    print("Created by Ambiabstract (Sergey Shavin)")
+    print("https://github.com/Ambiabstract | Discord: @Ambiabstract")
+    print()
+
+
+def _format_elapsed(seconds: float) -> str:
+    hours, remainder = divmod(max(0.0, seconds), 3600)
+    minutes, remainder = divmod(remainder, 60)
+    return (
+        f"elapsed {int(hours)}h {int(minutes)}m {remainder:.2f}s"
+    )
+
+
+def _try_emergency_passthrough(args: argparse.Namespace, report: DiagnosticReport) -> bool:
+    try:
+        deliver_passthrough_vmf(Path(args.vmf_in), Path(args.vmf_out))
+    except (OSError, UnicodeError, ValueError) as exc:
+        report.add(
+            "error",
+            "vmf_passthrough_failed",
+            f"{type(exc).__name__}: {exc}",
+        )
+        return False
+    report.add(
+        "info",
+        "vmf_passthrough_written",
+        "the validated original VMF was delivered unchanged after an early failure",
+    )
+    return True
 
 
 def _application_directory() -> Path:

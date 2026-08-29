@@ -153,6 +153,22 @@ class StableSkinLayoutTests(unittest.TestCase):
         assignments = {item.entity_id: item.target_skin for item in plan.assignments}
         self.assertEqual(assignments, {"1": 3, "2": 2, "3": 1})
 
+    def test_generation_recipe_version_invalidates_model_layout_fingerprint(self) -> None:
+        model = self.case["logical_model_path"]
+        operation, materials = self.plans("recipe", [
+            entity("1", model, scale="1.5"),
+        ])
+        manifest = empty_manifest(self.project)
+        current = build_skin_layout_plan(operation, materials, manifest)
+
+        with patch("psr.pipeline.skin_layout.MODEL_GENERATION_RECIPE_VERSION", 999):
+            future = build_skin_layout_plan(operation, materials, manifest)
+
+        self.assertNotEqual(
+            current.layouts[0].layout_fingerprint,
+            future.layouts[0].layout_fingerprint,
+        )
+
     def test_dynamic_fallback_ignores_cached_generated_variants(self) -> None:
         dynamic = load_case("dynamic_v44")
         dynamic["bodyparts"] = [[[0]], [[], [0]]]

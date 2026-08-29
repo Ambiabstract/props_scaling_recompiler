@@ -110,10 +110,27 @@ def build_colored_material_plan(
                 requested.add((logical_path, requirement.render_color))
 
     colored_materials: list[ColoredMaterialPlan] = []
+    blend_tint_warned: set[str] = set()
     for logical_path, color in sorted(requested):
         metadata = metadata_by_path.get(logical_path)
         if metadata is None:
             continue
+        parameters = dict(metadata.parameters)
+        if (
+            parameters.get("$blendtintbybasealpha") != "1"
+            and logical_path not in blend_tint_warned
+        ):
+            diagnostics.append(PipelineDiagnostic(
+                "warning",
+                "blendtintbybasealpha_missing",
+                (
+                    f"{logical_path}: the effective source material does not contain "
+                    '"$blendtintbybasealpha" "1"; rendercolor tint may not blend as '
+                    "the artist expects. Add the key to the original material if its "
+                    "shader supports base-alpha tint blending"
+                ),
+            ))
+            blend_tint_warned.add(logical_path)
         parameter = select_color_parameter(metadata)
         if parameter is None:
             diagnostics.append(PipelineDiagnostic(

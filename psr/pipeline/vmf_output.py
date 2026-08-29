@@ -39,6 +39,13 @@ class VmfOutput:
 
 
 @dataclass(frozen=True, slots=True)
+class VmfFallbackAssignment:
+    """One failed request retained as a runtime-scaled dynamic override."""
+
+    entity_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class _Edit:
     start: int
     end: int
@@ -50,6 +57,7 @@ def build_vmf_output(
     operation: OperationPlan,
     skin_layout: SkinLayoutOperationPlan,
     *,
+    fallbacks: tuple[VmfFallbackAssignment, ...] = (),
     value_encoding: str = "cp1252",
 ) -> VmfOutput:
     """Apply final model/skin assignments without reserialising unrelated VMF.
@@ -77,6 +85,17 @@ def build_vmf_output(
 
     assignment_by_id = {item.entity_id: item for item in skin_layout.assignments}
     usage_by_id = {item.request.entity_id: item for item in operation.usages}
+    fallback_ids = {item.entity_id for item in fallbacks}
+    if len(fallback_ids) != len(fallbacks):
+        raise VmfOutputError(
+            "vmf_fallback_duplicate",
+            "fallback ledger contains duplicate entity IDs",
+        )
+    if fallback_ids & set(usage_by_id):
+        raise VmfOutputError(
+            "vmf_fallback_assignment_overlap",
+            "an entity cannot have both a static assignment and runtime fallback",
+        )
     if len(assignment_by_id) != len(skin_layout.assignments):
         raise VmfOutputError(
             "vmf_assignment_duplicate",
@@ -100,7 +119,7 @@ def build_vmf_output(
             entity_id = values[0].decode(value_encoding)
         except UnicodeError:
             continue
-        if entity_id in usage_by_id:
+        if entity_id in usage_by_id or entity_id in fallback_ids:
             if entity_id in blocks_by_id:
                 raise VmfOutputError(
                     "vmf_target_duplicate",
@@ -108,8 +127,9 @@ def build_vmf_output(
                 )
             blocks_by_id[entity_id] = block
 
-    if set(blocks_by_id) != set(usage_by_id):
-        missing = sorted(set(usage_by_id) - set(blocks_by_id), key=int)
+    target_ids = set(usage_by_id) | fallback_ids
+    if set(blocks_by_id) != target_ids:
+        missing = sorted(target_ids - set(blocks_by_id), key=int)
         raise VmfOutputError(
             "vmf_target_missing",
             f"planned entity IDs are absent from the current VMF: {missing!r}",
@@ -117,7 +137,27 @@ def build_vmf_output(
 
     edits: list[_Edit] = []
     preserved_dynamic: dict[str, dict[bytes, tuple[bytes, ...]]] = {}
-    for entity_id in sorted(usage_by_id, key=int):
+    for entity_id in sorted(target_ids, key=int):
+        if entity_id in fallback_ids:
+            block = blocks_by_id[entity_id]
+            properties: dict[bytes, list[Property]] = {}
+            for prop in block.properties:
+                properties.setdefault(prop.key.lower(), []).append(prop)
+            classname = _one_property(properties, b"classname", entity_id)
+            preserved_dynamic[entity_id] = {
+                key: block.direct_values(key)
+                for key in (b"model", b"modelscale", b"rendercolor", b"skin")
+            }
+            edits.append(_replace_value(
+                classname,
+                "prop_dynamic_override",
+                value_encoding,
+            ))
+            for key in _DYNAMIC_PSR_ONLY_KEYS:
+                for prop in properties.get(key, []):
+                    start, end = _property_removal_span(source, prop)
+                    edits.append(_Edit(start, end, b""))
+            continue
         usage = usage_by_id[entity_id]
         assignment = assignment_by_id[entity_id]
         block = blocks_by_id[entity_id]
@@ -183,9 +223,10 @@ def build_vmf_output(
         usage_by_id,
         assignment_by_id,
         preserved_dynamic,
+        fallback_ids,
         value_encoding=value_encoding,
     )
-    ids = tuple(sorted(usage_by_id, key=int))
+    ids = tuple(sorted(target_ids, key=int))
     return VmfOutput(
         map_identity=operation.map_identity,
         content=content,
@@ -311,6 +352,7 @@ def _validate_result(
     usages: dict[str, MapUsagePlan],
     assignments: dict[str, EntitySkinAssignment],
     preserved_dynamic: dict[str, dict[bytes, tuple[bytes, ...]]],
+    fallback_ids: set[str],
     *,
     value_encoding: str,
 ) -> None:
@@ -325,7 +367,7 @@ def _validate_result(
             entity_id = ids[0].decode(value_encoding)
         except UnicodeError:
             continue
-        if entity_id not in usages:
+        if entity_id not in usages and entity_id not in fallback_ids:
             continue
         if entity_id in found:
             raise VmfOutputError(
@@ -333,6 +375,24 @@ def _validate_result(
                 f"entity ID {entity_id!r} occurs more than once after editing",
             )
         found.add(entity_id)
+        if entity_id in fallback_ids:
+            if block.direct_values(b"classname") != (b"prop_dynamic_override",):
+                raise VmfOutputError(
+                    "vmf_output_validation_failed",
+                    f"entity {entity_id}: general fallback classname was not written",
+                )
+            if block.direct_values(b"convert_prop_to_static"):
+                raise VmfOutputError(
+                    "vmf_output_psr_key_retained",
+                    f"entity {entity_id}: retained fallback service keys",
+                )
+            for key, value in preserved_dynamic[entity_id].items():
+                if block.direct_values(key) != value:
+                    raise VmfOutputError(
+                        "vmf_output_dynamic_property_changed",
+                        f"entity {entity_id}: {key!r} changed during general fallback",
+                    )
+            continue
         assignment = assignments[entity_id]
         expected = {
             b"classname": usages[entity_id].output_classname.encode("ascii"),
@@ -368,8 +428,9 @@ def _validate_result(
                         f"entity {entity_id}: {key!r} is {actual!r}, "
                         f"expected preserved value {value!r}",
                     )
-    if found != set(usages):
-        missing = sorted(set(usages) - found, key=int)
+    expected_ids = set(usages) | fallback_ids
+    if found != expected_ids:
+        missing = sorted(expected_ids - found, key=int)
         raise VmfOutputError(
             "vmf_output_target_missing",
             f"transformed entity IDs missing after editing: {missing!r}",
@@ -385,5 +446,6 @@ def _removed_keys(usage: MapUsagePlan) -> set[bytes]:
 __all__ = [
     "VmfOutput",
     "VmfOutputError",
+    "VmfFallbackAssignment",
     "build_vmf_output",
 ]

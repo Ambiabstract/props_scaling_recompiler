@@ -27,7 +27,12 @@ from .skin_layout import (
     commit_skin_layout_plan,
     source_asset_fingerprint,
 )
-from .vmf_output import VmfOutput, VmfOutputError, build_vmf_output
+from .vmf_output import (
+    VmfFallbackAssignment,
+    VmfOutput,
+    VmfOutputError,
+    build_vmf_output,
+)
 
 
 class CommitError(RuntimeError):
@@ -99,6 +104,8 @@ def build_commit_plan(
     skin_layout: SkinLayoutOperationPlan,
     generation: GenerationResult,
     reuse: ArtifactReusePlan | None = None,
+    *,
+    fallbacks: tuple[VmfFallbackAssignment, ...] = (),
 ) -> CommitPlan:
     """Prove staged outputs and build cache/VMF candidates without publishing."""
     identities = {
@@ -124,7 +131,12 @@ def build_commit_plan(
         raise CommitError("commit_staging_missing", str(staging_root))
 
     try:
-        vmf_output = build_vmf_output(source_vmf, operation, skin_layout)
+        vmf_output = build_vmf_output(
+            source_vmf,
+            operation,
+            skin_layout,
+            fallbacks=fallbacks,
+        )
     except VmfOutputError as exc:
         raise CommitError(exc.code, exc.detail) from exc
     layout_by_model = {

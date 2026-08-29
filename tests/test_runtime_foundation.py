@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from io import StringIO
 from pathlib import Path
@@ -11,6 +12,7 @@ from psr.runtime import (
     DiagnosticReport,
     ProjectLock,
     ProjectLockError,
+    ProgressReporter,
     build_project_state_paths,
 )
 
@@ -82,17 +84,33 @@ class DiagnosticReportTests(unittest.TestCase):
         )
         report.extend_pipeline((warning, warning))
         report.add("error", "failed", "compile failed")
+        report.add("error", "failed", "compile failed", entity_id="12")
+        report.add("error", "failed", "compile failed", entity_id="14")
         report.add("recommendation", "retry", "inspect the retained staging directory")
 
         rendered = report.render(color=False)
 
         self.assertTrue(report.has_errors)
         self.assertEqual(rendered.count("[rounded]"), 1)
+        self.assertEqual(rendered.count("[failed]"), 1)
+        self.assertIn("entities 12, 14", rendered)
         self.assertLess(rendered.index("ERRORS"), rendered.index("WARNINGS"))
-        self.assertLess(rendered.index("WARNINGS"), rendered.index("RECOMMENDATIONS"))
+        self.assertLess(rendered.index("WARNINGS"), rendered.index("INFO"))
         stream = StringIO()
         report.print(stream)
         self.assertEqual(stream.getvalue(), rendered)
+
+    def test_progress_reporter_emits_heartbeat_for_long_stage(self) -> None:
+        stream = StringIO()
+        reporter = ProgressReporter(stream, heartbeat_seconds=0.01)
+
+        reporter.start("Compiling models")
+        time.sleep(0.035)
+        reporter.finish()
+
+        output = stream.getvalue()
+        self.assertIn("[PROGRESS] Compiling models", output)
+        self.assertIn("still working", output)
 
 
 if __name__ == "__main__":

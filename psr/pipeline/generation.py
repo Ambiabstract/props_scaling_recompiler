@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Sequence
 
@@ -24,7 +24,7 @@ from psr.assets import (
     validate_compiled_model,
 )
 
-from .materials import ColoredMaterialOperationPlan
+from .materials import ColoredMaterialOperationPlan, ColoredMaterialPlan
 from .planning import GeneratedModelRequirement, OperationPlan
 from .qc import (
     QCOperationPlan,
@@ -84,6 +84,30 @@ class ValidatedModelArtifact:
 
 
 @dataclass(frozen=True, slots=True)
+class GenerationFailure:
+    """One failed material, source-model, or scale-variation work unit."""
+
+    code: str
+    stage: str
+    detail: str
+    scope: str
+    logical_path: str | None = None
+    logical_source_model: str | None = None
+    logical_output_model: str | None = None
+    invocation: ToolInvocation | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MaterialGenerationResult:
+    """Independent validated VMT outputs plus per-output failures."""
+
+    map_identity: str
+    staging_root: Path
+    materials: tuple[ValidatedMaterialArtifact, ...]
+    failures: tuple[GenerationFailure, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class GenerationResult:
     """Validated staged outputs; no project, manifest, or VMF was committed."""
 
@@ -93,6 +117,7 @@ class GenerationResult:
     decompilations: tuple[CrowbarDecompileResult, ...]
     qc_plan: QCOperationPlan
     models: tuple[ValidatedModelArtifact, ...]
+    failures: tuple[GenerationFailure, ...] = ()
 
 
 def generate_and_validate(
@@ -113,13 +138,46 @@ def generate_and_validate(
     categorised exception and leaves all partial output confined to that
     workspace, whose context-manager policy decides whether to preserve it.
     """
-    _validate_inputs(workspace, operation, materials, skin_layout)
-    material_results = _generate_materials(
+    material_result = generate_materials_and_validate(
         workspace,
         filesystem,
+        operation,
         materials,
         skin_layout,
     )
+    if material_result.failures:
+        raise _failure_as_error(material_result.failures[0])
+    model_result = generate_models_and_validate(
+        workspace,
+        filesystem,
+        operation,
+        skin_layout,
+        crowbar_command=crowbar_command,
+        studiomdl_command=studiomdl_command,
+        crowbar_timeout_seconds=crowbar_timeout_seconds,
+        studiomdl_timeout_seconds=studiomdl_timeout_seconds,
+    )
+    if model_result.failures:
+        raise _failure_as_error(model_result.failures[0])
+    return replace(model_result, materials=material_result.materials)
+
+
+def generate_models_and_validate(
+    workspace: StagingWorkspace,
+    filesystem: OrderedAssetFileSystem,
+    operation: OperationPlan,
+    skin_layout: SkinLayoutOperationPlan,
+    *,
+    crowbar_command: Sequence[str | Path],
+    studiomdl_command: Sequence[str | Path],
+    crowbar_timeout_seconds: float = 300.0,
+    studiomdl_timeout_seconds: float = 300.0,
+) -> GenerationResult:
+    """Continue independent source models and scale variants after failures."""
+    empty_materials = ColoredMaterialOperationPlan(
+        operation.map_identity, (), (), (), ()
+    )
+    _validate_inputs(workspace, operation, empty_materials, skin_layout)
 
     assets = {
         item.logical_model_path: item
@@ -130,16 +188,20 @@ def generate_and_validate(
         for requirement in operation.generated_models
     }))
     decompiled_by_model: dict[str, CrowbarDecompileResult] = {}
-    source_qcs: dict[str, bytes] = {}
+    failures: list[GenerationFailure] = []
+    references = []
+    variants = []
+    qc_diagnostics = []
+    model_results: list[ValidatedModelArtifact] = []
     for logical_model in required_models:
         source = assets.get(logical_model)
         if source is None:
-            raise GenerationError(
-                "generation_source_asset_missing",
-                "decompile",
+            failures.append(GenerationFailure(
+                "generation_source_asset_missing", "decompile",
                 "generated requirement has no inspected source metadata",
-                logical_path=logical_model,
-            )
+                "source_model", logical_model, logical_model,
+            ))
+            continue
         try:
             staged_source = stage_source_model(workspace, filesystem, source)
             result = run_crowbar_decompile(
@@ -149,121 +211,173 @@ def generate_and_validate(
                 timeout_seconds=crowbar_timeout_seconds,
             )
         except StagingError as exc:
-            raise GenerationError(
-                exc.code,
-                "stage_source",
-                exc.detail,
-                logical_path=logical_model,
-            ) from exc
+            failures.append(GenerationFailure(
+                exc.code, "stage_source", exc.detail, "source_model",
+                logical_model, logical_model,
+            ))
+            continue
         except ToolExecutionError as exc:
-            raise GenerationError(
-                exc.code,
-                "decompile",
-                exc.detail,
-                logical_path=logical_model,
-                invocation=exc.invocation,
-            ) from exc
+            failures.append(GenerationFailure(
+                exc.code, "decompile", exc.detail, "source_model",
+                logical_model, logical_model, invocation=exc.invocation,
+            ))
+            continue
         decompiled_by_model[logical_model] = result
         try:
-            source_qcs[logical_model] = result.qc_path.read_bytes()
+            source_qc = result.qc_path.read_bytes()
         except OSError as exc:
-            raise GenerationError(
-                "decompiled_qc_read_failed",
-                "decompile",
-                f"{type(exc).__name__}: {exc}",
-                logical_path=logical_model,
-                invocation=result.invocation,
-            ) from exc
+            failures.append(GenerationFailure(
+                "decompiled_qc_read_failed", "decompile",
+                f"{type(exc).__name__}: {exc}", "source_model",
+                logical_model, logical_model, invocation=result.invocation,
+            ))
+            continue
 
-    qc_plan = build_qc_operation_plan(operation, skin_layout, source_qcs)
-    if not qc_plan.is_valid:
-        errors = [
-            f"{item.code}: {item.detail}"
-            for item in qc_plan.diagnostics
-            if item.severity == "error"
-        ]
-        raise GenerationError(
-            "qc_operation_plan_invalid",
-            "qc_plan",
-            "; ".join(errors) or operation.map_identity,
+        source_operation = replace(
+            operation,
+            source_assets=(source,),
+            usages=tuple(
+                item for item in operation.usages
+                if item.request.logical_model_path == logical_model
+            ),
+            generated_models=tuple(
+                item for item in operation.generated_models
+                if item.logical_source_model == logical_model
+            ),
+            colored_skins=tuple(
+                item for item in operation.colored_skins
+                if item.logical_source_model == logical_model
+            ),
+            diagnostics=(),
         )
-    try:
-        stage_qc_operation(workspace, qc_plan)
-    except StagingError as exc:
-        raise GenerationError(exc.code, "stage_qc", exc.detail) from exc
-
-    requirements = {
-        item.logical_output_model: item
-        for item in operation.generated_models
-    }
-    model_results: list[ValidatedModelArtifact] = []
-    for variant in qc_plan.variants:
-        requirement = requirements.get(variant.logical_output_model)
-        source = assets.get(variant.logical_source_model)
-        decompile = decompiled_by_model.get(variant.logical_source_model)
-        if requirement is None or source is None or decompile is None:
-            raise GenerationError(
-                "generation_variant_unplanned",
-                "compile",
-                "QC variant does not match its operation/source/decompile plan",
-                logical_path=variant.logical_output_model,
+        source_layout = replace(
+            skin_layout,
+            layouts=tuple(
+                item for item in skin_layout.layouts
+                if item.logical_source_model == logical_model
+            ),
+            assignments=tuple(
+                item for item in skin_layout.assignments
+                if item.logical_source_model == logical_model
+            ),
+            diagnostics=(),
+        )
+        source_qc_plan = build_qc_operation_plan(
+            source_operation, source_layout, {logical_model: source_qc}
+        )
+        if not source_qc_plan.is_valid:
+            detail = "; ".join(
+                f"{item.code}: {item.detail}"
+                for item in source_qc_plan.diagnostics
+                if item.severity == "error"
             )
-        compile_qc = _stage_compile_qc(workspace, decompile, variant)
+            failures.append(GenerationFailure(
+                "qc_operation_plan_invalid", "qc_plan",
+                detail or logical_model, "source_model",
+                logical_model, logical_model,
+            ))
+            continue
         try:
-            invocation = run_studiomdl_compile(
-                studiomdl_command,
-                game_directory=workspace.path("game"),
-                qc_path=compile_qc.physical_path,
-                timeout_seconds=studiomdl_timeout_seconds,
-            )
-            validation = validate_compiled_model(
-                workspace.path("game"),
-                variant.logical_output_model,
-                requires_physics=source.has_physics,
-                requires_static_conversion=requirement.requires_static_conversion,
-            )
-        except ToolExecutionError as exc:
-            raise GenerationError(
-                exc.code,
-                "compile",
-                exc.detail,
-                logical_path=variant.logical_output_model,
-                invocation=exc.invocation,
-            ) from exc
-        except CompiledModelValidationError as exc:
-            raise GenerationError(
-                exc.code,
-                "validate_model",
-                exc.detail,
-                logical_path=exc.logical_path,
-                invocation=invocation,
-            ) from exc
-        model_results.append(ValidatedModelArtifact(
-            requirement=requirement,
-            source_has_physics=source.has_physics,
-            qc_artifact=variant,
-            compile_qc=compile_qc,
-            compile_invocation=invocation,
-            validation=validation,
-            artifact_fingerprint=model_artifact_fingerprint(validation),
-        ))
+            stage_qc_operation(workspace, source_qc_plan)
+        except StagingError as exc:
+            failures.append(GenerationFailure(
+                exc.code, "stage_qc", exc.detail, "source_model",
+                logical_model, logical_model,
+            ))
+            continue
+        references.extend(source_qc_plan.references)
+        variants.extend(source_qc_plan.variants)
+        qc_diagnostics.extend(source_qc_plan.diagnostics)
+        requirements = {
+            item.logical_output_model: item
+            for item in source_operation.generated_models
+        }
+        for variant in source_qc_plan.variants:
+            requirement = requirements[variant.logical_output_model]
+            try:
+                compile_qc = _stage_compile_qc(workspace, result, variant)
+                invocation = run_studiomdl_compile(
+                    studiomdl_command,
+                    game_directory=workspace.path("game"),
+                    qc_path=compile_qc.physical_path,
+                    timeout_seconds=studiomdl_timeout_seconds,
+                )
+                validation = validate_compiled_model(
+                    workspace.path("game"),
+                    variant.logical_output_model,
+                    requires_physics=source.has_physics,
+                    requires_static_conversion=requirement.requires_static_conversion,
+                )
+            except GenerationError as exc:
+                failures.append(_error_as_failure(
+                    exc, "model_variant", logical_model,
+                    variant.logical_output_model,
+                ))
+                continue
+            except ToolExecutionError as exc:
+                failures.append(GenerationFailure(
+                    exc.code, "compile", exc.detail, "model_variant",
+                    variant.logical_output_model, logical_model,
+                    variant.logical_output_model, exc.invocation,
+                ))
+                continue
+            except CompiledModelValidationError as exc:
+                failures.append(GenerationFailure(
+                    exc.code, "validate_model", exc.detail, "model_variant",
+                    exc.logical_path, logical_model,
+                    variant.logical_output_model, invocation,
+                ))
+                continue
+            model_results.append(ValidatedModelArtifact(
+                requirement=requirement,
+                source_has_physics=source.has_physics,
+                qc_artifact=variant,
+                compile_qc=compile_qc,
+                compile_invocation=invocation,
+                validation=validation,
+                artifact_fingerprint=model_artifact_fingerprint(validation),
+            ))
 
-    if len(model_results) != len(operation.generated_models):
-        raise GenerationError(
-            "generation_model_count_mismatch",
-            "validate_model",
-            f"validated {len(model_results)} of {len(operation.generated_models)} models",
-        )
+    qc_plan = QCOperationPlan(
+        operation.map_identity,
+        tuple(references),
+        tuple(variants),
+        tuple(qc_diagnostics),
+    )
     return GenerationResult(
         map_identity=operation.map_identity,
         staging_root=workspace.root,
-        materials=material_results,
+        materials=(),
         decompilations=tuple(
             decompiled_by_model[model]
-            for model in required_models
+            for model in required_models if model in decompiled_by_model
         ),
         qc_plan=qc_plan,
         models=tuple(model_results),
+        failures=tuple(failures),
+    )
+
+
+def generate_materials_and_validate(
+    workspace: StagingWorkspace,
+    filesystem: OrderedAssetFileSystem,
+    operation: OperationPlan,
+    materials: ColoredMaterialOperationPlan,
+    skin_layout: SkinLayoutOperationPlan,
+) -> MaterialGenerationResult:
+    """Generate independent material outputs without aborting sibling work."""
+    _validate_inputs(workspace, operation, materials, skin_layout)
+    generated: list[ValidatedMaterialArtifact] = []
+    failures: list[GenerationFailure] = []
+    for item in _required_material_plans(materials, skin_layout):
+        try:
+            generated.append(_generate_one_material(
+                workspace, filesystem, materials, item
+            ))
+        except GenerationError as exc:
+            failures.append(_error_as_failure(exc, "material"))
+    return MaterialGenerationResult(
+        operation.map_identity, workspace.root, tuple(generated), tuple(failures)
     )
 
 
@@ -301,6 +415,16 @@ def _generate_materials(
     plan: ColoredMaterialOperationPlan,
     skin_layout: SkinLayoutOperationPlan,
 ) -> tuple[ValidatedMaterialArtifact, ...]:
+    return tuple(
+        _generate_one_material(workspace, filesystem, plan, item)
+        for item in _required_material_plans(plan, skin_layout)
+    )
+
+
+def _required_material_plans(
+    plan: ColoredMaterialOperationPlan,
+    skin_layout: SkinLayoutOperationPlan,
+) -> tuple[ColoredMaterialPlan, ...]:
     accepted_skin_identities = {
         (
             mapping.logical_source_model,
@@ -320,78 +444,113 @@ def _generate_materials(
         ) in accepted_skin_identities
         for logical_path in colored_skin.logical_colored_materials
     }
+    return tuple(
+        item for item in plan.colored_materials
+        if item.logical_output_material in required_outputs
+    )
+
+
+def _generate_one_material(
+    workspace: StagingWorkspace,
+    filesystem: OrderedAssetFileSystem,
+    plan: ColoredMaterialOperationPlan,
+    item: ColoredMaterialPlan,
+) -> ValidatedMaterialArtifact:
     metadata = {
-        item.logical_material_path: item
-        for item in plan.source_materials
+        value.logical_material_path: value
+        for value in plan.source_materials
     }
-    generated: list[ValidatedMaterialArtifact] = []
-    for item in plan.colored_materials:
-        if item.logical_output_material not in required_outputs:
-            continue
-        planned_source = metadata.get(item.logical_source_material)
-        if planned_source is None:
-            raise GenerationError(
-                "generation_material_source_missing",
-                "generate_material",
-                "planned material has no inspected source metadata",
-                logical_path=item.logical_source_material,
-            )
-        try:
-            source = inspect_source_material(filesystem, item.logical_source_material)
-        except SourceMaterialInspectionError as exc:
-            raise GenerationError(
-                exc.code,
-                "generate_material",
-                exc.detail,
-                logical_path=exc.logical_path,
-            ) from exc
-        if (
-            planned_source.dependency_fingerprint != item.source_fingerprint
-            or source.dependency_fingerprint != item.source_fingerprint
-            or source != planned_source
-        ):
-            raise GenerationError(
-                "generation_material_source_changed",
-                "generate_material",
-                "source dependency fingerprint differs from the material plan",
-                logical_path=item.logical_source_material,
-            )
-        try:
-            content = generate_colored_material(
-                source,
-                logical_output_material=item.logical_output_material,
-                render_color=item.render_color,
-                color_parameter=item.color_parameter,
-                color_assignment=item.color_assignment,
-                generation_mode=item.generation_mode,
-            )
-            staged = workspace.write_bytes(
-                f"game/{content.logical_output_material}",
-                content.content,
-            )
-        except MaterialGenerationError as exc:
-            raise GenerationError(
-                exc.code,
-                "generate_material",
-                exc.detail,
-                logical_path=exc.logical_path,
-            ) from exc
-        except StagingError as exc:
-            raise GenerationError(
-                exc.code,
-                "stage_material",
-                exc.detail,
-                logical_path=item.logical_output_material,
-            ) from exc
-        if staged.sha256 != content.sha256:
-            raise GenerationError(
-                "staged_material_hash_mismatch",
-                "validate_material",
-                staged.relative_path,
-                logical_path=item.logical_output_material,
-            )
-        generated.append(ValidatedMaterialArtifact(content, staged))
-    return tuple(generated)
+    planned_source = metadata.get(item.logical_source_material)
+    if planned_source is None:
+        raise GenerationError(
+            "generation_material_source_missing",
+            "generate_material",
+            "planned material has no inspected source metadata",
+            logical_path=item.logical_output_material,
+        )
+    try:
+        source = inspect_source_material(filesystem, item.logical_source_material)
+    except SourceMaterialInspectionError as exc:
+        raise GenerationError(
+            exc.code,
+            "generate_material",
+            exc.detail,
+            logical_path=item.logical_output_material,
+        ) from exc
+    if (
+        planned_source.dependency_fingerprint != item.source_fingerprint
+        or source.dependency_fingerprint != item.source_fingerprint
+        or source != planned_source
+    ):
+        raise GenerationError(
+            "generation_material_source_changed",
+            "generate_material",
+            "source dependency fingerprint differs from the material plan",
+            logical_path=item.logical_output_material,
+        )
+    try:
+        content = generate_colored_material(
+            source,
+            logical_output_material=item.logical_output_material,
+            render_color=item.render_color,
+            color_parameter=item.color_parameter,
+            color_assignment=item.color_assignment,
+            generation_mode=item.generation_mode,
+        )
+        staged = workspace.write_bytes(
+            f"game/{content.logical_output_material}",
+            content.content,
+        )
+    except MaterialGenerationError as exc:
+        raise GenerationError(
+            exc.code,
+            "generate_material",
+            exc.detail,
+            logical_path=item.logical_output_material,
+        ) from exc
+    except StagingError as exc:
+        raise GenerationError(
+            exc.code,
+            "stage_material",
+            exc.detail,
+            logical_path=item.logical_output_material,
+        ) from exc
+    if staged.sha256 != content.sha256:
+        raise GenerationError(
+            "staged_material_hash_mismatch",
+            "validate_material",
+            staged.relative_path,
+            logical_path=item.logical_output_material,
+        )
+    return ValidatedMaterialArtifact(content, staged)
+
+
+def _error_as_failure(
+    exc: GenerationError,
+    scope: str,
+    logical_source_model: str | None = None,
+    logical_output_model: str | None = None,
+) -> GenerationFailure:
+    return GenerationFailure(
+        exc.code,
+        exc.stage,
+        exc.detail,
+        scope,
+        exc.logical_path,
+        logical_source_model,
+        logical_output_model,
+        exc.invocation,
+    )
+
+
+def _failure_as_error(failure: GenerationFailure) -> GenerationError:
+    return GenerationError(
+        failure.code,
+        failure.stage,
+        failure.detail,
+        logical_path=failure.logical_path,
+        invocation=failure.invocation,
+    )
 
 
 def _decompile_directory(logical_model: str) -> str:
@@ -438,9 +597,13 @@ def model_artifact_fingerprint(validation: CompiledModelValidation) -> str:
 
 __all__ = [
     "GenerationError",
+    "GenerationFailure",
     "GenerationResult",
+    "MaterialGenerationResult",
     "ValidatedMaterialArtifact",
     "ValidatedModelArtifact",
     "generate_and_validate",
+    "generate_materials_and_validate",
+    "generate_models_and_validate",
     "model_artifact_fingerprint",
 ]

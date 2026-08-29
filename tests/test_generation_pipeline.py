@@ -40,6 +40,7 @@ from psr.pipeline import (
     reconcile_generation_requirements,
 )
 from psr.runtime import CompileRequest, DiagnosticReport, execute_compile_run
+from psr.keyvalues import parse_vmf
 from tests.mdl_fixture_builder import build_case_files
 
 
@@ -176,10 +177,14 @@ counter = pathlib.Path({str(counter)!r})
 counter.write_text(str(int(counter.read_text() or "0") + 1))
 args = sys.argv[1:]
 omit_sw = "--omit-sw" in args
+fail_150 = "--fail-150" in args
 game = pathlib.Path(args[args.index("-game") + 1])
 qc = pathlib.Path(args[-1])
 text = qc.read_text(encoding="ascii")
 name = re.search(r'\\$modelname\\s+"([^"]+)"', text).group(1)
+if fail_150 and name.endswith("_scaled_150.mdl"):
+    print("forced scale-150 failure", file=sys.stderr)
+    raise SystemExit(9)
 target = game / "models" / pathlib.PurePosixPath(name)
 target.parent.mkdir(parents=True, exist_ok=True)
 data = bytearray(160)
@@ -855,6 +860,146 @@ class GenerationPipelineTests(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertEqual(vmf_output.read_bytes(), source)
         self.assertEqual(result.published_files, 0)
+
+    def test_runtime_missing_tool_commits_independent_entity_and_dynamic_fallback(self) -> None:
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1", "255 255 255")
+            + entity("2", model, "1.5", "255 255 255")
+        ).encode("ascii")
+        vmf_input = self.root / "maps" / "partial.vmf"
+        vmf_output = self.root / "maps" / "psr_temp" / "partial.vmf"
+        vmf_input.parent.mkdir()
+        vmf_input.write_bytes(source_vmf)
+        report = DiagnosticReport()
+
+        result = execute_compile_run(
+            CompileRequest(
+                game_directory=self.root,
+                vmf_input_path=vmf_input,
+                vmf_output_path=vmf_output,
+                engine_root=self.engine,
+                crowbar_command=None,
+                studiomdl_command=None,
+                local_appdata=self.root / "localappdata",
+            ),
+            report,
+        )
+
+        self.assertTrue(result.success)
+        self.assertTrue(report.has_errors)
+        entities = {
+            block.direct_values(b"id")[0]: block
+            for block in parse_vmf(vmf_output.read_bytes()).blocks
+            if block.name.lower() == b"entity"
+        }
+        self.assertEqual(entities[b"1"].direct_values(b"classname"), (b"prop_static",))
+        self.assertEqual(entities[b"1"].direct_values(b"model"), (model.encode("ascii"),))
+        self.assertEqual(
+            entities[b"2"].direct_values(b"classname"),
+            (b"prop_dynamic_override",),
+        )
+        self.assertEqual(entities[b"2"].direct_values(b"modelscale"), (b"1.5",))
+
+    def test_runtime_disabled_dynamic_fallback_leaves_failed_entity_untouched(self) -> None:
+        model = self.case["logical_model_path"]
+        source_vmf = entity("2", model, "1.5", "255 255 255").encode("ascii")
+        vmf_input = self.root / "maps" / "no_fallback.vmf"
+        vmf_output = self.root / "maps" / "psr_temp" / "no_fallback.vmf"
+        vmf_input.parent.mkdir()
+        vmf_input.write_bytes(source_vmf)
+
+        result = execute_compile_run(
+            CompileRequest(
+                game_directory=self.root,
+                vmf_input_path=vmf_input,
+                vmf_output_path=vmf_output,
+                engine_root=self.engine,
+                crowbar_command=None,
+                studiomdl_command=None,
+                local_appdata=self.root / "localappdata",
+                dynamic_fallback=False,
+            ),
+            DiagnosticReport(),
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(vmf_output.read_bytes(), source_vmf)
+
+    def test_runtime_compile_failure_isolated_to_one_scale_variation(self) -> None:
+        model = self.case["logical_model_path"]
+        source_vmf = (
+            entity("1", model, "1.5", "255 255 255")
+            + entity("2", model, "2", "255 255 255")
+        ).encode("ascii")
+        vmf_input = self.root / "maps" / "variation_failure.vmf"
+        vmf_output = self.root / "maps" / "psr_temp" / "variation_failure.vmf"
+        vmf_input.parent.mkdir()
+        vmf_input.write_bytes(source_vmf)
+        report = DiagnosticReport()
+
+        result = execute_compile_run(
+            CompileRequest(
+                game_directory=self.root,
+                vmf_input_path=vmf_input,
+                vmf_output_path=vmf_output,
+                engine_root=self.engine,
+                crowbar_command=(sys.executable, self.crowbar),
+                studiomdl_command=(sys.executable, self.studiomdl, "--fail-150"),
+                local_appdata=self.root / "localappdata",
+            ),
+            report,
+        )
+
+        self.assertTrue(result.success)
+        self.assertTrue(report.has_errors)
+        self.assertEqual(result.generated_models, 1)
+        entities = {
+            block.direct_values(b"id")[0]: block
+            for block in parse_vmf(vmf_output.read_bytes()).blocks
+            if block.name.lower() == b"entity"
+        }
+        self.assertEqual(
+            entities[b"1"].direct_values(b"classname"),
+            (b"prop_dynamic_override",),
+        )
+        self.assertEqual(entities[b"2"].direct_values(b"classname"), (b"prop_static",))
+        self.assertEqual(
+            entities[b"2"].direct_values(b"model"),
+            (b"models/psr_scaled/fixture/static_multi_scaled_200.mdl",),
+        )
+
+    def test_runtime_commit_failure_delivers_valid_passthrough_vmf(self) -> None:
+        source = b'world\n{\n    "id" "1"\n}\n'
+        vmf_input = self.root / "maps" / "commit_failure.vmf"
+        vmf_output = self.root / "maps" / "psr_temp" / "commit_failure.vmf"
+        vmf_input.parent.mkdir()
+        vmf_input.write_bytes(source)
+        report = DiagnosticReport()
+
+        with patch(
+            "psr.runtime.app.apply_commit_plan",
+            side_effect=CommitError("forced_commit_failure", "fixture"),
+        ):
+            result = execute_compile_run(
+                CompileRequest(
+                    game_directory=self.root,
+                    vmf_input_path=vmf_input,
+                    vmf_output_path=vmf_output,
+                    engine_root=self.engine,
+                    crowbar_command=None,
+                    studiomdl_command=None,
+                    local_appdata=self.root / "localappdata",
+                ),
+                report,
+            )
+
+        self.assertTrue(result.success)
+        self.assertTrue(report.has_errors)
+        self.assertEqual(vmf_output.read_bytes(), source)
+        self.assertTrue(any(
+            item.code == "vmf_passthrough_written" for item in report.entries
+        ))
 
     def test_capacity_fallback_does_not_generate_rejected_colored_materials(self) -> None:
         model = self.case["logical_model_path"]

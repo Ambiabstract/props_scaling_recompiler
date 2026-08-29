@@ -90,6 +90,7 @@ def build_operation_plan(
         asset = assets.get(request.logical_model_path)
         if asset is None:
             continue
+
         scale = resolve_compile_scale(request.raw_modelscale)
         for item in scale.diagnostics:
             diagnostics.append(PipelineDiagnostic(
@@ -193,12 +194,18 @@ def _parse_skin(
         ))
         return None
     if not 0 <= value < len(asset.skin_families):
-        diagnostics.append(_request_error(
-            request,
+        diagnostics.append(PipelineDiagnostic(
+            "warning",
             "skin_out_of_range",
-            f"skin {value} is outside 0..{len(asset.skin_families) - 1}",
+            (
+                f"skin {value} does not exist for {request.logical_model_path}; "
+                "using effective source skin 0. Recompile after changing the "
+                "original model so the raw VMF value is interpreted again"
+            ),
+            request.entity_id,
+            request.source_line,
         ))
-        return None
+        return 0
     return value
 
 

@@ -313,15 +313,21 @@ class ScaledQCTransformTests(unittest.TestCase):
         self.assertTrue(metadata.is_static_prop)
         self.assertEqual(
             result.mutations,
-            ("replace_modelname", "insert_scale", "scale_lod_distances"),
+            (
+                "replace_modelname",
+                "insert_scale",
+                "scale_lod_distances",
+                "remove_explicit_bounds",
+            ),
         )
         collision = reference.data[
             reference.data.index(b"$collisionjoints"):
             reference.data.index(b"$sequence")
         ]
         self.assertIn(collision, result.data)
-        self.assertIn(b"$bbox -10 -20 -30 10 20 30", result.data)
-        self.assertIn(b"$illumposition 1 2 3", result.data)
+        self.assertNotIn(b"$bbox", result.data)
+        self.assertNotIn(b"$cbox", result.data)
+        self.assertNotIn(b"$illumposition", result.data)
 
     def test_existing_scale_is_replaced_not_multiplied(self) -> None:
         source = (FIXTURES / "static_formatting.qc").read_bytes()

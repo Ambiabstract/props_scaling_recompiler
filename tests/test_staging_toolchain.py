@@ -424,7 +424,7 @@ class StagedQCCompileMatrixTests(unittest.TestCase):
                             self.assertTrue(metadata.is_static_prop, name)
                             self.assertEqual(metadata.scale, "1.5", name)
                             self.assertEqual(metadata.lod_distances, ("60",), name)
-                            self.assertIn(b"$bbox -1 -2 -3 1 2 3", variant.data, name)
+                            self.assertNotIn(b"$bbox", variant.data, name)
                             if collision_bytes:
                                 self.assertIn(collision_bytes, variant.data, name)
                             rows.append({
