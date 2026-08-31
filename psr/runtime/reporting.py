@@ -31,11 +31,18 @@ class DiagnosticReport:
     @property
     def entries(self) -> tuple[ReportEntry, ...]:
         order = {"error": 0, "warning": 1, "info": 2}
+        summary_order = {
+            "project_summary": 1,
+            "session_summary": 2,
+            "elapsed_time": 3,
+        }
         return tuple(sorted(
             self._entries.values(),
             key=lambda item: (
                 order[item.severity],
-                item.code,
+                1 if item.severity == "info" and item.code in summary_order else 0,
+                summary_order.get(item.code, 0),
+                "" if item.code in summary_order else item.code,
                 item.entity_id or "",
                 item.source_line or -1,
                 item.detail,

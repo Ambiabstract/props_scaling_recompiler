@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
-from typing import Sequence
+from typing import Callable, Sequence
 
 from psr.assets import (
     CompiledModelValidation,
@@ -60,6 +60,9 @@ class GenerationError(RuntimeError):
         self.invocation = invocation
         subject = f": {logical_path}" if logical_path is not None else ""
         super().__init__(f"{code} [{stage}]{subject}: {detail}")
+
+
+ProgressCallback = Callable[[int, int, str], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +175,7 @@ def generate_models_and_validate(
     studiomdl_command: Sequence[str | Path],
     crowbar_timeout_seconds: float = 300.0,
     studiomdl_timeout_seconds: float = 300.0,
+    progress_callback: ProgressCallback | None = None,
 ) -> GenerationResult:
     """Continue independent source models and scale variants after failures."""
     empty_materials = ColoredMaterialOperationPlan(
@@ -193,7 +197,26 @@ def generate_models_and_validate(
     variants = []
     qc_diagnostics = []
     model_results: list[ValidatedModelArtifact] = []
+    total_work = len(required_models) + len(operation.generated_models)
+    completed_work = 0
+
+    def advance(count: int, detail: str) -> None:
+        nonlocal completed_work
+        completed_work += count
+        if progress_callback is not None:
+            progress_callback(completed_work, total_work, detail)
+
     for logical_model in required_models:
+        source_variants = tuple(
+            item for item in operation.generated_models
+            if item.logical_source_model == logical_model
+        )
+        if progress_callback is not None:
+            progress_callback(
+                completed_work,
+                total_work,
+                f"decompiling {logical_model}",
+            )
         source = assets.get(logical_model)
         if source is None:
             failures.append(GenerationFailure(
@@ -201,6 +224,7 @@ def generate_models_and_validate(
                 "generated requirement has no inspected source metadata",
                 "source_model", logical_model, logical_model,
             ))
+            advance(1 + len(source_variants), f"skipped {logical_model}")
             continue
         try:
             staged_source = stage_source_model(workspace, filesystem, source)
@@ -215,14 +239,17 @@ def generate_models_and_validate(
                 exc.code, "stage_source", exc.detail, "source_model",
                 logical_model, logical_model,
             ))
+            advance(1 + len(source_variants), f"failed {logical_model}")
             continue
         except ToolExecutionError as exc:
             failures.append(GenerationFailure(
                 exc.code, "decompile", exc.detail, "source_model",
                 logical_model, logical_model, invocation=exc.invocation,
             ))
+            advance(1 + len(source_variants), f"failed {logical_model}")
             continue
         decompiled_by_model[logical_model] = result
+        advance(1, f"decompiled {logical_model}")
         try:
             source_qc = result.qc_path.read_bytes()
         except OSError as exc:
@@ -231,6 +258,7 @@ def generate_models_and_validate(
                 f"{type(exc).__name__}: {exc}", "source_model",
                 logical_model, logical_model, invocation=result.invocation,
             ))
+            advance(len(source_variants), f"skipped variants for {logical_model}")
             continue
 
         source_operation = replace(
@@ -276,6 +304,7 @@ def generate_models_and_validate(
                 detail or logical_model, "source_model",
                 logical_model, logical_model,
             ))
+            advance(len(source_variants), f"skipped variants for {logical_model}")
             continue
         try:
             stage_qc_operation(workspace, source_qc_plan)
@@ -284,6 +313,7 @@ def generate_models_and_validate(
                 exc.code, "stage_qc", exc.detail, "source_model",
                 logical_model, logical_model,
             ))
+            advance(len(source_variants), f"skipped variants for {logical_model}")
             continue
         references.extend(source_qc_plan.references)
         variants.extend(source_qc_plan.variants)
@@ -294,6 +324,12 @@ def generate_models_and_validate(
         }
         for variant in source_qc_plan.variants:
             requirement = requirements[variant.logical_output_model]
+            if progress_callback is not None:
+                progress_callback(
+                    completed_work,
+                    total_work,
+                    f"compiling {variant.logical_output_model}",
+                )
             try:
                 compile_qc = _stage_compile_qc(workspace, result, variant)
                 invocation = run_studiomdl_compile(
@@ -313,6 +349,7 @@ def generate_models_and_validate(
                     exc, "model_variant", logical_model,
                     variant.logical_output_model,
                 ))
+                advance(1, f"failed {variant.logical_output_model}")
                 continue
             except ToolExecutionError as exc:
                 failures.append(GenerationFailure(
@@ -320,6 +357,7 @@ def generate_models_and_validate(
                     variant.logical_output_model, logical_model,
                     variant.logical_output_model, exc.invocation,
                 ))
+                advance(1, f"failed {variant.logical_output_model}")
                 continue
             except CompiledModelValidationError as exc:
                 failures.append(GenerationFailure(
@@ -327,6 +365,7 @@ def generate_models_and_validate(
                     exc.logical_path, logical_model,
                     variant.logical_output_model, invocation,
                 ))
+                advance(1, f"failed {variant.logical_output_model}")
                 continue
             model_results.append(ValidatedModelArtifact(
                 requirement=requirement,
@@ -337,6 +376,7 @@ def generate_models_and_validate(
                 validation=validation,
                 artifact_fingerprint=model_artifact_fingerprint(validation),
             ))
+            advance(1, f"compiled {variant.logical_output_model}")
 
     qc_plan = QCOperationPlan(
         operation.map_identity,
@@ -364,18 +404,26 @@ def generate_materials_and_validate(
     operation: OperationPlan,
     materials: ColoredMaterialOperationPlan,
     skin_layout: SkinLayoutOperationPlan,
+    *,
+    progress_callback: ProgressCallback | None = None,
 ) -> MaterialGenerationResult:
     """Generate independent material outputs without aborting sibling work."""
     _validate_inputs(workspace, operation, materials, skin_layout)
     generated: list[ValidatedMaterialArtifact] = []
     failures: list[GenerationFailure] = []
-    for item in _required_material_plans(materials, skin_layout):
+    required = _required_material_plans(materials, skin_layout)
+    total = len(required)
+    for index, item in enumerate(required):
+        if progress_callback is not None:
+            progress_callback(index, total, f"generating {item.logical_output_material}")
         try:
             generated.append(_generate_one_material(
                 workspace, filesystem, materials, item
             ))
         except GenerationError as exc:
             failures.append(_error_as_failure(exc, "material"))
+        if progress_callback is not None:
+            progress_callback(index + 1, total, f"processed {item.logical_output_material}")
     return MaterialGenerationResult(
         operation.map_identity, workspace.root, tuple(generated), tuple(failures)
     )

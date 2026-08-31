@@ -9,6 +9,7 @@ import tempfile
 import uuid
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
+from typing import Callable
 
 from psr.cache import (
     ColoredMaterialRecord,
@@ -42,6 +43,9 @@ class CommitError(RuntimeError):
         self.code = code
         self.detail = detail
         super().__init__(f"{code}: {detail}")
+
+
+ProgressCallback = Callable[[int, int, str], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -382,6 +386,7 @@ def apply_commit_plan(
     manifest_path: Path,
     vmf_output_path: Path,
     recovery_journal_path: Path | None = None,
+    vmf_progress_callback: ProgressCallback | None = None,
 ) -> CommitResult:
     """Publish every planned file with rollback if any replacement fails."""
     game_root = game_directory.resolve(strict=True)
@@ -438,7 +443,15 @@ def apply_commit_plan(
     prepared: list[_PreparedWrite] = []
     try:
         for target, content, size, sha256 in writes:
-            prepared.append(_prepare_write(target, content, size, sha256))
+            prepared.append(_prepare_write(
+                target,
+                content,
+                size,
+                sha256,
+                progress_callback=(
+                    vmf_progress_callback if target == vmf_target else None
+                ),
+            ))
         for existing in existing_targets:
             _checked_existing_artifact(existing)
         _install_prepared(prepared, recovery_journal_path=recovery_journal_path)
@@ -763,6 +776,8 @@ def _prepare_write(
     content: Path | bytes,
     expected_size: int,
     expected_sha256: str,
+    *,
+    progress_callback: ProgressCallback | None = None,
 ) -> _PreparedWrite:
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists() and not target.is_file():
@@ -781,7 +796,15 @@ def _prepare_write(
         ) as stream:
             temporary = Path(stream.name)
             if isinstance(content, bytes):
-                stream.write(content)
+                completed = 0
+                if progress_callback is not None:
+                    progress_callback(0, expected_size, target.name)
+                for offset in range(0, len(content), 1024 * 1024):
+                    chunk = content[offset:offset + 1024 * 1024]
+                    stream.write(chunk)
+                    completed += len(chunk)
+                    if progress_callback is not None:
+                        progress_callback(completed, expected_size, target.name)
             else:
                 with content.open("rb") as source:
                     while chunk := source.read(1024 * 1024):

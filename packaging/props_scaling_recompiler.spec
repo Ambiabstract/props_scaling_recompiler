@@ -16,6 +16,9 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
+        "asyncio",
+        "concurrent",
+        "multiprocessing",
         "PIL",
         "tkinter",
         "unittest",
@@ -25,6 +28,8 @@ a = Analysis(
         "srctools.dmx",
         "srctools.fgd",
         "srctools.packlist",
+        "srctools.run",
+        "srctools.steam",
         "srctools.vmf",
         "srctools.vtf",
     ],
@@ -48,5 +53,5 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch="x86_64",
-    icon=str(project_root / "props_scaling_recompiler_icon_v1.ico"),
+    icon=str(project_root / "props_scaling_recompiler_icon_v3.ico"),
 )

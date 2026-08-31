@@ -9,7 +9,7 @@ import tempfile
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 from psr.assets import (
     OrderedAssetFileSystem,
@@ -50,6 +50,8 @@ from psr.pipeline import (
 
 from .reporting import DiagnosticReport
 from .progress import NullProgressReporter, ProgressReporter
+from .cleanup import perform_debug_cleanup
+from .summary import ProjectCacheSummary, build_project_cache_summary
 from .staging_gameinfo import build_staging_gameinfo
 from .state import ProjectLock, ProjectStatePaths, build_project_state_paths
 
@@ -73,6 +75,7 @@ class CompileRequest:
     studiomdl_command: tuple[str | Path, ...] | None
     local_appdata: Path | None = None
     dynamic_fallback: bool = True
+    debug_cleanup: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +90,7 @@ class CompileRunResult:
     reused_materials: int
     published_files: int
     retained_staging: Path | None = None
+    project_summary: ProjectCacheSummary | None = None
 
 
 def execute_compile_run(
@@ -105,13 +109,45 @@ def execute_compile_run(
     if not vmf_input.is_file():
         raise RuntimeExecutionError("vmf_input_not_file", str(vmf_input))
     vmf_output = request.vmf_output_path.resolve()
-    source_vmf = _read_bytes(vmf_input, "vmf_input_read_failed")
+    try:
+        vmf_size = vmf_input.stat().st_size
+    except OSError as exc:
+        raise RuntimeExecutionError(
+            "vmf_input_read_failed",
+            f"{type(exc).__name__}: {exc}",
+        ) from exc
+    progress.start("Reading input VMF", total=vmf_size, unit="bytes")
+    source_vmf = _read_bytes(
+        vmf_input,
+        "vmf_input_read_failed",
+        progress_callback=lambda done, total, detail: progress.update(
+            done, total=total, detail=detail
+        ),
+    )
+    progress.finish()
     map_identity = _map_identity(vmf_input, game)
     project = build_project_identity(gameinfo)
     state = build_project_state_paths(project, local_appdata=request.local_appdata)
     state.ensure_directories()
 
     with ProjectLock(state.lock, map_identity=map_identity):
+        if request.debug_cleanup:
+            progress.start(f"Applying debug cleanup mode {request.debug_cleanup}")
+            cleanup = perform_debug_cleanup(
+                request.debug_cleanup,
+                game_directory=game,
+                state=state,
+                current_lock_held=True,
+            )
+            state.ensure_directories()
+            report.add(
+                "info",
+                "debug_cleanup_applied",
+                (
+                    f"mode {cleanup.mode}: removed {cleanup.removed_files} PSR-managed "
+                    f"files ({cleanup.removed_bytes} bytes) before the compile run"
+                ),
+            )
         recovery = recover_interrupted_commit(
             state.recovery_journal,
             game_directory=game,
@@ -222,7 +258,9 @@ def execute_compile_run(
                 report.extend_pipeline(reuse.diagnostics)
                 progress.start(
                     f"Generating and validating materials "
-                    f"({len(reuse.generation_materials.colored_materials)} pending)"
+                    f"({len(reuse.generation_materials.colored_materials)} pending)",
+                    total=len(reuse.generation_materials.colored_materials),
+                    unit="materials",
                 )
                 material_result = generate_materials_and_validate(
                     workspace,
@@ -230,6 +268,9 @@ def execute_compile_run(
                     reuse.generation_operation,
                     reuse.generation_materials,
                     skin_layout,
+                    progress_callback=lambda done, total, detail: progress.update(
+                        done, total=total, detail=detail
+                    ),
                 )
                 generated_materials.update({
                     item.generated.logical_output_material: item
@@ -315,9 +356,16 @@ def execute_compile_run(
                     game, loaded.manifest, operation, materials, skin_layout
                 )
 
+            pending_models = reuse.generation_operation.generated_models
+            pending_sources = {
+                item.logical_source_model for item in pending_models
+            }
+            model_work = len(pending_sources) + len(pending_models)
             progress.start(
                 f"Decompiling and compiling models "
-                f"({len(reuse.generation_operation.generated_models)} pending)"
+                f"({len(pending_models)} variations pending)",
+                total=model_work,
+                unit="tasks",
             )
             model_result = generate_models_and_validate(
                 workspace,
@@ -326,6 +374,9 @@ def execute_compile_run(
                 skin_layout,
                 crowbar_command=request.crowbar_command or ("unused-crowbar",),
                 studiomdl_command=request.studiomdl_command or ("unused-studiomdl",),
+                progress_callback=lambda done, total, detail: progress.update(
+                    done, total=total, detail=detail
+                ),
             )
             generation_failures: list[WorkFailure] = []
             requirements = {
@@ -400,12 +451,26 @@ def execute_compile_run(
                     for entity_id in sorted(fallback_ids, key=int)
                 ),
             )
+            vmf_write_started = False
+
+            def report_vmf_write(done: int, total: int, detail: str) -> None:
+                nonlocal vmf_write_started
+                if not vmf_write_started:
+                    progress.start(
+                        "Writing and verifying output VMF",
+                        total=total,
+                        unit="bytes",
+                    )
+                    vmf_write_started = True
+                progress.update(done, total=total, detail=detail)
+
             committed = apply_commit_plan(
                 commit_plan,
                 game_directory=game,
                 manifest_path=state.manifest,
                 vmf_output_path=vmf_output,
                 recovery_journal_path=state.recovery_journal,
+                vmf_progress_callback=report_vmf_write,
             )
         except (CommitError, StagingError) as exc:
             progress.finish()
@@ -459,6 +524,10 @@ def execute_compile_run(
                 reused_materials=len(reuse.reused_materials),
                 published_files=0,
                 retained_staging=workspace.root,
+                project_summary=build_project_cache_summary(
+                    game,
+                    load_manifest(state.manifest, project).manifest,
+                ),
             )
         else:
             progress.finish()
@@ -476,6 +545,9 @@ def execute_compile_run(
                 generated_materials=len(generation.materials),
                 reused_materials=len(reuse.reused_materials),
                 published_files=len(committed.published_artifacts),
+                project_summary=build_project_cache_summary(
+                    game, commit_plan.manifest
+                ),
             )
 
 
@@ -697,9 +769,23 @@ def _find_gameinfo(game: Path) -> Path:
     )
 
 
-def _read_bytes(path: Path, code: str) -> bytes:
+def _read_bytes(
+    path: Path,
+    code: str,
+    *,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+) -> bytes:
     try:
-        return path.read_bytes()
+        total = path.stat().st_size
+        content = bytearray()
+        if progress_callback is not None:
+            progress_callback(0, total, path.name)
+        with path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                content.extend(chunk)
+                if progress_callback is not None:
+                    progress_callback(len(content), total, path.name)
+        return bytes(content)
     except OSError as exc:
         raise RuntimeExecutionError(
             code,

@@ -7,6 +7,18 @@ import unittest
 from pathlib import Path
 
 
+class ReleaseConfigurationTests(unittest.TestCase):
+    def test_release_spec_uses_v3_icon(self) -> None:
+        spec = Path(__file__).parents[1] / "packaging/props_scaling_recompiler.spec"
+        content = spec.read_text(encoding="utf-8")
+
+        self.assertIn("props_scaling_recompiler_icon_v3.ico", content)
+        self.assertNotIn("props_scaling_recompiler_icon_v1.ico", content)
+        self.assertNotIn('"ctypes"', content)
+        self.assertIn('"multiprocessing"', content)
+        self.assertIn('"srctools.run"', content)
+
+
 @unittest.skipUnless(
     os.environ.get("PSR_FROZEN_EXE"),
     "set PSR_FROZEN_EXE to run the frozen one-file smoke test",

@@ -4,6 +4,9 @@
 # only KeyValues, filesys/VPK, MDL and VMT modules, so no package data is needed.
 datas = []
 excludedimports = [
+    "asyncio",
+    "concurrent",
+    "multiprocessing",
     "PIL",
     "tkinter",
     "wx",
@@ -12,6 +15,8 @@ excludedimports = [
     "srctools.dmx",
     "srctools.fgd",
     "srctools.packlist",
+    "srctools.run",
+    "srctools.steam",
     "srctools.vmf",
     "srctools.vtf",
 ]

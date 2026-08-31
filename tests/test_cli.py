@@ -21,6 +21,7 @@ class CliContractTests(unittest.TestCase):
             "-subfolders", "1",
             "-force_recompile", "0",
             "-dynamic_fallback", "0",
+            "-debug_cleanup", "2",
         ])
 
         self.assertEqual(args.game, "game")
@@ -29,6 +30,16 @@ class CliContractTests(unittest.TestCase):
         self.assertEqual(args.subfolders, 1)
         self.assertEqual(args.force_recompile, 0)
         self.assertEqual(args.dynamic_fallback, 0)
+        self.assertEqual(args.debug_cleanup, 2)
+
+    def test_debug_cleanup_rejects_values_outside_zero_one_two(self) -> None:
+        with self.assertRaises(ValueError):
+            build_arg_parser().parse_args([
+                "-game", "game",
+                "-vmf_in", "input.vmf",
+                "-vmf_out", "output.vmf",
+                "-debug_cleanup", "3",
+            ])
 
     def test_tool_discovery_prefers_separate_third_party_crowbar(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -76,6 +87,11 @@ class CliContractTests(unittest.TestCase):
         self.assertEqual(written, source)
         self.assertEqual(output.count("[deprecated_cli_argument]"), 1)
         self.assertIn("SUCCESS", output)
+        self.assertIn("[PROGRESS] Reading input VMF", output)
+        self.assertIn(f"{len(source)}/{len(source)} bytes (100%)", output)
+        self.assertIn("[PROGRESS] Writing and verifying output VMF", output)
+        self.assertLess(output.index("[project_summary]"), output.index("[session_summary]"))
+        self.assertLess(output.index("[session_summary]"), output.index("[elapsed_time]"))
 
     def test_errors_do_not_change_exit_zero_when_valid_vmf_was_delivered(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -102,6 +118,42 @@ class CliContractTests(unittest.TestCase):
                 ])
 
         self.assertEqual(exit_code, 0)
+
+    def test_debug_cleanup_mode_one_runs_under_the_compile_lock_before_noop(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            game = root / "game"
+            maps = game / "maps"
+            maps.mkdir(parents=True)
+            (game / "GameInfo.txt").write_text(
+                'GameInfo\n{\n FileSystem\n {\n  SearchPaths\n  {\n'
+                '   game "|gameinfo_path|."\n  }\n }\n}\n',
+                encoding="utf-8",
+            )
+            managed = game / "models/psr_scaled/stale.mdl"
+            managed.parent.mkdir(parents=True)
+            managed.write_bytes(b"stale")
+            vmf_input = maps / "noop.vmf"
+            vmf_output = maps / "psr_temp/noop.vmf"
+            source = b'world\n{\n "id" "1"\n}\n'
+            vmf_input.write_bytes(source)
+            console = StringIO()
+
+            with patch.dict(
+                "os.environ", {"LOCALAPPDATA": str(root / "local")}
+            ), redirect_stdout(console):
+                exit_code = main([
+                    "-game", str(game),
+                    "-vmf_in", str(vmf_input),
+                    "-vmf_out", str(vmf_output),
+                    "-debug_cleanup", "1",
+                ])
+
+            output = console.getvalue()
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(vmf_output.read_bytes(), source)
+            self.assertFalse(managed.exists())
+            self.assertIn("[debug_cleanup_applied]", output)
 
     def test_early_runtime_failure_still_returns_zero_after_valid_passthrough(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

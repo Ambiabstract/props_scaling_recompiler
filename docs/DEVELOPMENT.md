@@ -34,11 +34,11 @@ Runtime-зависимость `srctools` закреплена точной ве
 
 ## Runtime и release-сборка
 
-CLI сохраняет совместимость с Hammer compile-run через `-game`, `-vmf_in` и `-vmf_out`. Старые `0/1`-флаги принимаются, но игнорируются с deprecated warning. Постоянный project state размещается под `%LOCALAPPDATA%\PropsScalingRecompiler\projects\<project_id>`; два одновременных запуска одного проекта блокируются. Короткий operation staging находится под `%LOCALAPPDATA%\PropsScalingRecompiler\work\<project_prefix>`, чтобы Crowbar 0.68 не упирался в legacy Win32 path limit. Manifest, recovery journal, logs и staging не размещаются рядом с пользовательским VMF.
+CLI сохраняет совместимость с Hammer compile-run через `-game`, `-vmf_in` и `-vmf_out`. Старые `0/1`-флаги принимаются, но игнорируются с deprecated warning. `-debug_cleanup 0/1/2` явно включает pre-run cleanup managed assets/current cache/all caches+temporary state. Постоянный project state размещается под `%LOCALAPPDATA%\PropsScalingRecompiler\projects\<project_id>`; два одновременных запуска одного проекта блокируются. Короткий operation staging находится под `%LOCALAPPDATA%\PropsScalingRecompiler\work\<project_prefix>`, чтобы Crowbar 0.68 не упирался в legacy Win32 path limit. Manifest, recovery journal, logs и staging не размещаются рядом с пользовательским VMF.
 
 Fallback версии 2.0 для dynamic MDL с пустым option многовариантного bodygroup является чистой VMF-конверсией: asset не передаётся Crowbar/StudioMDL, не получает managed MDL/VMT/skin layout и не восстанавливается из прежних cached variants. В output сохраняются исходные `model`, `modelscale`, `rendercolor` и `skin`, classname становится `prop_dynamic`, а legacy `convert_prop_to_static` удаляется. Полноценная static-конвертация этого класса моделей отложена в отдельный будущий SMD-aware этап; zero-triangle placeholders запрещены.
 
-Целевая поставка — Windows 10/11 x64: один `props_scaling_recompiler.exe` и отдельный `third-party/CrowbarCommandLineDecomp.exe`. VPKEdit и Crowbar не встраиваются в основной exe. StudioMDL берётся из окружения Source SDK 2013 SP. Текущая сборка `2.0.0.dev3` после исправления dynamic-to-static bone layout — 11 433 757 байт (10,90 MiB), SHA-256 `A131E91A9A1928D33924CECB4EBAF97738FA80BEE581EA3C4DF37A99025D086C`.
+Целевая поставка — Windows 10/11 x64: один `props_scaling_recompiler.exe` и отдельный `third-party/CrowbarCommandLineDecomp.exe`. VPKEdit и Crowbar не встраиваются в основной exe. StudioMDL берётся из окружения Source SDK 2013 SP. Текущая сборка `2.0.0.dev4` с иконкой v3 — 10 537 748 байт (10,05 MiB), SHA-256 `7A1F584E8DDA2444BB9DCA183BB07FC3EA35B8B4BD7B9DB3830803EEC5344E8A`.
 
 Воспроизводимая сборка:
 
@@ -46,7 +46,7 @@ Fallback версии 2.0 для dynamic MDL с пустым option многов
 powershell -NoProfile -ExecutionPolicy Bypass -File packaging/build_release.ps1 -CrowbarPath <path-to-CrowbarCommandLineDecomp.exe>
 ```
 
-Скрипт сначала запускает обычные тесты, пересоздаёт только собственный `dist/props_scaling_recompiler_v2`, выполняет frozen `--version` smoke и отклоняет основной exe крупнее 64 MiB. Размер свыше предпочтительных 16 MiB даёт warning. Текущая проверенная сборка `2.0.0.dev3` на Python 3.14/PyInstaller 6.22.2 — 11 433 757 байт (10,90 MiB), SHA-256 `A131E91A9A1928D33924CECB4EBAF97738FA80BEE581EA3C4DF37A99025D086C`.
+Скрипт сначала запускает обычные тесты, пересоздаёт только собственный `dist/props_scaling_recompiler_v2`, выполняет frozen `--version` smoke и отклоняет основной exe крупнее 64 MiB. Размер свыше предпочтительных 16 MiB даёт warning. Текущая проверенная сборка `2.0.0.dev4` на Python 3.14/PyInstaller 6.22.2 — 10 537 748 байт (10,05 MiB), SHA-256 `7A1F584E8DDA2444BB9DCA183BB07FC3EA35B8B4BD7B9DB3830803EEC5344E8A`.
 
 После каждого полезного изменения рабочего кода, поведения или сборочной конфигурации PSR завершённый цикл разработки включает не только автоматические проверки, но и немедленную подготовку версии для ручного теста пользователя:
 

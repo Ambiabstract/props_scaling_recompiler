@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import platform
 import sys
 import time
 import traceback
@@ -58,6 +57,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help=(
             "use prop_dynamic_override for failed entities (default: 1); "
             "0 leaves them as prop_static_scalable"
+        ),
+    )
+    parser.add_argument(
+        "-debug_cleanup",
+        type=_zero_one_or_two,
+        default=0,
+        help=(
+            "destructive PSR debug cleanup before compilation: 0=off, "
+            "1=current project assets/cache, 2=all caches and temporary files"
         ),
     )
     parser.add_argument(
@@ -124,6 +132,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     crowbar_command=crowbar,
                     studiomdl_command=studiomdl,
                     dynamic_fallback=bool(args.dynamic_fallback),
+                    debug_cleanup=args.debug_cleanup,
                 ),
                 report,
                 progress,
@@ -170,6 +179,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             emergency_vmf_delivered = _try_emergency_passthrough(args, report)
 
     if result is not None:
+        project_summary = result.project_summary
+        if project_summary is not None:
+            missing = (
+                f", missing_files={project_summary.missing_files}"
+                if project_summary.missing_files else ""
+            )
+            report.add(
+                "info",
+                "project_summary",
+                (
+                    f"cache: source_models={project_summary.source_models}, "
+                    f"model_variations={project_summary.model_variations}, "
+                    f"material_variations={project_summary.material_variations}, "
+                    f"skin_variations={project_summary.skin_variations}, "
+                    f"maps={project_summary.maps}, "
+                    f"entity_usages={project_summary.entity_usages}; "
+                    f"managed_files={project_summary.managed_files}, "
+                    f"size={_format_bytes(project_summary.managed_bytes)}{missing}",
+                ),
+            )
         outcome = (
             "SUCCESS" if result.success and not report.has_errors
             else "PARTIAL" if result.success
@@ -224,6 +253,16 @@ def _format_elapsed(seconds: float) -> str:
     )
 
 
+def _format_bytes(size: int) -> str:
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.2f} KiB"
+    if size < 1024 * 1024 * 1024:
+        return f"{size / (1024 * 1024):.2f} MiB"
+    return f"{size / (1024 * 1024 * 1024):.2f} GiB"
+
+
 def _try_emergency_passthrough(args: argparse.Namespace, report: DiagnosticReport) -> bool:
     try:
         deliver_passthrough_vmf(Path(args.vmf_in), Path(args.vmf_out))
@@ -259,7 +298,9 @@ def _validate_platform() -> None:
             "unsupported_platform",
             "PSR 2.0 supports only Windows 10/11 x64",
         )
-    if sys.maxsize <= 2**32 or platform.machine().casefold() not in {
+    process_architecture = os.environ.get("PROCESSOR_ARCHITECTURE", "").casefold()
+    native_architecture = os.environ.get("PROCESSOR_ARCHITEW6432", "").casefold()
+    if sys.maxsize <= 2**32 or (native_architecture or process_architecture) not in {
         "amd64", "x86_64"
     }:
         raise RuntimeExecutionError(
@@ -285,6 +326,16 @@ def _zero_or_one(value: str) -> int:
         raise argparse.ArgumentTypeError("expected 0 or 1") from exc
     if parsed not in {0, 1}:
         raise argparse.ArgumentTypeError("expected 0 or 1")
+    return parsed
+
+
+def _zero_one_or_two(value: str) -> int:
+    try:
+        parsed = int(value, 10)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("expected 0, 1, or 2") from exc
+    if parsed not in {0, 1, 2}:
+        raise argparse.ArgumentTypeError("expected 0, 1, or 2")
     return parsed
 
 
