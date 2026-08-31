@@ -1,15 +1,18 @@
-1. Не нашлись две модельки из ВПК у Эдика в Этике
+1. Не нашлись две модельки из ВПК у Эдика в Этике:
 
-models/props_docks/dockpole02a.mdl
+1)
+Entity path: models/props_docks/dockpole02a.mdl
 
-D:/SteamLibrary/steamapps/common/Source SDK Base 2013 Singleplayer slam/hl2/hl2_misc.vpk/models/props_docks/dockpole02a.mdl
+Full path: D:/SteamLibrary/steamapps/common/Source SDK Base 2013 Singleplayer slam/hl2/hl2_misc.vpk/models/props_docks/dockpole02a.mdl
 
-models/props_silo/eli_weapon.mdl
+2)
+Entity path: models/props_silo/eli_weapon.mdl
 
-D:/SteamLibrary/steamapps/common/Source SDK Base 2013 Singleplayer slam/ep2/ep2_pak.vpk/models/props_silo/eli_weapon.mdl
+Full path: D:/SteamLibrary/steamapps/common/Source SDK Base 2013 Singleplayer slam/ep2/ep2_pak.vpk/models/props_silo/eli_weapon.mdl
 
-D:\SteamLibrary\steamapps\sourcemods\Ethica
+Путь мода (у Эдика): D:\SteamLibrary\steamapps\sourcemods\Ethica
 
+GameInfo его мода:
 ```
 "GameInfo"
 {
@@ -121,6 +124,7 @@ D:\SteamLibrary\steamapps\sourcemods\Ethica
 	}
 }
 ```
+Важно: его гейминфо правильный, хаммер и движок находят и читают эти модели. Мы видимо неправильно читаем некоторые случаи SearchPaths в гейминфо.
 
 
 2. Поведение при фейле компиляции вариации должно выбираться пользователем. Замена на prop_dynamic_override должна быть опциональной (на это был чёткий фидбек у художников уровней). Вводим новый аргумент на вход с такими значениями:
