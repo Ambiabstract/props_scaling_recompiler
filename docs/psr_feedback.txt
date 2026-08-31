@@ -1,29 +1,148 @@
-У меня в какой-то момент кончились токены и к сожалению у меня нет лишних денег на оплату дополнительных лимитов, так что я ковырялся сам как мог :)
+1. Не нашлись две модельки из ВПК у Эдика в Этике
 
-Изучи пожалуйста фигню, которую я наворотил в твоё отсутствие (я ничего из этого не коммитил). Скорее всего мы её откатим.
+models/props_docks/dockpole02a.mdl
 
-Дальше изучи пожалуйста фидбек текущей итерации ниже, затем мы обсудим твои вопросы/комментарии, затем сохраним ключевые выводы в память, и затем составим план дальнейших улучшений.
+D:/SteamLibrary/steamapps/common/Source SDK Base 2013 Singleplayer slam/hl2/hl2_misc.vpk/models/props_docks/dockpole02a.mdl
 
-- Главный недостаток сейчас - что при ошибке программа просто остананавливает работу художнику. Такого не должно быть. Если одна модель из 12 тысяч на карте деффектная - мы не должны отменять коммит всего что сделали, мы должны просто пропустить модельку и сообщить об этом художнику в конце в отчёте.
-Пока что я вообще не вижу ни одного сценария, когда ошибка считается фатальной и должна останавливать компиляцию уровня, в худшем случае мы просто передаём на выход оригинальный vmf (вообще ничего не меняя внутри - движок просто скажет что ничего не знает про энтитю prop_static_scalable и её параметры - это вполне допустимый вариант). Во всех остальных случаях мы просто коммитим и применяем в выходном VMF ту часть работы, которая не была испорченной. 
-Единицей хорошей/плохой работы должна быть не группа моделей, затронутых компиляцией уровня, а каждая отдельная оригинальная модель (если что-то не так с одной её вариацией - значит что-то не так со всей оригинальной моделью и её вариациями, но другие модели и их вариации не должны от этого страдать, как и художник уровня от того что он не понимает почему не скомпилилась карта из-за какой-то сущности №915245).
+models/props_silo/eli_weapon.mdl
 
-- ббоксы (или что? cbox?) имеют неправильные размеры (большие модели исчезают близко к границам экрана), поэтому я сделал их удаление, как было в версии 1.1.2. StudioMDL сам их пересчитывает вполне корректно, насколько я понимаю. Если нет - надо пересчитывать самим в будущих обновлениях, но в версии 2.0 будем тупо удалять из QC как раньше.
+D:/SteamLibrary/steamapps/common/Source SDK Base 2013 Singleplayer slam/ep2/ep2_pak.vpk/models/props_silo/eli_weapon.mdl
 
-- Очень нужны сообщения, показывающие прогресс работы каждого этапа, в идеале с прогресс баром или хотя бы процентами как было в версии 1.1.2 (каждая операция которая длится больше 5 секунд и ничего не сообщает в консоль - пугает художника что "всё зависло").
-Те, которые я добавил - плохие. И по форме, и по содержанию. 
-Плюс по сравнению с версией 1.1.2 только в том, что мы не спамим в консоль массивными и пугающими логами из Crowbar/StudioMDL.
+D:\SteamLibrary\steamapps\sourcemods\Ethica
 
-- С книжкой (`models/props_se/storage/book_2.mdl`) сразу две проблемы. Относительно хаммера и размер отличается, и коллизия смещена относительно визуальной геометрии. Пока что грешу на обработку QC/SMD.
+```
+"GameInfo"
+{
+	game 		"Mapbase - HL2 Episodic"
+	title 		"HALF-LIFE'"
+	title2		""
 
-- Нужно стартовое приветственное сообщение с инфой о программе, контактами и так далее, как это было в версии 1.1.2.
+	type		singleplayer_only
+	supportsvr	0
 
-- Нужен подсчёт времени работы программы, как в версии 1.1.2.
+	GameData	"bin/halflife2.fgd"
 
-- Нужны стартовые сообщения с информацией для непродвинутых художников, которые рассказывают куда поместить экзешник и не закрывают моментально консоль, а дают прочитать что делать (как было в версии 1.1.2, там было два сценария на просто запуск из рандомной папки и на запуск из папки bin, но не той). Запуск exe из cmd - на удивление редкий навык в 2026 году. Даже для source моддеров.
+	icon		"resource/icon"
+	
+	// Indicates this is an original Mapbase mod and not just a mod using its features.
+	mapbase_core 1
 
-- По покраске нужно мелкое улучшение. Если у материала оригинала отсутствует `"$blendtintbybasealpha" "1"` - предупреждаем об этом пользователя в конце в отчёте.
+	FileSystem
+	{
+		SteamAppId				243730		// This sets the app ID in Steam
+		
+		//
+		// Mapbase has a fairly unique file system that needs some explanation.
+		// In its rawest form, it is spread out across 2-3 folders:
+		// 
+		// mapbase_shared - Shared Mapbase content, like editor icons, that are not unique to Half-Life 2.
+		// mapbase_hl2 - Original HL2 branch of Mapbase.
+		// mapbase_episodic - Episodic branch of Mapbase.
+		// 
+		// Each folder relies on the previous, meaning mapbase_episodic cannot function without mapbase_hl2 and
+		// mapbase_hl2 cannot function without mapbase_shared.
+		// 
+		// mapbase_episodic > mapbase_hl2 > mapbase_shared
+		// 
+		// Each Mapbase folder has its own "content" subfolder contianing VPKs.
+		// These are mounted similar to the "custom" folder in which everything is mounted without listing out their names.
+		// 
+		SearchPaths
+		{
+			// First, mount all user customizations.  This will search for VPKs and subfolders
+			// and mount them in alphabetical order.  The easiest way to distribute a mod is to
+			// pack up the custom content into a VPK.  To "install" a mod, just drop it in this
+			// folder.
+			//
+			// Note that this folder is scanned only when the game is booted.
+			game+mod+addon			|gameinfo_path|custom/*
+			game+mod+addon			|gameinfo_path|../mapbase_hl2/custom/*
+			game+mod+addon			ep2/custom/*
+			game+mod+addon			episodic/custom/*
+			game+mod+addon			hl2/custom/*
+			
 
-- Patch работает прекрасно!
 
-- В целом мы добились отличного результата, бОльшая часть карт компилируется успешно, большинство ассетов без явных косяков за исключением ббоксов/цбоксов. Это уже отличный результат, хоть и не финальный.
+			// Now search loose files.  We'll set the directory containing the gameinfo.txt file
+			// as the first "mod" search path (after any user customizations).  This is also the one
+			// that's used when writing to the "mod" path.
+			game+mod+mod_write+default_write_path		|gameinfo_path|.
+			gamebin				|gameinfo_path|bin
+			
+			game+mod			|gameinfo_path|content/*
+			
+				//dev shit
+			//game+mod			|gameinfo_path|../swelter/swelter_materials.vpk
+			//game+mod			|gameinfo_path|../swelter/swelter_models.vpk
+			//game+mod			|gameinfo_path|../snowdrop_escape/sde_materials.vpk
+			//game+mod			|gameinfo_path|../snowdrop_escape/sde_models.vpk
+			//game+mod			G:\Dev_content\Antenna\antenna_mod*
+			
+			// Get our shared mapbase files.
+			// They should be right next to this mod.
+			// Also, for Episodic Mapbase, get HL2 as well.
+			game+mod			|gameinfo_path|../mapbase_hl2
+			game+mod			|gameinfo_path|../mapbase_hl2/content/*
+			game+mod			|gameinfo_path|../mapbase_shared/shared_misc
+			gamebin				|gameinfo_path|../mapbase_shared/shared_misc/bin
+			game+mod			|gameinfo_path|../mapbase_shared/shared_content_v7_0.vpk
+
+			// We search VPK files before ordinary folders, because most files will be found in
+			// VPK and we can avoid making thousands of file system calls to attempt to open files
+			// in folders where they don't exist.  (Searching a VPK is much faster than making an operating
+			// system call.)
+			game_lv				hl2/hl2_lv.vpk
+			game				|all_source_engine_paths|ep2/ep2_english.vpk
+			game				|all_source_engine_paths|ep2/ep2_pak.vpk
+			game				|all_source_engine_paths|episodic/ep1_english.vpk
+			game				|all_source_engine_paths|episodic/ep1_pak.vpk
+			game				|all_source_engine_paths|hl2/hl2_english.vpk
+			game				|all_source_engine_paths|hl2/hl2_pak.vpk
+			game				|all_source_engine_paths|hl2/hl2_textures.vpk
+			game				|all_source_engine_paths|hl2/hl2_sound_vo_english.vpk
+			game				|all_source_engine_paths|hl2/hl2_sound_misc.vpk
+			game				|all_source_engine_paths|hl2/hl2_misc.vpk
+	  		game				|all_source_engine_paths|sourcetest/sourcetest_pak.vpk // sourcetest has Lost Coast content
+	  		game				|all_source_engine_paths|lostcoast/lostcoast_pak.vpk // For those using Hammer with Half-Life 2's bin
+			platform			|all_source_engine_paths|platform/platform_misc.vpk
+
+			// Add the HL2 directory as a game search path.  This is also where where writes
+			// to the "game" path go.
+			game+game_write		ep2
+
+			// Where the game's binaries are
+			gamebin				episodic/bin
+
+			// Last, mount in shared HL2 loose files
+			game				|all_source_engine_paths|episodic
+			game				|all_source_engine_paths|hl2
+			platform			|all_source_engine_paths|platform
+		}
+	}
+}
+```
+
+
+2. Поведение при фейле компиляции вариации должно выбираться пользователем. Замена на prop_dynamic_override должна быть опциональной (на это был чёткий фидбек у художников уровней). Вводим новый аргумент на вход с такими значениями:
+0 - удаляем сущность из vmf_out
+1 - заменяем на prop_static с такими параметрами, которые были бы, если бы вариативная модель удачно создалась (прям путь к несуществующей модельке, скин можно без учёта покраски ставить) - дефолтное значение и ожидаемое поведение для движка и художников
+2 - заменяем на prop_dynamic_override
+3 - заменяем на prop_scalable
+
+
+3. sw.vtx и dx80.vtx вообще-то не должны быть обязательными, а сейчас их отсутствие это ошибка, приводящая к отсутствию скомпилированной вариации. Непонятно на нашей стороне это проблема или на стороне studiomdl. Надо изучить как эта проблема решалась в старой версии скрипта. Скорее всего я тупо копировал vtx других версий при их отсутствии.
+
+
+4. Вот этим этапам работы тоже надо улучшить прогресс, текущий heartbit слишком непоказательный, а этапы долгие на больших картах.
+[PROGRESS] Discovering entities and planning source assets
+[PROGRESS] Validating and publishing assets, manifest, and VMF
+
+
+5. Логи желательно генерировать так, чтобы по именам папок и файлов было легко понять какой проект, какая карта, какое время. Должны быть человекочитаемыми. 
+
+
+6. Нужно добавить дополнительную логику при генерации colored скинов: если в материале оригинальной модели есть параметр `$notint` - мы не красим этот материал, т.е. при генерации нового скина для этого материала юзается оригинальный не colored материал. Это нужно только для тех моделей, где используется несколько материалов для каждого скина (например корпус автомобиля красится, а материал колёс имеет `$notint` и не красится).
+Пример такого ассета сделаю позже.
+
+
+7*. (ЭТО ПОТОМ) Поддержка гмода. "Do you also add proper gmod support (parse mount.cfg mainly)?"
