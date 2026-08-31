@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Sequence
 
 from psr import __version__
@@ -51,13 +53,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("-vmf_in", required=True, help="input VMF path")
     parser.add_argument("-vmf_out", required=True, help="output VMF path")
     parser.add_argument(
-        "-dynamic_fallback",
-        type=_zero_or_one,
+        "-compile_failure_mode",
+        type=_zero_one_two_or_three,
         default=1,
         help=(
-            "use prop_dynamic_override for failed entities (default: 1); "
-            "0 leaves them as prop_static_scalable"
+            "failed variation handling: 0=remove entity, 1=prop_static with the "
+            "intended missing model (default), 2=prop_dynamic_override, "
+            "3=prop_scalable"
         ),
+    )
+    parser.add_argument(
+        "-dynamic_fallback",
+        type=_zero_or_one,
+        default=None,
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "-debug_cleanup",
@@ -119,6 +128,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "deprecated_cli_argument",
                     f"-{name}={value} is accepted for compatibility but ignored in 2.0",
                 )
+        compile_failure_mode: int | None = args.compile_failure_mode
+        if args.dynamic_fallback is not None:
+            report.add(
+                "warning",
+                "deprecated_cli_argument",
+                "-dynamic_fallback is deprecated; use -compile_failure_mode 0..3",
+            )
+            compile_failure_mode = 2 if args.dynamic_fallback else None
         _validate_platform()
         application_dir = _application_directory()
         crowbar, studiomdl = discover_tool_commands(application_dir)
@@ -131,7 +148,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     engine_root=_engine_root(application_dir),
                     crowbar_command=crowbar,
                     studiomdl_command=studiomdl,
-                    dynamic_fallback=bool(args.dynamic_fallback),
+                    compile_failure_mode=compile_failure_mode,
                     debug_cleanup=args.debug_cleanup,
                 ),
                 report,
@@ -217,7 +234,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     elapsed = time.perf_counter() - started
     report.add("info", "elapsed_time", _format_elapsed(elapsed))
     if result is not None:
-        _write_report_log(report, result.state.logs)
+        _write_report_log(report, result.state.logs, result.map_identity)
     report.print()
     return 0 if (result is not None and result.success) or emergency_vmf_delivered else 1
 
@@ -288,7 +305,10 @@ def _application_directory() -> Path:
 
 
 def _engine_root(application_directory: Path) -> Path | None:
-    candidate = application_directory.resolve().parent.parent / "Half-Life 2"
+    application = application_directory.resolve()
+    if application.name.casefold() != "bin":
+        return None
+    candidate = application.parent
     return candidate if candidate.is_dir() else None
 
 
@@ -339,16 +359,38 @@ def _zero_one_or_two(value: str) -> int:
     return parsed
 
 
-def _write_report_log(report: DiagnosticReport, directory: Path) -> None:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+def _zero_one_two_or_three(value: str) -> int:
     try:
-        report.write_log(directory / f"run-{stamp}-{os.getpid()}.log")
+        parsed = int(value, 10)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("expected 0, 1, 2, or 3") from exc
+    if parsed not in {0, 1, 2, 3}:
+        raise argparse.ArgumentTypeError("expected 0, 1, 2, or 3")
+    return parsed
+
+
+def _write_report_log(
+    report: DiagnosticReport,
+    directory: Path,
+    map_identity: str,
+) -> None:
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S.%fZ")
+    map_name = _safe_log_component(PurePosixPath(map_identity).stem, "map")
+    try:
+        report.write_log(
+            directory / f"{map_name}__{stamp}__pid-{os.getpid()}.log"
+        )
     except OSError as exc:
         report.add(
             "warning",
             "report_log_write_failed",
             f"{type(exc).__name__}: {exc}",
         )
+
+
+def _safe_log_component(value: str, fallback: str) -> str:
+    cleaned = re.sub(r"[^\w.-]+", "-", value, flags=re.UNICODE).strip(" .-_")
+    return cleaned[:80] or fallback
 
 
 if __name__ == "__main__":

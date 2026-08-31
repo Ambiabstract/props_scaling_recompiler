@@ -177,6 +177,7 @@ counter = pathlib.Path({str(counter)!r})
 counter.write_text(str(int(counter.read_text() or "0") + 1))
 args = sys.argv[1:]
 omit_sw = "--omit-sw" in args
+omit_dx90 = "--omit-dx90" in args
 fail_150 = "--fail-150" in args
 game = pathlib.Path(args[args.index("-game") + 1])
 qc = pathlib.Path(args[-1])
@@ -194,7 +195,8 @@ struct.pack_into("<Ii", data, 152, 0x10 if "$staticprop" in text else 0, 1)
 target.write_bytes(data)
 target.with_suffix(".vvd").write_bytes(b"vvd")
 target.with_suffix(".dx80.vtx").write_bytes(b"vtx80")
-target.with_suffix(".dx90.vtx").write_bytes(b"vtx90")
+if not omit_dx90:
+    target.with_suffix(".dx90.vtx").write_bytes(b"vtx90")
 if not omit_sw:
     target.with_suffix(".sw.vtx").write_bytes(b"vtxsw")
 target.with_suffix(".phy").write_bytes(b"phy")
@@ -861,7 +863,7 @@ class GenerationPipelineTests(unittest.TestCase):
         self.assertEqual(vmf_output.read_bytes(), source)
         self.assertEqual(result.published_files, 0)
 
-    def test_runtime_missing_tool_commits_independent_entity_and_dynamic_fallback(self) -> None:
+    def test_runtime_missing_tool_defaults_to_intended_missing_static_assignment(self) -> None:
         model = self.case["logical_model_path"]
         source_vmf = (
             entity("1", model, "1", "255 255 255")
@@ -897,11 +899,15 @@ class GenerationPipelineTests(unittest.TestCase):
         self.assertEqual(entities[b"1"].direct_values(b"model"), (model.encode("ascii"),))
         self.assertEqual(
             entities[b"2"].direct_values(b"classname"),
-            (b"prop_dynamic_override",),
+            (b"prop_static",),
         )
-        self.assertEqual(entities[b"2"].direct_values(b"modelscale"), (b"1.5",))
+        self.assertEqual(
+            entities[b"2"].direct_values(b"model"),
+            (b"models/psr_scaled/fixture/static_multi_scaled_150.mdl",),
+        )
+        self.assertEqual(entities[b"2"].direct_values(b"modelscale"), ())
 
-    def test_runtime_disabled_dynamic_fallback_leaves_failed_entity_untouched(self) -> None:
+    def test_runtime_compile_failure_modes_remove_dynamic_and_scalable(self) -> None:
         model = self.case["logical_model_path"]
         source_vmf = entity("2", model, "1.5", "255 255 255").encode("ascii")
         vmf_input = self.root / "maps" / "no_fallback.vmf"
@@ -909,22 +915,35 @@ class GenerationPipelineTests(unittest.TestCase):
         vmf_input.parent.mkdir()
         vmf_input.write_bytes(source_vmf)
 
-        result = execute_compile_run(
-            CompileRequest(
-                game_directory=self.root,
-                vmf_input_path=vmf_input,
-                vmf_output_path=vmf_output,
-                engine_root=self.engine,
-                crowbar_command=None,
-                studiomdl_command=None,
-                local_appdata=self.root / "localappdata",
-                dynamic_fallback=False,
-            ),
-            DiagnosticReport(),
-        )
+        for mode, expected_classname in ((0, None), (2, b"prop_dynamic_override"), (3, b"prop_scalable")):
+            result = execute_compile_run(
+                CompileRequest(
+                    game_directory=self.root,
+                    vmf_input_path=vmf_input,
+                    vmf_output_path=vmf_output,
+                    engine_root=self.engine,
+                    crowbar_command=None,
+                    studiomdl_command=None,
+                    local_appdata=self.root / f"localappdata-{mode}",
+                    compile_failure_mode=mode,
+                ),
+                DiagnosticReport(),
+            )
 
-        self.assertTrue(result.success)
-        self.assertEqual(vmf_output.read_bytes(), source_vmf)
+            self.assertTrue(result.success)
+            entities = [
+                block
+                for block in parse_vmf(vmf_output.read_bytes()).blocks
+                if block.name.lower() == b"entity"
+            ]
+            if expected_classname is None:
+                self.assertEqual(entities, [])
+            else:
+                self.assertEqual(
+                    entities[0].direct_values(b"classname"),
+                    (expected_classname,),
+                )
+                self.assertEqual(entities[0].direct_values(b"modelscale"), (b"1.5",))
 
     def test_runtime_compile_failure_isolated_to_one_scale_variation(self) -> None:
         model = self.case["logical_model_path"]
@@ -961,7 +980,11 @@ class GenerationPipelineTests(unittest.TestCase):
         }
         self.assertEqual(
             entities[b"1"].direct_values(b"classname"),
-            (b"prop_dynamic_override",),
+            (b"prop_static",),
+        )
+        self.assertEqual(
+            entities[b"1"].direct_values(b"model"),
+            (b"models/psr_scaled/fixture/static_multi_scaled_150.mdl",),
         )
         self.assertEqual(entities[b"2"].direct_values(b"classname"), (b"prop_static",))
         self.assertEqual(
@@ -1068,7 +1091,7 @@ class GenerationPipelineTests(unittest.TestCase):
                     materials,
                     skin_layout,
                     crowbar_command=(sys.executable, self.crowbar),
-                    studiomdl_command=(sys.executable, self.studiomdl, "--omit-sw"),
+                    studiomdl_command=(sys.executable, self.studiomdl, "--omit-dx90"),
                 )
 
         self.assertEqual(raised.exception.code, "compiled_companion_missing")

@@ -110,6 +110,7 @@ def build_commit_plan(
     reuse: ArtifactReusePlan | None = None,
     *,
     fallbacks: tuple[VmfFallbackAssignment, ...] = (),
+    progress_callback: ProgressCallback | None = None,
 ) -> CommitPlan:
     """Prove staged outputs and build cache/VMF candidates without publishing."""
     identities = {
@@ -204,6 +205,26 @@ def build_commit_plan(
             f"expected {sorted(accepted_materials)!r}",
         )
 
+    progress_total = (
+        len(actual_materials)
+        + len(reused_materials)
+        + sum(len(item.validation.files) for item in actual_models.values())
+        + sum(len(item.files) for item in reused_models.values())
+    )
+    progress_completed = 0
+    if progress_callback is not None:
+        progress_callback(0, progress_total, "validating commit candidates")
+
+    def advance_progress(detail: str) -> None:
+        nonlocal progress_completed
+        progress_completed += 1
+        if progress_callback is not None:
+            progress_callback(progress_completed, progress_total, detail)
+
+    def describe_progress(detail: str) -> None:
+        if progress_callback is not None:
+            progress_callback(progress_completed, progress_total, detail)
+
     artifacts: list[CommitArtifact] = []
     existing_artifacts: list[ExistingArtifact] = []
     material_records: list[ColoredMaterialRecord] = []
@@ -212,6 +233,7 @@ def build_commit_plan(
         for item in materials.colored_materials
     }
     for logical_path in sorted(actual_materials):
+        describe_progress(f"validating {logical_path}")
         item = actual_materials[logical_path]
         planned = material_plan_by_output.get(logical_path)
         if planned is None or (
@@ -233,6 +255,7 @@ def build_commit_plan(
             item.staged_file.size,
             item.staged_file.sha256,
         ))
+        advance_progress(f"validated {logical_path}")
         material_records.append(ColoredMaterialRecord(
             logical_source_material=planned.logical_source_material,
             render_color=planned.render_color,
@@ -244,6 +267,7 @@ def build_commit_plan(
         ))
 
     for logical_path in sorted(reused_materials):
+        describe_progress(f"revalidating {logical_path}")
         item = reused_materials[logical_path]
         planned = material_plan_by_output.get(logical_path)
         record = item.record
@@ -260,6 +284,7 @@ def build_commit_plan(
         if checked.logical_path != logical_path or checked.sha256 != record.artifact_sha256:
             raise CommitError("commit_reused_material_changed", logical_path)
         existing_artifacts.append(checked)
+        advance_progress(f"revalidated {logical_path}")
         material_records.append(record)
 
     model_records: list[GeneratedModelRecord] = []
@@ -277,6 +302,7 @@ def build_commit_plan(
         expected_files: list[str] = []
         fingerprint = hashlib.sha256()
         for output in sorted(item.validation.files, key=lambda value: value.logical_path):
+            describe_progress(f"validating {output.logical_path}")
             artifact = _checked_artifact(
                 staging_root,
                 output.logical_path,
@@ -285,6 +311,7 @@ def build_commit_plan(
                 output.sha256,
             )
             artifacts.append(artifact)
+            advance_progress(f"validated {output.logical_path}")
             expected_files.append(output.logical_path)
             fingerprint.update(output.logical_path.encode("utf-8"))
             fingerprint.update(b"\0")
@@ -320,10 +347,12 @@ def build_commit_plan(
             or record.skin_layout_fingerprint != layout.layout_fingerprint
         ):
             raise CommitError("commit_reused_model_identity_mismatch", logical_model)
-        checked_files = tuple(
-            _checked_existing_artifact(file)
-            for file in item.files
-        )
+        checked_file_items: list[ExistingArtifact] = []
+        for file in item.files:
+            describe_progress(f"revalidating {file.logical_path}")
+            checked_file_items.append(_checked_existing_artifact(file))
+            advance_progress(f"revalidated {file.logical_path}")
+        checked_files = tuple(checked_file_items)
         if (
             {file.logical_path for file in checked_files}
             != set(record.expected_files)
@@ -387,6 +416,7 @@ def apply_commit_plan(
     vmf_output_path: Path,
     recovery_journal_path: Path | None = None,
     vmf_progress_callback: ProgressCallback | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> CommitResult:
     """Publish every planned file with rollback if any replacement fails."""
     game_root = game_directory.resolve(strict=True)
@@ -441,20 +471,50 @@ def apply_commit_plan(
         raise CommitError("commit_target_duplicate", repr(targets))
 
     prepared: list[_PreparedWrite] = []
+    progress_total = len(writes) + 1
+    if progress_callback is not None:
+        progress_callback(0, progress_total, "preparing commit transaction")
     try:
-        for target, content, size, sha256 in writes:
+        for index, (target, content, size, sha256) in enumerate(writes):
+            if progress_callback is not None:
+                progress_callback(
+                    index,
+                    progress_total,
+                    f"preparing {target.name}",
+                )
+
+            def report_prepare_bytes(done: int, total: int, detail: str) -> None:
+                if vmf_progress_callback is not None and target == vmf_target:
+                    vmf_progress_callback(done, total, detail)
+                if progress_callback is not None:
+                    progress_callback(
+                        index,
+                        progress_total,
+                        f"preparing {detail}: {done}/{total} bytes",
+                    )
+
             prepared.append(_prepare_write(
                 target,
                 content,
                 size,
                 sha256,
-                progress_callback=(
-                    vmf_progress_callback if target == vmf_target else None
-                ),
+                progress_callback=report_prepare_bytes,
             ))
+            if progress_callback is not None:
+                progress_callback(
+                    index + 1,
+                    progress_total,
+                    f"prepared {target.name}",
+                )
         for existing in existing_targets:
             _checked_existing_artifact(existing)
         _install_prepared(prepared, recovery_journal_path=recovery_journal_path)
+        if progress_callback is not None:
+            progress_callback(
+                progress_total,
+                progress_total,
+                "installed validated transaction",
+            )
     except CommitError:
         _discard_temporaries(prepared)
         raise
@@ -795,10 +855,10 @@ def _prepare_write(
             delete=False,
         ) as stream:
             temporary = Path(stream.name)
+            completed = 0
+            if progress_callback is not None:
+                progress_callback(0, expected_size, target.name)
             if isinstance(content, bytes):
-                completed = 0
-                if progress_callback is not None:
-                    progress_callback(0, expected_size, target.name)
                 for offset in range(0, len(content), 1024 * 1024):
                     chunk = content[offset:offset + 1024 * 1024]
                     stream.write(chunk)
@@ -809,6 +869,9 @@ def _prepare_write(
                 with content.open("rb") as source:
                     while chunk := source.read(1024 * 1024):
                         stream.write(chunk)
+                        completed += len(chunk)
+                        if progress_callback is not None:
+                            progress_callback(completed, expected_size, target.name)
             stream.flush()
             os.fsync(stream.fileno())
         if temporary.stat().st_size != expected_size or _file_sha256(temporary) != expected_sha256:

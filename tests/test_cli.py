@@ -7,7 +7,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from psr.cli import build_arg_parser, discover_tool_commands, main
+from psr.cli import _engine_root, build_arg_parser, discover_tool_commands, main
 from psr.runtime import CompileRunResult, DiagnosticReport, build_project_state_paths
 from psr.cache import ProjectIdentity
 
@@ -20,7 +20,7 @@ class CliContractTests(unittest.TestCase):
             "-vmf_out", "output.vmf",
             "-subfolders", "1",
             "-force_recompile", "0",
-            "-dynamic_fallback", "0",
+            "-compile_failure_mode", "3",
             "-debug_cleanup", "2",
         ])
 
@@ -29,8 +29,32 @@ class CliContractTests(unittest.TestCase):
         self.assertEqual(args.vmf_out, "output.vmf")
         self.assertEqual(args.subfolders, 1)
         self.assertEqual(args.force_recompile, 0)
-        self.assertEqual(args.dynamic_fallback, 0)
+        self.assertEqual(args.compile_failure_mode, 3)
         self.assertEqual(args.debug_cleanup, 2)
+
+    def test_compile_failure_mode_defaults_to_missing_static_and_rejects_other_values(self) -> None:
+        args = build_arg_parser().parse_args([
+            "-game", "game",
+            "-vmf_in", "input.vmf",
+            "-vmf_out", "output.vmf",
+        ])
+
+        self.assertEqual(args.compile_failure_mode, 1)
+        with self.assertRaises(ValueError):
+            build_arg_parser().parse_args([
+                "-game", "game",
+                "-vmf_in", "input.vmf",
+                "-vmf_out", "output.vmf",
+                "-compile_failure_mode", "4",
+            ])
+
+    def test_engine_searchpath_root_is_the_sdk_parent_of_bin(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            sdk = Path(temporary) / "Source SDK Base 2013 Singleplayer slam"
+            application_directory = sdk / "bin"
+            application_directory.mkdir(parents=True)
+
+            self.assertEqual(_engine_root(application_directory), sdk.resolve())
 
     def test_debug_cleanup_rejects_values_outside_zero_one_two(self) -> None:
         with self.assertRaises(ValueError):
@@ -82,6 +106,9 @@ class CliContractTests(unittest.TestCase):
                 ])
             written = vmf_output.read_bytes()
             output = console.getvalue()
+            log_files = list(
+                (root / "local" / "PropsScalingRecompiler" / "logs").rglob("*.log")
+            )
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(written, source)
@@ -89,7 +116,15 @@ class CliContractTests(unittest.TestCase):
         self.assertIn("SUCCESS", output)
         self.assertIn("[PROGRESS] Reading input VMF", output)
         self.assertIn(f"{len(source)}/{len(source)} bytes (100%)", output)
-        self.assertIn("[PROGRESS] Writing and verifying output VMF", output)
+        self.assertIn("[PROGRESS] Publishing assets, manifest, and VMF", output)
+        self.assertIn("[PROGRESS] Inspecting source models", output)
+        self.assertIn("0/0 models (100%)", output)
+        self.assertEqual(len(log_files), 1)
+        self.assertRegex(
+            log_files[0].name,
+            r"^noop__\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.",
+        )
+        self.assertIn("game--", log_files[0].parent.name)
         self.assertLess(output.index("[project_summary]"), output.index("[session_summary]"))
         self.assertLess(output.index("[session_summary]"), output.index("[elapsed_time]"))
 

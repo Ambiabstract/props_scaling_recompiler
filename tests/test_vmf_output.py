@@ -193,6 +193,59 @@ class VmfOutputTests(unittest.TestCase):
         self.assertEqual(active.direct_values(b"convert_prop_to_static"), ())
         self.assertIn(b'\t"skin" "00" // preserve exactly\r\n', result.content)
 
+    def test_compile_failure_dispositions_cover_remove_static_and_scalable(self) -> None:
+        operation, skin_layout = plans(ACTIVE_AND_HIDDEN)
+        operation = replace(operation, usages=())
+        skin_layout = replace(skin_layout, assignments=())
+
+        removed = build_vmf_output(
+            ACTIVE_AND_HIDDEN,
+            operation,
+            skin_layout,
+            fallbacks=(VmfFallbackAssignment("100", "remove"),),
+        )
+        self.assertNotIn(
+            b"100",
+            b" ".join(
+                block.direct_values(b"id")[0]
+                for block in parse_vmf(removed.content).blocks
+                if block.name.lower() == b"entity" and block.direct_values(b"id")
+            ),
+        )
+
+        missing_static = build_vmf_output(
+            ACTIVE_AND_HIDDEN,
+            operation,
+            skin_layout,
+            fallbacks=(VmfFallbackAssignment(
+                "100",
+                "missing_static",
+                "models/psr_scaled/props_fixture/static_scaled_150.mdl",
+                2,
+            ),),
+        )
+        active = parse_vmf(missing_static.content).blocks[0]
+        self.assertEqual(active.direct_values(b"classname"), (b"prop_static",))
+        self.assertEqual(
+            active.direct_values(b"model"),
+            (b"models/psr_scaled/props_fixture/static_scaled_150.mdl",),
+        )
+        self.assertEqual(active.direct_values(b"skin"), (b"2",))
+        self.assertEqual(active.direct_values(b"modelscale"), ())
+        self.assertEqual(active.direct_values(b"rendercolor"), ())
+
+        scalable = build_vmf_output(
+            ACTIVE_AND_HIDDEN,
+            operation,
+            skin_layout,
+            fallbacks=(VmfFallbackAssignment("100", "scalable"),),
+        )
+        active = parse_vmf(scalable.content).blocks[0]
+        self.assertEqual(active.direct_values(b"classname"), (b"prop_scalable",))
+        self.assertEqual(active.direct_values(b"modelscale"), (b"1.5",))
+        self.assertEqual(active.direct_values(b"rendercolor"), (b"190 48 148",))
+        self.assertEqual(active.direct_values(b"convert_prop_to_static"), ())
+
     def test_noop_output_is_byte_identical(self) -> None:
         source = b'world\n{\n\t"id" "1"\n}\n'
         discovery = discover_vmf_requests(source, map_identity="maps/noop.vmf")

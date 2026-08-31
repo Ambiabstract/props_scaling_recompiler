@@ -53,6 +53,8 @@ class ProjectStateTests(unittest.TestCase):
         self.assertEqual(paths.manifest.parent, paths.root)
         self.assertEqual(paths.lock.parent, paths.root)
         self.assertEqual(paths.recovery_journal.parent, paths.root)
+        self.assertIn("project", paths.logs.name)
+        self.assertIn("a" * 8, paths.logs.name)
         self.assertEqual(
             paths.staging,
             self.root.resolve()

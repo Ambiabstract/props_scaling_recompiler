@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable, Literal
 
 from psr.assets import (
     OrderedAssetFileSystem,
@@ -123,12 +123,19 @@ def discover_vmf_requests(
 def inspect_map_sources(
     discovery: MapDiscovery,
     filesystem: OrderedAssetFileSystem,
+    *,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> InspectedMap:
     """Inspect every unique source model while collecting all failures."""
     assets: list[SourceAssetMetadata] = []
     diagnostics = list(discovery.diagnostics)
     model_paths = sorted({request.logical_model_path for request in discovery.requests})
-    for logical_path in model_paths:
+    total = len(model_paths)
+    if progress_callback is not None:
+        progress_callback(0, total, "waiting for first source model")
+    for index, logical_path in enumerate(model_paths):
+        if progress_callback is not None:
+            progress_callback(index, total, f"inspecting {logical_path}")
         try:
             assets.append(inspect_source_model(filesystem, logical_path))
         except SourceAssetInspectionError as exc:
@@ -139,6 +146,8 @@ def inspect_map_sources(
                 entity_id=None,
                 source_line=None,
             ))
+        if progress_callback is not None:
+            progress_callback(index + 1, total, f"inspected {logical_path}")
     return InspectedMap(discovery, tuple(assets), tuple(diagnostics))
 
 

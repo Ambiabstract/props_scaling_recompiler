@@ -84,11 +84,18 @@ class ProgressReporter:
             effective_total = self._total if total is None else total
             if completed < 0 or (effective_total is not None and completed > effective_total):
                 raise ValueError("progress completed count is outside its total")
-            changed = completed != self._completed or effective_total != self._total
+            normalized_detail = (
+                self._detail if detail is None else " ".join(detail.split())
+            )
+            changed = (
+                completed != self._completed
+                or effective_total != self._total
+                or normalized_detail != self._detail
+            )
             self._completed = completed
             self._total = effective_total
             if detail is not None:
-                self._detail = " ".join(detail.split())
+                self._detail = normalized_detail
             done = effective_total is not None and completed >= effective_total
             if changed and done:
                 self._done_emitted = True

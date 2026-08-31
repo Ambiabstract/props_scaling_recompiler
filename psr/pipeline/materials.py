@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable, Literal
 
 from psr.assets import (
     ColorParameter,
@@ -72,12 +72,19 @@ class ColoredMaterialOperationPlan:
 def inspect_colored_material_sources(
     operation: OperationPlan,
     filesystem: OrderedAssetFileSystem,
+    *,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> MaterialInspection:
     """Inspect each unique VMT needed by non-white skin requirements."""
     diagnostics: list[PipelineDiagnostic] = []
     required_paths = _required_source_material_paths(operation, diagnostics)
     materials: list[SourceMaterialMetadata] = []
-    for logical_path in required_paths:
+    total = len(required_paths)
+    if progress_callback is not None:
+        progress_callback(0, total, "waiting for first source material")
+    for index, logical_path in enumerate(required_paths):
+        if progress_callback is not None:
+            progress_callback(index, total, f"inspecting {logical_path}")
         try:
             materials.append(inspect_source_material(filesystem, logical_path))
         except SourceMaterialInspectionError as exc:
@@ -86,6 +93,8 @@ def inspect_colored_material_sources(
                 exc.code,
                 f"{logical_path}: {exc.detail}",
             ))
+        if progress_callback is not None:
+            progress_callback(index + 1, total, f"inspected {logical_path}")
     return MaterialInspection(tuple(materials), tuple(diagnostics))
 
 

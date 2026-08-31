@@ -287,6 +287,41 @@ class ToolAdapterTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, "compiled_companion_missing")
             self.assertIn(".phy", raised.exception.detail)
 
+    def test_validation_accepts_missing_dx80_and_software_vtx_companions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            game = Path(temp)
+            logical = "models/psr_scaled/props/optional_vtx_scaled_100.mdl"
+            case = {
+                "internal_model_name": logical.removeprefix("models/"),
+                "mdl_version": 48,
+                "static_prop": True,
+                "checksum_hex": "11223344",
+                "bone_count": 1,
+                "skin_families": [["body"]],
+                "cdmaterials": ["models/props/"],
+                "surface_property": "default",
+            }
+            target = game.joinpath(*Path(logical).parts)
+            target.parent.mkdir(parents=True)
+            target.write_bytes(build_mdl(case))
+            target.with_suffix(".vvd").write_bytes(b"vvd")
+            target.with_suffix(".dx90.vtx").write_bytes(b"vtx90")
+
+            validation = validate_compiled_model(
+                game,
+                logical,
+                requires_physics=False,
+            )
+
+            self.assertEqual(
+                tuple(item.logical_path for item in validation.files),
+                (
+                    logical,
+                    logical.removesuffix(".mdl") + ".vvd",
+                    logical.removesuffix(".mdl") + ".dx90.vtx",
+                ),
+            )
+
     def test_validation_accepts_studiomdl_63_byte_header_name_truncation(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             game = Path(temp)

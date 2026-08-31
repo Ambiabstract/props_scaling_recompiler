@@ -8,6 +8,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import BinaryIO
 
 from psr.cache import ProjectIdentity
@@ -66,15 +67,27 @@ def build_project_state_paths(
     # are unique and marker-protected, so the short routing key is not an
     # identity or ownership boundary.
     staging = application_root / "work" / project.project_id[:16]
+    project_name = _safe_path_component(
+        PurePosixPath(project.normalized_gameinfo_path).parent.name,
+        "project",
+    )
     return ProjectStatePaths(
         root=root,
         manifest=root / "manifest.json",
         lock=root / "operation.lock",
         recovery_journal=root / "recovery.json",
-        logs=root / "logs",
+        logs=application_root / "logs" / f"{project_name}--{project.project_id[:8]}",
         staging=staging,
         failed_runs=root / "failed_runs",
     )
+
+
+def _safe_path_component(value: str, fallback: str) -> str:
+    cleaned = "".join(
+        character if character.isalnum() or character in "-_." else "-"
+        for character in value
+    ).strip(" .-_")
+    return cleaned[:80] or fallback
 
 
 class ProjectLock:

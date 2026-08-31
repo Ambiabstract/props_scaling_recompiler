@@ -18,6 +18,7 @@ from psr.assets import (
     plan_search_paths,
 )
 from psr.cache import ProjectManifest, build_project_identity, load_manifest
+from psr.domain import resolve_compile_scale, scaled_model_path
 from psr.keyvalues import parse_vmf
 from psr.pipeline import (
     CommitError,
@@ -74,7 +75,8 @@ class CompileRequest:
     crowbar_command: tuple[str | Path, ...] | None
     studiomdl_command: tuple[str | Path, ...] | None
     local_appdata: Path | None = None
-    dynamic_fallback: bool = True
+    compile_failure_mode: int | None = 1
+    dynamic_fallback: bool | None = None
     debug_cleanup: int = 0
 
 
@@ -100,6 +102,14 @@ def execute_compile_run(
 ) -> CompileRunResult:
     """Execute discover -> plan -> generate -> validate -> commit once."""
     progress = progress or NullProgressReporter()
+    failure_mode = request.compile_failure_mode
+    if request.dynamic_fallback is not None:
+        failure_mode = 2 if request.dynamic_fallback else None
+    if failure_mode is not None and failure_mode not in {0, 1, 2, 3}:
+        raise RuntimeExecutionError(
+            "compile_failure_mode_invalid",
+            f"expected 0, 1, 2, or 3, got {failure_mode!r}",
+        )
     progress.start("Validating project and VMF inputs")
     game = request.game_directory.resolve(strict=True)
     if not game.is_dir():
@@ -190,19 +200,43 @@ def execute_compile_run(
         _report_search_path_diagnostics(search_plan.diagnostics, report)
         filesystem = OrderedAssetFileSystem(search_plan.mounts)
 
-        progress.start("Discovering entities and planning source assets")
+        progress.start("Discovering VMF entities")
         discovery = discover_vmf_requests(source_vmf, map_identity=map_identity)
-        inspected = inspect_map_sources(discovery, filesystem)
-        base_operation = build_operation_plan(inspected)
-        material_inspection = inspect_colored_material_sources(
-            base_operation, filesystem
+        unique_models = len({
+            item.logical_model_path for item in discovery.requests
+        })
+        progress.start(
+            "Inspecting source models",
+            total=unique_models,
+            unit="models",
         )
+        inspected = inspect_map_sources(
+            discovery,
+            filesystem,
+            progress_callback=lambda done, total, detail: progress.update(
+                done, total=total, detail=detail
+            ),
+        )
+        progress.start("Planning model variations", total=1, unit="steps")
+        base_operation = build_operation_plan(inspected)
+        progress.update(1, detail=f"planned {len(base_operation.usages)} entity usages")
+        progress.start("Inspecting source materials", unit="materials")
+        material_inspection = inspect_colored_material_sources(
+            base_operation,
+            filesystem,
+            progress_callback=lambda done, total, detail: progress.update(
+                done, total=total, detail=detail
+            ),
+        )
+        progress.start("Planning materials and skin layouts", total=2, unit="steps")
         initial_materials = build_colored_material_plan(
             base_operation, material_inspection
         )
+        progress.update(1, detail="planned colored materials")
         initial_layout = build_skin_layout_plan(
             base_operation, initial_materials, loaded.manifest
         )
+        progress.update(2, detail="planned stable skin layouts")
         report.extend_pipeline(
             item for item in initial_layout.diagnostics
             if item.code != "dynamic_bodygroup_fallback"
@@ -436,8 +470,23 @@ def execute_compile_run(
                 ),
             )
             _report_work_failures(failures, base_operation, initial_materials, report)
-            fallback_ids = excluded if request.dynamic_fallback else set()
-            progress.start("Validating and publishing assets, manifest, and VMF")
+            fallbacks = _build_failure_assignments(
+                discovery.requests,
+                base_operation,
+                excluded,
+                failure_mode,
+            )
+            validation_work = (
+                len(generation.materials)
+                + len(reuse.reused_materials)
+                + sum(len(item.validation.files) for item in generation.models)
+                + sum(len(item.files) for item in reuse.reused_models)
+            )
+            progress.start(
+                "Validating commit candidates",
+                total=validation_work,
+                unit="files",
+            )
             commit_plan = build_commit_plan(
                 source_vmf,
                 loaded.manifest,
@@ -446,31 +495,26 @@ def execute_compile_run(
                 skin_layout,
                 generation,
                 reuse,
-                fallbacks=tuple(
-                    VmfFallbackAssignment(entity_id)
-                    for entity_id in sorted(fallback_ids, key=int)
+                fallbacks=fallbacks,
+                progress_callback=lambda done, total, detail: progress.update(
+                    done, total=total, detail=detail
                 ),
             )
-            vmf_write_started = False
-
-            def report_vmf_write(done: int, total: int, detail: str) -> None:
-                nonlocal vmf_write_started
-                if not vmf_write_started:
-                    progress.start(
-                        "Writing and verifying output VMF",
-                        total=total,
-                        unit="bytes",
-                    )
-                    vmf_write_started = True
-                progress.update(done, total=total, detail=detail)
-
+            publish_work = len(commit_plan.artifacts) + 3
+            progress.start(
+                "Publishing assets, manifest, and VMF",
+                total=publish_work,
+                unit="steps",
+            )
             committed = apply_commit_plan(
                 commit_plan,
                 game_directory=game,
                 manifest_path=state.manifest,
                 vmf_output_path=vmf_output,
                 recovery_journal_path=state.recovery_journal,
-                vmf_progress_callback=report_vmf_write,
+                progress_callback=lambda done, total, detail: progress.update(
+                    done, total=total, detail=detail
+                ),
             )
         except (CommitError, StagingError) as exc:
             progress.finish()
@@ -625,6 +669,54 @@ def _planning_failures(
                 logical_source_model=model,
             ))
     return failures
+
+
+def _build_failure_assignments(
+    requests: Sequence[VmfEntityRequest],
+    operation: OperationPlan,
+    excluded: set[str],
+    mode: int | None,
+) -> tuple[VmfFallbackAssignment, ...]:
+    """Translate failed entity IDs into the selected source-preserving VMF policy."""
+    if mode is None:
+        return ()
+    requests_by_id = {item.entity_id: item for item in requests}
+    usages_by_id = {item.request.entity_id: item for item in operation.usages}
+    disposition = {
+        0: "remove",
+        1: "missing_static",
+        2: "dynamic_override",
+        3: "scalable",
+    }[mode]
+    assignments: list[VmfFallbackAssignment] = []
+    for entity_id in sorted(excluded, key=int):
+        request = requests_by_id.get(entity_id)
+        if request is None:
+            continue
+        if mode != 1:
+            assignments.append(VmfFallbackAssignment(entity_id, disposition))
+            continue
+        usage = usages_by_id.get(entity_id)
+        if usage is not None:
+            logical_output_model = usage.logical_output_model
+            target_skin = usage.source_skin
+        else:
+            logical_output_model = scaled_model_path(
+                request.logical_model_path,
+                resolve_compile_scale(request.raw_modelscale).compile_scale,
+            )
+            try:
+                parsed_skin = int(request.raw_skin, 10)
+            except ValueError:
+                parsed_skin = 0
+            target_skin = max(0, parsed_skin)
+        assignments.append(VmfFallbackAssignment(
+            entity_id,
+            disposition,
+            logical_output_model,
+            target_skin,
+        ))
+    return tuple(assignments)
 
 
 def _surviving_plans(

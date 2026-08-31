@@ -20,14 +20,20 @@ from .searchpaths import normalize_logical_path
 _STATIC_PROP_FLAG = 0x10
 _BONE_COUNT_OFFSET = 156
 _SUPPORTED_MDL_VERSIONS = range(44, 50)
-_DEFAULT_MODEL_EXTENSIONS = (
+_REQUIRED_MODEL_EXTENSIONS = (
     ".mdl",
     ".vvd",
-    ".dx80.vtx",
     ".dx90.vtx",
+)
+_OPTIONAL_MODEL_EXTENSIONS = (
+    ".dx80.vtx",
     ".sw.vtx",
 )
-_ALLOWED_MODEL_EXTENSIONS = frozenset((*_DEFAULT_MODEL_EXTENSIONS, ".phy"))
+_ALLOWED_MODEL_EXTENSIONS = frozenset((
+    *_REQUIRED_MODEL_EXTENSIONS,
+    *_OPTIONAL_MODEL_EXTENSIONS,
+    ".phy",
+))
 
 
 class ToolExecutionError(RuntimeError):
@@ -202,9 +208,9 @@ def validate_compiled_model(
     *,
     requires_physics: bool,
     requires_static_conversion: bool = False,
-    required_extensions: Sequence[str] = _DEFAULT_MODEL_EXTENSIONS,
+    required_extensions: Sequence[str] | None = None,
 ) -> CompiledModelValidation:
-    """Validate a staged managed model and every explicitly expected file."""
+    """Validate required outputs and retain optional VTX files when emitted."""
     try:
         logical_path = normalize_logical_path(logical_model_path)
     except ValueError as exc:
@@ -218,8 +224,18 @@ def validate_compiled_model(
             "compiled output must be a managed models/psr_scaled/**/*.mdl path",
         )
 
-    extensions = _normalise_extensions(required_extensions, requires_physics)
+    extensions = list(_normalise_extensions(
+        _REQUIRED_MODEL_EXTENSIONS if required_extensions is None else required_extensions,
+        requires_physics,
+    ))
     base = PurePosixPath(logical_path)
+    if required_extensions is None:
+        game_root = game_directory.resolve()
+        for extension in _OPTIONAL_MODEL_EXTENSIONS:
+            companion = str(base.with_suffix(extension))
+            physical = game_root.joinpath(*PurePosixPath(companion).parts)
+            if physical.is_file():
+                extensions.append(extension)
     metadata: list[CompiledFileMetadata] = []
     mdl_header: bytes | None = None
     for extension in extensions:

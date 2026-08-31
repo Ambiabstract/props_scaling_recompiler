@@ -146,9 +146,23 @@ GameInfo его мода:
 5. Логи желательно генерировать так, чтобы по именам папок и файлов было легко понять какой проект, какая карта, какое время. Должны быть человекочитаемыми. 
 
 
+================
+
+
 6. Нужно добавить дополнительную логику при генерации colored скинов: если в материале оригинальной модели есть параметр `$notint` - мы не красим этот материал, т.е. при генерации нового скина для этого материала юзается оригинальный не colored материал. Это нужно только для тех моделей, где используется несколько материалов для каждого скина (например корпус автомобиля красится, а материал колёс имеет `$notint` и не красится).
 Пример такого ассета сделаю позже.
 Вики по параметру: https://developer.valvesoftware.com/wiki/$notint (в сурсбазе 2013 этот параметр вроде бы отсутствует, но это абсолютно не важно, мы будем его юзать как маркер).
 
 
-7*. (ЭТО ПОТОМ) Поддержка гмода. "Do you also add proper gmod support (parse mount.cfg mainly)?"
+7. Надо писать все случаи, а не "5 more"
+  [searchpath_searchpath_missing] 8 SearchPath entries were not mounted: '|gameinfo_path|for_trailer.vpk', 'hl2/hl2_lv.vpk', 'ep2/ep2_english.vpk', and 5 more
+
+
+8*. (ЭТО ПОТОМ) Поддержка гмода. "Do you also add proper gmod support (parse mount.cfg mainly)?"
+
+9. Разобраться что не так 
+```
+ERRORS (2)
+  [invalid_entity_property] (line 489934) active PSR entity requires one non-empty 'model' value
+  [qc_operation_plan_invalid] (entities 5906925, 5906940, 6175435, 6175468, 6175471, 6175474, 6175476, 6655399, 6655402, 6655405, 6655408, 6655411, 6655416, 6655419, 6655423, 6655753, 6655760, 6655768, 6655773, 6655778, 6655781, 6655988, 6655994, 6656051, 6656055, 6656062, 6656066, 6656076, 6656081) qc_source_skinfamilies_mismatch: models/props_foliage/coldstream_oak_shrub.mdl: reference: QC families (('urban_trees_branches03',),) do not match source MDL families (('models/props_foliage/urban_trees_branches03',),)
+```
